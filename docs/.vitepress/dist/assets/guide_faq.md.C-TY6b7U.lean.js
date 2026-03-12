@@ -1,0 +1,1 @@
+import{_ as s,o as i,c as a,ae as t}from"./chunks/framework.EHGTsUvI.js";const k=JSON.parse('{"title":"FAQ","description":"","frontmatter":{},"headers":[],"relativePath":"guide/faq.md","filePath":"guide/faq.md"}'),n={name:"guide/faq.md"};function r(o,e,l,h,p,d){return i(),a("div",null,[...e[0]||(e[0]=[t("",41)])])}const u=s(n,[["render",r]]);export{k as __pageData,u as default};

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"text: 'Reference'\" \"C:/Work/Code/semantic-typescript/docs/.vitepress/config.mts\")",
+      "Bash(grep -n \"text: '参考'\" \"C:/Work/Code/semantic-typescript/docs/.vitepress/config.mts\")"
+    ]
+  }
+}
