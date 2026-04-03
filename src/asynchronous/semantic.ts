@@ -278,9 +278,11 @@ export class AsynchronousSemantic<E> {
         throw new TypeError("Invalid arguments.");
     }
 
+    public map(mapper: Functional<E, E>): AsynchronousSemantic<E>;
+    public map(mapper: BiFunctional<E, bigint, E>): AsynchronousSemantic<E>;
     public map<R>(mapper: Functional<E, R>): AsynchronousSemantic<R>;
     public map<R>(mapper: BiFunctional<E, bigint, R>): AsynchronousSemantic<R>;
-    public map<R>(mapper: Functional<E, R> | BiFunctional<E, bigint, R>): AsynchronousSemantic<R> {
+    public map<R = E>(mapper: Functional<E, R> | BiFunctional<E, bigint, R>): AsynchronousSemantic<R> {
         if (isFunction(mapper)) {
             return new AsynchronousSemantic<R>(async (accept: Consumer<R> | BiConsumer<R, bigint>, interrupt: Predicate<R> | BiPredicate<R, bigint>): Promise<void> => {
                 return new Promise<void>((resolve: Consumer<void>, reject: Consumer<any>): void => {
@@ -318,6 +320,12 @@ export class AsynchronousSemantic<E> {
             });
         }
         throw new TypeError("Invalid arguments.");
+    }
+
+    public pipe(conversion: Functional<AsynchronousGenerator<E>, AsynchronousSemantic<E>>): AsynchronousSemantic<E>;
+    public pipe<R>(conversion: Functional<AsynchronousGenerator<E>, AsynchronousSemantic<R>>): AsynchronousSemantic<R>;
+    public pipe<R = E>(conversion: Functional<AsynchronousGenerator<E>, AsynchronousSemantic<R>>): AsynchronousSemantic<R> {
+        return conversion(this.source());
     }
 
     public redirect(redirector: BiFunctional<E, bigint, bigint>): AsynchronousSemantic<E> {
