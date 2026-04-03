@@ -1,37 +1,33 @@
-# Semantic-TypeScript
-Flow, Indexed. 당신의 데이터, 정밀한 제어 아래에.
+# **Semantic‑TypeScript**
+**스트림 처리, 인덱싱.** 당신의 데이터를 정밀하게 제어합니다.
 
 ---
 
 ### 개요
 
-Semantic-TypeScript는 스트림 처리 기술의 중요한 도약을 의미하며, JavaScript `GeneratorFunction`, Java Streams, 그리고 MySQL 스타일 인덱싱에서 가장 효과적인 개념들을 종합합니다. 그 핵심 철학은 단순하면서도 강력합니다: 무차별 반복이 아닌, 지능적인 인덱싱을 통해 매우 효율적인 데이터 처리 파이프라인을 구축하는 것입니다.
+Semantic‑TypeScript는 스트림 처리 분야에서 중요한 진화를 나타내며, JavaScript 생성자, Java Streams, MySQL 스타일 인덱싱에서 가장 효과적인 패러다임을 우아하게 **통합**합니다. 그 기본 전제는 강력하면서도 신중하게 선택되었습니다: 기존의 무차별 반복이 아니라 지능적인 인덱싱을 통해 예외적으로 효율적인 데이터 처리 파이프라인을 구축합니다.
 
-기존 라이브러리들이 동기 루프나 다루기 힘든 프로미스 체인을 부과하는 곳에서, Semantic-TypeScript는 완전히 비동기적이고, 순수 함수형이며, 엄격한 타입 안전성을 제공하는 경험을 제공합니다. 이것은 현대 프론트엔드 개발의 요구에 맞게 설계되었습니다.
+일반적인 라이브러리가 동기 루프나 번거로운 Promise 체인을 강제하는 반면, Semantic‑TypeScript는 현대 애플리케이션 개발의 요구에 맞춰 설계된 **완전 비동기적**, 기능적으로 순수하며 엄격한 타입 안전성을 제공합니다.
 
-우아한 이 모델에서, 데이터는 업스트림 파이프라인이 명시적으로 `accept` (그리고 선택적으로 `interrupt`) 콜백을 호출할 때만 소비자에게 전달됩니다. 당신은 데이터가 필요한 정확한 순간, 즉 타이밍을 완벽히 제어할 수 있습니다.
+이 모델은 세련된 제어 흐름을 구현합니다: 업스트림 파이프라인이 명시적으로 `accept` 콜백을 호출할 때만 데이터가 다운스트림 소비자에게 전달됩니다. 처리 타이밍에 대해 완전하고 세밀한 제어를 유지할 수 있습니다. 처리는 정확히 필요할 때, 그리고 오직 그때에만 발생합니다.
 
 ---
 
-### 개발자들이 선호하는 이유
+### 개발자가 Semantic‑TypeScript를 선택하는 이유
 
-• **보일러플레이트 없는 인덱싱** — 모든 요소가 고유 또는 맞춤형 인덱스를 가지고 있습니다.
-
-• **순수 함수형 스타일** — 완전한 타입스크립트 타입 추론과 함께.
-
-• **메모리 누수 방지 이벤트 스트림** — `useWindow`, `useDocument`, `useHTMLElement`, `useWebSocket`은 안전을 염두에 두고 구축되었습니다. `limit(n)`, `sub(start, end)`, `takeWhile(predicate)`를 사용해 경계를 정의하면, 라이브러리가 정리를 관리합니다. 잔여 리스너나 메모리 누수 없음.
-
-• **내장 통계 분석** — 평균, 중앙값, 최빈값, 분산, 왜도, 첨도를 포함한 포괄적인 number 및 bigint 분석.
-
-• **예측 가능한 성능** — 요구사항에 따라 정렬된 또는 비정렬 수집기(collector) 중 선택 가능.
-
-• **메모리 효율적** — 스트림은 지연 평가(Lazy Evaluation) 방식으로 처리되며, 메모리 문제를 완화합니다.
-
-• **정의되지 않은 동작 없음** — 타입스크립트가 타입 안전성과 null 가능성을 보장합니다. 콜백 함수 내에서 명시적으로 변경하지 않는 한, 입력 데이터는 수정되지 않습니다.
+-   **보일러플레이트 없는 인덱싱** – 각 요소는 고유의 자연스러운 또는 맞춤형 인덱스를 본질적으로 보유하여 수동 추적을 제거합니다.
+-   **순수 함수형 및 타입 안전** – 변경 불가능한 작업과 함께 완전하고 관용적인 TypeScript 타입 추론을 즐기세요.
+-   **메모리 누수 방지 이벤트 스트림** – `useSubscription` 패턴은 리소스 안전을 첫 번째 원칙으로 설계되었습니다. `limit(n)`, `sub(start, end)` 또는 `takeWhile(predicate)`를 사용하여 논리적 경계를 정의하면 라이브러리가 전체 구독 수명 주기를 관리합니다. 이는 잔여 리스너와 메모리 누수가 없음을 보장합니다.
+-   **내장 통계 제품군** – 외부 종속성 없이 `number` 및 `bigint` 스트림에 대한 평균, 중앙값, 최빈값, 분산, 왜도, 첨도를 포함한 포괄적인 분석에 접근할 수 있습니다.
+-   **예측 가능하고 조정 가능한 성능** – 정확한 성능 및 순서 요구 사항에 맞게 정렬된 또는 비정렬된 콜렉터를 선택하세요.
+-   **본질적으로 메모리 효율적** – 스트림은 지연 평가되어 메모리 부담을 줄이기 위해 요소를 필요할 때만 처리합니다.
+-   **정의되지 않은 동작 없음** – TypeScript는 완전한 타입 안전성과 null 안전성을 보장합니다. 콜백 함수 내에서 명시적으로 수정하지 않는 한 소스 데이터는 변경되지 않습니다.
 
 ---
 
 ### 설치
+
+선호하는 패키지 관리자를 사용하여 프로젝트에 Semantic‑TypeScript를 통합하세요:
 
 ```bash
 npm install semantic-typescript
@@ -43,182 +39,229 @@ yarn add semantic-typescript
 
 ---
 
-### 빠른 시작
+### 실용적인 소개
+
+다음 예제는 기본 변환부터 실제 이벤트 처리까지 핵심 개념을 보여줍니다.
 
 ```typescript
-import { useOf, useFrom, useRange, useWindow, useHTMLElement, useWebSocket, useText, useStringify } from "semantic-typescript";
+import { useOf, useFrom, useRange, useSubscription, useText, useStringify } from "semantic-typescript";
 
-// 숫자 통계
-let summate: number = useOf(10, 20, 30, 40)
-  .map((n: number): number => n * 2)
-  .toNumericStatistics()  // 최종 연산 전 필수 호출
-  .summate();             // 200
+// ====================================================================
+// 예제 1: 기본 연산 및 수치 통계
+// ====================================================================
+// 매핑 및 최종 통계 연산을 보여줍니다. 변환 후 파이프라인을 통계 콜렉터로 변환해야 `.summate()`와 같은 최종 메서드를 호출할 수 있습니다.
 
-// Bigint 통계
-let summate: bigint = useOf(10n, 20n, 30n, 40n)
-  .map((n: bigint): bigint => n * 2)
-  .toBigIntStatistics()   // 최종 연산 전 필수 호출
-  .summate();             // 200n
+const numericSum: number = useOf(10, 20, 30, 40)
+  .map((n: number): number => n * 2)        // 각 요소를 두 배로: [20, 40, 60, 80]
+  .toNumericStatistics()                    // 통계 콜렉터로 변환
+  .summate();                               // 최종 연산: 200
 
-// 인덱스로 스트림 뒤집기
-useFrom([1, 2, 3, 4, 5])
-  .redirect((element: E, index: bigint): bigint => -index) // 뒤집기를 위한 음수 인덱스
-  .toOrdered() // 인덱스 순서를 유지하려면 toOrdered() 호출
-  .toArray(); // [5, 4, 3, 2, 1]
+// 기타 통계 메서드 (`.toNumericStatistics()` 이후 사용 가능):
+// .average(), .median(), .mode(), .variance(), .skewness(), .kurtosis()
 
-// 스트림 섞기(Shuffle)
-useFrom([1, 2, 3, 4, 5])
+// ====================================================================
+// 예제 2: BigInt 통계
+// ====================================================================
+// 수치 통계와 동일하게 작동하지만 BigInt 데이터에 최적화되어 있습니다.
+
+const bigintSum: bigint = useOf(10n, 20n, 30n, 40n)
+  .map((n: bigint): bigint => n * 2n)       // BigInt 산술
+  .toBigIntStatistics()                     // BigInt 통계 콜렉터로 변환
+  .summate();                               // 최종 연산: 200n
+
+// ====================================================================
+// 예제 3: 스트림 반전을 위한 인덱스 조작
+// ====================================================================
+// `.redirect()` 메서드를 사용하여 요소의 인덱스를 전략적으로 재할당하여 요소를 재정렬하는 방법을 보여줍니다. 반전과 같은 맞춤형 패턴을 가능하게 합니다.
+
+const reversedArray: number[] = useFrom([1, 2, 3, 4, 5])
+  .redirect((_element: number, index: bigint): bigint => -index) // 음수 인덱스에 매핑
+  .toOrdered()  // 필수: 새로운 인덱스로 정렬된 요소 수집
+  .toArray();   // 결과: [5, 4, 3, 2, 1]
+
+// 단순 반전의 경우 `.reverse()`도 사용 가능합니다.
+
+// ====================================================================
+// 예제 4: 스트림 셔플
+// ====================================================================
+// 제자리 셔플 알고리즘을 사용하여 요소 인덱스를 무작위로 순열합니다.
+
+const shuffledArray: number[] = useFrom([1, 2, 3, 4, 5])
+  .shuffle()      // 인덱스를 무작위로 재할당
+  .toOrdered()    // 새로운 무작위 인덱스로 정렬
+  .toArray();     // 예: [2, 5, 1, 4, 3] (실행마다 다름)
+
+// ====================================================================
+// 예제 5: 스트림 순환 회전
+// ====================================================================
+// 요소를 순환적으로 이동합니다. 양수 값은 오른쪽으로 회전, 음수 값은 왼쪽으로 회전합니다.
+
+// 오른쪽으로 2 위치 회전
+const rightRotated: number[] = useFrom([1, 2, 3, 4, 5])
+  .translate(2)   // 인덱스를 오른쪽으로 2 이동
+  .toOrdered()
+  .toArray();     // 결과: [4, 5, 1, 2, 3]
+
+// ====================================================================
+// 예제 6: 무한 범위에서의 지연 평가
+// ====================================================================
+// 이론적으로 무한한 스트림을 지연 처리하여 필요할 때만 요소를 계산합니다.
+
+const firstTenMultiples: bigint[] = useRange(0n, 1_000_000n)
+  .filter(n => n % 17n === 0n)  // 17의 배수 유지
+  .limit(10n)                   // 중요: 10번째 일치 후 중지
+  .toUnordered()                // 정렬 불필요
+  .toArray();                   // 결과: [0, 17, 34, 51, 68, 85, 102, 119, 136, 153]
+
+// `.limit(10n)` 없이는 파이프라인이 백만 개의 모든 요소를 처리합니다.
+
+// ====================================================================
+// 예제 7: 복잡한 파이프라인 구성
+// ====================================================================
+// 여러 연산의 순차적 구성을 보여줍니다.
+
+const complexResult: number[] = useRange(1n, 100n)
+  .map(n => Number(n) * 2)
+  .filter(n => n > 50)
   .shuffle()
+  .limit(5n)
+  .translate(2)
   .toOrdered()
-  .toArray(); // 예: [2, 5, 1, 4, 3]
-
-// 스트림 내 요소 이동(Translate)
-useFrom([1, 2, 3, 4, 5])
-  .translate(2)  // 요소를 오른쪽으로 2칸 이동
-  .toOrdered()
-  .toArray(); // [4, 5, 1, 2, 3]
-
-useFrom([1, 2, 3, 4, 5])
-  .translate(-2) // 요소를 왼쪽으로 2칸 이동
-  .toOrdered()
-  .toArray(); // [3, 4, 5, 1, 2]
-
-// 조기 종료와 함께하는 무한 범위
-useRange(0n, 1_000_000n)
-  .filter(n => n % 17n === 0n)
-  .limit(10n)          // 10개 요소 후 중지
-  .toUnordered()
   .toArray();
 
-// 실시간 윈도우 크기 조정 이벤트 (5번 이벤트 후 자동 중지)
-useWindow("resize")
-  .limit(5n)          // 이벤트 스트림에 필수적
-  .toUnordered()
-  .forEach((ev, idx) => console.log(`Resize #${idx}`));
+// ====================================================================
+// 예제 8: 관리되는 DOM 이벤트 구독
+// ====================================================================
+// 자동적이고 메모리 누수 방지 정리 기능과 함께 브라우저 이벤트를 수신합니다.
+// `.limit(n)` 호출은 리스너 자동 제거의 경계를 정의합니다.
 
-// HTML 요소 청취
-// <input id="input" type="text"/>
-useHTMLElement("#input", "change")
-  .limit(1)
-  .toUnordered()
-  .forEach((event: Event) => submit(event));
+// Window 대상에 대한 구독자 정의
+const windowSubscriber = {
+    mount: (target: Window): void => { /* 설정 로직 */ },
+    subscribe: (target: Window, event: keyof WindowEventMap, handler: EventListener): void => {
+        target.addEventListener(event, handler);
+    },
+    unsubscribe: (target: Window, event: keyof WindowEventMap, handler: EventListener): void => {
+        target.removeEventListener(event, handler);
+    },
+    unmount: (): void => { /* 정리 로직 */ }
+};
 
-// 여러 요소 및 이벤트 청취
-useHTMLElement("input", ["change", "keyup"])
-  .takeWhile((event: Event): boolean => validate(event))
+useSubscription(window, windowSubscriber, "resize")
+  .limit(5n) // 5개 이벤트 후 자동 구독 취소
   .toUnordered()
-  .forEach((event: Event) => submit(event));
+  .forEach((ev: Event, idx) =>
+    console.log(`크기 조정 #${idx}: ${(ev.target as Window).innerWidth}x${(ev.target as Window).innerHeight}`)
+  );
 
-// WebSocket 청취
-let webSocket = new WebSocket("ws://localhost:8080");
-webSocket.addEventListener("close", (): void => {
-  webSocket.close();  // WebSocket 생명주기를 수동으로 관리
-});
-useWebSocket(webSocket, "message")
-  .limit(1)
-  .toUnordered()
-  .forEach((message: MessageEvent) => console.log(message.data));
+// ====================================================================
+// 예제 9: 유니코드 코드 포인트별 문자열 처리
+// ====================================================================
+// 멀티바이트 유니코드 문자를 올바르게 처리하면서 문자열을 반복합니다.
 
-// 문자열을 코드 포트(code point) 단위로 순회
 useText("My emotion now is: 😊, and semantic is 👍")
   .toUnordered()
-  .log(); // 문자열을 출력
+  .log(); // 각 문자(이모지 포함)를 새 줄에 출력합니다.
 
-// 순환 참조가 있는 객체를 안전하게 문자열로 변환(Stringify)
-let o = {
+// ====================================================================
+// 예제 10: 순환 참조 객체의 안전한 문자열화
+// ====================================================================
+// 순환 참조를 포함하는 객체를 안전하게 직렬화합니다.
+
+const obj = {
   a: 1,
-  b: "text",
-  c: [o.a, o.b, o.c] // 순환 참조
+  b: "text"
 };
-// let text: string = JSON.stringify(o); // 오류 발생
-let text: string = useStringify(o); // 안전하게 `{a: 1, b: "text", c: []}` 반환
+(obj as any).c = [obj.a, obj.b, (obj as any).c]; // 순환 참조 도입
+
+// const text: string = JSON.stringify(obj); // 오류 발생
+const text: string = useStringify(obj); // 안전하게 `{a: 1, b: "text", c: []}` 생성
 ```
 
 ---
 
 ### 핵심 개념
 
-| 개념 | 목적 | 언제 사용하는가 |
+| 개념 | 목적 | 주요 사용 사례 |
 | :--- | :--- | :--- |
-| `AsynchronousSemantic` | 비동기 스트림, 이벤트, 지연 평가 파이프라인을 위한 핵심 빌더. | 실시간 이벤트, WebSocket, DOM 리스너, 장기 실행 또는 무한 스트림. |
-| `SynchronousSemantic` | 동기식, 메모리 내 또는 루프 기반 스트림을 위한 빌더. | 정적 데이터, 범위, 즉시 반복. |
-| `toUnordered()` | 가장 빠른 최종 수집기 (맵 기반 인덱싱). | 성능이 중요한 경로 (O(n) 시간 및 공간 복잡도, 정렬 없음). |
-| `toOrdered()` | 정렬된, 인덱스 안정적인 수집기. | 안정적인 순서 또는 인덱싱된 접근이 필요할 때. |
-| `toNumericStatistics()` | 풍부한 숫자 통계 분석 (평균, 중앙값, 분산, 왜도, 첨도 등). | 데이터 분석 및 통계 계산. |
-| `toBigIntStatistics()` | 풍부한 bigint 통계 분석. | 큰 정수에 대한 데이터 분석 및 통계 계산. |
-| `toWindow()` | 슬라이딩 및 텀블링 윈도우 지원. | 시계열 처리, 배치 처리, 윈도우 기반 연산. |
+| `AsynchronousSemantic` | 비동기 스트림, 이벤트 및 푸시 기반 지연 파이프라인을 위한 핵심 빌더. | 실시간 이벤트, WebSockets, DOM 리스너 또는 장기 실행/무한 스트림. |
+| `SynchronousSemantic` | 동기식, 메모리 내 또는 풀 기반 즉시 평가 파이프라인을 위한 빌더. | 정적 데이터, 유한 범위 또는 즉시 반복 작업. |
+| `toUnordered()` | 가장 빠른 최종 콜렉터. 인덱스 저장을 위해 Map 사용. | 안정적인 순서가 필요 없는 성능 중요 경로(시간 및 공간 복잡도 O(n)). |
+| `toOrdered()` | 정렬되고 인덱스가 안정된 최종 콜렉터. | 요소 순서를 유지해야 하거나 인덱스 접근이 필요한 경우. |
+| `toNumericStatistics()` | `number` 스트림에서 풍부한 통계 분석을 가능하게 하는 콜렉터. | 데이터 분석, 메트릭 및 통계 계산. |
+| `toBigIntStatistics()` | `bigint` 스트림에서 풍부한 통계 분석을 가능하게 하는 콜렉터. | 큰 정수 데이터 세트의 분석 및 통계. |
+| `toWindow()` | 스트림에 대한 슬라이딩 및 텀블링 창 작업을 제공합니다. | 시계열 분석, 일괄 처리 및 창 집계. |
 
 ---
 
-중요 사용 규칙
+**필수 사용 규칙**
 
-1.  이벤트 스트림 (`useWindow`, `useDocument`, `useHTMLElement`, `useWebSocket`, …)은 `AsynchronousSemantic`을 반환합니다.
-    → 청취를 중지하려면 `.limit(n)`, `.sub(start, end)`, 또는 `.takeWhile()`을 **반드시 호출해야 합니다.** 그렇지 않으면 리스너가 계속 활성 상태로 유지됩니다.
+1.  **이벤트 스트림** (`useSubscription`와 같은 팩토리를 통해 생성)은 `AsynchronousSemantic`을 반환합니다.
+    → `.limit(n)`, `.sub(start, end)` 또는 `.takeWhile(predicate)`와 같은 경계 정의 메서드를 호출하여 리스너를 종료해야 합니다. 그렇지 않으면 구독이 계속 활성 상태로 유지됩니다.
 
-2.  최종 연산 (`.toArray()`, `.count()`, `.average()`, `.reduce()`, `.findFirst()` 등)은 수집기로 변환한 후에만 사용 가능합니다:
+2.  **최종 연산** (`.toArray()`, `.count()`, `.forEach()`, `.findFirst()` 등)은 파이프라인을 콜렉터로 변환한 **후에만** 사용 가능합니다:
     ```typescript
-    .toUnordered()   // O(n) 시간 및 공간 복잡도, 정렬 없음
+    .toUnordered()   // 최대 속도를 위해, 순서는 보장되지 않음.
     // 또는
-    .toOrdered()     // 정렬됨, 순서 유지
+    .toOrdered()     // 안정적이고 정렬된 출력을 위해.
+    // 또는
+    .toNumericStatistics() // 통계 메서드를 위해.
     ```
 
 ---
 
 ### 성능 특성
 
-| 수집기 | 시간 복잡도 | 공간 복잡도 | 정렬 여부 | 최적 용도 |
+| 콜렉터 | 시간 복잡도 | 공간 복잡도 | 순서 보장? | 이상적인 시나리오 |
 | :--- | :--- | :--- | :--- | :--- |
-| `toUnordered()` | O(n) | O(n) | 아니요 | 원시 속도, 순서가 필요하지 않은 경우. |
-| `toOrdered()` | O(2n) | O(n) | 예 | 안정적인 순서, 인덱싱된 접근, 분석. |
-| `toNumericStatistics()` | O(2n) | O(n) | 예 | 정렬된 데이터가 필요한 통계 연산. |
-| `toBigIntStatistics()` | O(2n) | O(n) | 예 | bigint에 대한 통계 연산. |
-| `toWindow()` | O(2n) | O(n) | 예 | 시간 기반 윈도우 연산. |
+| `toUnordered()` | O(n) | O(n) | 아니요 | 원시 처리량이 핵심. 최종 순서는 중요하지 않음. |
+| `toOrdered()` | O(n log n) | O(n) | 예(정렬됨) | 안정적인 순서, 인덱스 접근 또는 통계를 위한 사전 정렬. |
+| `toNumericStatistics()` | O(n log n) | O(n) | 예(내부 정렬) | 정렬된 데이터가 필요한 통계 연산 수행. |
+| `toBigIntStatistics()` | O(n log n) | O(n) | 예(내부 정렬) | BigInt 데이터에 대한 통계 연산. |
+| `toWindow()` | O(n log n) | O(n) | 예(내부 정렬) | 정렬된 인덱스에서 이점을 얻는 창 작업. |
 
-속도가 가장 중요할 때는 `toUnordered()`를 선택하세요. 안정적인 순서나 정렬된 데이터에 의존하는 통계 메서드가 필요할 때만 `toOrdered()`를 사용하세요.
+절대적인 속도가 가장 중요할 때는 `toUnordered()`를 선택하세요. 요소 순서에 로직이 의존하는 경우에만 `toOrdered()` 또는 통계 콜렉터를 선택하세요.
 
 ---
 
-다른 프론트엔드 스트림 프로세서와의 비교
+**현대 스트림 라이브러리와의 비교 분석**
 
-| 기능 | Semantic-TypeScript | RxJS | 네이티브 Async Iterators / Generators | Most.js |
+| 기능 | Semantic‑TypeScript | RxJS | 네이티브 Async Iterators / Generators | Most.js |
 | :--- | :--- | :--- | :--- | :--- |
-| 타입스크립트 통합 | 일급, 네이티브 인덱스 인식과 함께 깊은 타입 지원. | 뛰어나나, 복잡한 제네릭이 포함됨. | 좋음, 수동 타이핑 필요. | 강함, 함수형 우선 스타일. |
-| 내장 통계 분석 | `number` 및 `bigint`에 대한 포괄적인 네이티브 지원. | 네이티브로 사용 불가 (사용자 정의 연산자 필요). | 없음. | 없음. |
-| 인덱싱 & 위치 인식 | 네이티브, 모든 요소에 강력한 bigint 인덱싱. | 사용자 정의 연산자 필요 (`scan`, `withLatestFrom`). | 수동 카운터 필요. | 기본적, 내장 인덱스 없음. |
-| 이벤트 스트림 관리 | 명시적인 조기 중단 제어와 함께 전용, 타입 안전 팩토리. | 강력하지만 수동 구독 관리 필요. | 수동 이벤트 리스너 + 취소. | 좋은 `fromEvent`, 경량. |
-| 성능 & 메모리 효율성 | 뛰어남 – 최적화된 `toUnordered()` 및 `toOrdered()` 수집기. | 매우 좋음, 하지만 연산자 체인이 오버헤드 추가. | 탁월함 (오버헤드 없음). | 탁월함. |
-| 번들 크기 | 매우 가벼움. | 큼 (트리 쉐이킹 사용 시에도). | 제로 (네이티브). | 작음. |
-| API 설계 철학 | 명시적 인덱싱을 가진 함수형 수집기 패턴. | 반응형 Observable 패턴. | Iterator / Generator 패턴. | 함수형, 포인트 프리(Point-free). |
-| 조기 종료 및 제어 | 명시적 (`interrupt`, `.limit()`, `.takeWhile()`, `.sub()`). | 좋음 (`take`, `takeUntil`, `first`). | 수동 (`for await…of` 안의 `break`). | 좋음 (`take`, `until`). |
-| 동기 및 비동기 지원 | 통합 API – 양쪽 모두에 대한 일급 지원. | 주로 비동기. | 둘 다, 그러나 수동. | 주로 비동기. |
-| 학습 곡선 | 함수형 및 인덱싱된 파이프라인에 익숙한 개발자에게 완만함. | 가파름 (많은 연산자, 핫/콜드 Observable). | 낮음. | 중간. |
+| **TypeScript 통합** | 일류, 깊은 타이핑, 인덱스 인식 내재. | 우수하지만 복잡한 제네릭 체인이 수반되는 경우가 많음. | 좋지만 수동 타입 주석이 필요. | 강력, 함수형-퍼스트 타이핑 스타일. |
+| **내장 통계 분석** | `number` 및 `bigint`에 대한 포괄적인 네이티브 지원. | 네이티브로 사용 불가(사용자 정의 연산자 또는 다른 라이브러리 필요). | 없음. | 없음. |
+| **인덱싱 및 위치 인식** | 각 요소에 대한 네이티브 강력한 BigInt 인덱싱. | 사용자 정의 연산자 필요(예: `scan`, `withLatestFrom`). | 수동 카운터 관리 필요. | 기본, 내장 인덱스 속성 없음. |
+| **이벤트 스트림 관리** | 명시적이고 선언적인 수명 주기 제어를 갖춘 전용 타입 안전 팩토리. | 강력하지만 메모리 누수를 방지하려면 주의 깊은 수동 구독 관리 필요. | 이벤트 리스너 수동 부착 및 취소 토큰 관리. | 좋은 `fromEvent`, 일반적으로 가벼움. |
+| **성능 및 메모리** | 탁월함 – 최적화된 `toUnordered()` 및 `toOrdered()` 콜렉터 제공. | 매우 좋지만 깊은 연산자 체인은 오버헤드를 초래할 수 있음. | 우수함(네이티브 오버헤드 최소). | 우수함. |
+| **번들 크기** | 매우 가벼움. | 크기가 큼(트리 쉐이킹 후에도). | 제로(언어 네이티브 기능). | 작음. |
+| **API 설계 철학** | 명시적 인덱스 의미론을 가진 함수형 콜렉터 패턴. | 반응형 Observable 패턴. | 명령형 Iterator / 선언형 Generator 패턴. | 함수형, 포인트 프리 구성. |
+| **흐름 제어** | 명시적(`interrupt`, `.limit()`, `.takeWhile()`, `.sub()`). | 좋음(`take`, `takeUntil`, `first`). | 수동(루프 내 `break`). | 좋음(`take`, `until`). |
+| **동기 및 비동기 지원** | 통합 API – 두 패러다임에 대한 일류 지원. | 주로 비동기. | 둘 다 지원되지만 수동 브리지 필요. | 주로 비동기. |
+| **학습 곡선** | 함수형 및 인덱스된 컬렉션 파이프라인에 익숙한 개발자에게는 완만함. | 가파름(광범위한 연산자 어휘, 핫/콜드 Observable 개념). | 낮음에서 중간. | 중간. |
 
-Semantic-TypeScript의 주요 장점
+**Semantic‑TypeScript의 장점**
 
-•   고유한 내장 통계 및 인덱싱 기능으로, 수동 `reduce` 또는 외부 라이브러리의 필요성을 없앱니다.
+*   **고유한 기능:** 내장 통계 및 인덱싱 기능으로 수동 `reduce` 작업 또는 보조 데이터 분석 라이브러리의 필요성이 제거됩니다.
+*   **예측 가능한 리소스 관리:** 이벤트 스트림에 대한 명시적 제어로 RxJS 애플리케이션에서 미묘하게 발생할 수 있는 메모리 누수를 방지합니다.
+*   **통합 설계:** 동기 및 비동기 워크플로우 모두에 대한 일관된 API로 인지 부하와 코드 중복이 감소합니다.
 
-•   이벤트 스트림에 대한 명시적 제어로 RxJS에서 흔히 발생하는 메모리 누수를 방지합니다.
-
-•   통합된 동기/비동기 설계로 다양한 사용 사례에 대해 단일하고 일관된 API를 제공합니다.
-
-이 비교는 Semantic-TypeScript가 기존의 반응형 라이브러리의 번잡함 없이도 성능, 타입 안전성, 풍부한 분석 기능을 요구하는 현대 타입스크립트 프론트엔드 애플리케이션에 특히 적합한 이유를 보여줍니다.
+이 비교는 기존 반응형 프레임워크의 복잡성 없이 높은 성능, 견고한 타입 안전성 및 풍부한 데이터 처리 기능을 요구하는 현대 TypeScript 애플리케이션에 Semantic‑TypeScript가 특히 적합한 이유를 강조합니다.
 
 ---
 
-### 탐구할 준비가 되셨나요?
+### 탐험 시작하기
 
-Semantic-TypeScript는 복잡한 데이터 흐름을 가독성 있고 구성 가능하며 고성능 파이프라인으로 변환합니다. 실시간 UI 이벤트를 처리하든, 대규모 데이터 세트를 처리하든, 분석 대시보드를 구축하든, 데이터베이스 수준의 인덱싱의 힘과 함수형 프로그래밍의 우아함을 동시에 제공합니다.
+Semantic‑TypeScript는 복잡한 데이터 흐름을 읽기 쉽고 구성 가능하며 고성능인 파이프라인으로 변환합니다. 실시간 UI 이벤트 처리, 대규모 데이터 세트 처리 또는 분석 대시보드 구축 중 어느 것이든 데이터베이스 수준 인덱싱의 힘과 함수형 프로그래밍의 우아함을 제공합니다.
 
-다음 단계:
+**다음 단계:**
 
-•   IDE에서 완전한 타이핑된 API를 탐색하세요 (모든 내보내기는 메인 패키지에서 제공됩니다).
+*   IDE에서 직접 완전히 타이핑된 API를 탐색하세요(모든 내보내기는 기본 패키지 진입점에서 사용 가능).
+*   복잡한 비동기 반복자 및 반응형 체인을 명확하고 의도적인 Semantic 파이프라인으로 대체한 개발자들의 성장하는 커뮤니티에 가입하세요.
 
-•   복잡한 비동기 이터레이터를 깨끗한 Semantic 파이프라인으로 대체한 개발자 커뮤니티에 합류하세요.
+**Semantic‑TypeScript** – 스트림과 구조가 만나는 곳.
 
-Semantic-TypeScript — 스트림이 구조를 만나는 곳.
+오늘부터 구축을 시작하고 신중한 인덱싱 설계가 가져오는 실질적인 차이를 경험하세요.
 
-오늘부터 구축을 시작하고 사려 깊은 인덱싱이 제공하는 차이를 경험해 보세요.
-
-명확하게 구축하고, 자신 있게 나아가며, 의도를 가지고 데이터를 변형하세요.
+**명확성으로 구축하고, 확신을 가지고 나아가며, 의도적으로 데이터를 변환하세요.**
 
 MIT © Eloy Kim

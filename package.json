@@ -6,7 +6,7 @@
     "url": "https://github.com/eloyhere"
   },
   "description": "A modern type-safe stream processing library inspired by JavaScript Generator, Java Stream, and MySQL Index. Supports lazy evaluation, async streams, statistics, and IO-like operations.",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "type": "module",
   "readme": "readme.md",
   "main": "dist/index.js",

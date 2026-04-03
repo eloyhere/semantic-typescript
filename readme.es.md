@@ -1,31 +1,33 @@
-# **Semantic-TypeScript**
-**Flujos, Indexados.** Sus datos, bajo control preciso.
+# **Semantic‑TypeScript**
+**Flujos, indexados.** Tus datos, bajo control preciso.
 
 ---
 
 ### Descripción general
 
-Semantic-TypeScript marca un avance significativo en la tecnología de procesamiento de flujos, **sintetizando** los conceptos más efectivos de `GeneratorFunction` de JavaScript, Java Streams e indexación de estilo MySQL. Su filosofía central es a la vez simple y poderosa: construir pipelines de procesamiento de datos excepcionalmente eficientes mediante indexación inteligente, no a través de iteración de fuerza bruta.
+Semantic‑TypeScript representa un avance significativo en el procesamiento de flujos, **fusionando** elegantemente los paradigmas más efectivos de los generadores de JavaScript, los Streams de Java y la indexación al estilo MySQL. Su premisa fundamental es poderosa y deliberada: construir canalizaciones de procesamiento de datos excepcionalmente eficientes mediante indexación inteligente, en lugar de mediante iteración por fuerza bruta convencional.
 
-Donde las librerías convencionales imponen bucles síncronos o cadenas de promesas incómodas, Semantic-TypeScript ofrece una experiencia **completamente asíncrona**, funcionalmente pura y rigurosamente segura en tipos, diseñada para las demandas del desarrollo front-end moderno.
+Donde las bibliotecas típicas imponen bucles sincrónicos o cadenas de promesas engorrosas, Semantic‑TypeScript proporciona una experiencia **completamente asíncrona**, funcionalmente pura y rigurosamente segura en cuanto a tipos, diseñada expresamente para las exigencias del desarrollo moderno de aplicaciones.
 
-En su modelo elegante, los datos solo llegan al consumidor cuando el pipeline ascendente invoca explícitamente las devoluciones de llamada `accept` (y, opcionalmente, `interrupt`). Usted tiene control total sobre el momento exacto en que se necesita.
+Este modelo encarna una forma refinada de flujo de control: los datos solo avanzan hacia el consumidor aguas abajo cuando la canalización aguas arriba invoca explícitamente la función de retorno `accept`. Conservas un control completo y granular sobre el momento del procesamiento: este ocurre precisamente cuando, y solo cuando, es necesario.
 
 ---
 
-### Por qué los desarrolladores lo prefieren
+### ¿Por qué los desarrolladores eligen Semantic‑TypeScript?
 
--   **Indexación Cero-Boilerplate** — cada elemento lleva su índice natural o personalizado.
--   **Estilo Puramente Funcional** — con inferencia completa de TypeScript.
--   **Flujos de Eventos a Prueba de Fugas** — `useWindow`, `useDocument`, `useHTMLElement` y `useWebSocket` están construidos con la seguridad en mente. Usted define el límite (usando `limit(n)`, `sub(start, end)` o `takeWhile(predicate)`) y la librería gestiona la limpieza. Sin oyentes persistentes, sin fugas de memoria.
--   **Estadísticas Integradas** — análisis numérico y de bigint integral que incluye promedios, medianas, modas, varianza, asimetría y curtosis.
--   **Rendimiento Predecible** — elija entre recolectores ordenados o desordenados según sus requisitos.
--   **Eficiencia de Memoria** — los flujos se evalúan de forma perezosa, aliviando las preocupaciones de memoria.
--   **Sin Comportamiento Indefinido** — TypeScript garantiza seguridad de tipos y nulabilidad. Los datos de entrada permanecen sin modificar a menos que se alteren explícitamente dentro de sus funciones de devolución de llamada.
+-   **Indexación sin código repetitivo** – Cada elemento posee inherentemente su índice natural o personalizado, eliminando el seguimiento manual.
+-   **Puramente funcional y seguro en tipos** – Disfruta de inferencia de tipos TypeScript completa e idiomática junto con operaciones inmutables.
+-   **Flujos de eventos a prueba de fugas** – El patrón `useSubscription` se diseña teniendo la seguridad de recursos como primer principio. Defines el límite lógico (usando `limit(n)`, `sub(start, end)` o `takeWhile(predicate)`) y la biblioteca gestiona completamente el ciclo de vida de la suscripción. Esto garantiza que no haya oyentes residuales ni fugas de memoria.
+-   **Suite estadística integrada** – Accede a análisis exhaustivos para flujos tanto de `number` como de `bigint`, incluyendo promedios, medianas, modas, varianza, asimetría y curtosis, sin dependencias externas.
+-   **Rendimiento predecible y ajustable** – Elige entre colectores ordenados o desordenados para adaptarte exactamente a tus requisitos de rendimiento y orden.
+-   **Inherentemente eficiente en memoria** – Los flujos se evalúan de forma diferida, procesando elementos bajo demanda para aliviar la presión sobre la memoria.
+-   **Sin comportamiento indefinido** – TypeScript garantiza seguridad de tipos completa y nulabilidad. Tus datos de origen permanecen inmutables a menos que se modifiquen explícitamente dentro de tus funciones de retorno.
 
 ---
 
 ### Instalación
+
+Integra Semantic‑TypeScript en tu proyecto usando tu gestor de paquetes preferido:
 
 ```bash
 npm install semantic-typescript
@@ -37,179 +39,229 @@ yarn add semantic-typescript
 
 ---
 
-### Comienzo rápido
+### Introducción práctica
+
+Los siguientes ejemplos demuestran conceptos clave, desde transformaciones básicas hasta manejo de eventos del mundo real.
 
 ```typescript
-import { useOf, useFrom, useRange, useWindow, useHTMLElement, useWebSocket, useText, useStringify } from "semantic-typescript";
+import { useOf, useFrom, useRange, useSubscription, useText, useStringify } from "semantic-typescript";
 
-// Estadísticas numéricas
-let summate: number = useOf(10, 20, 30, 40)
-  .map((n: number): number => n * 2)
-  .toNumericStatistics()  // Requerido antes de la operación terminal
-  .summate();             // 200
+// ====================================================================
+// EJEMPLO 1: Operaciones básicas y estadísticas numéricas
+// ====================================================================
+// Demuestra operaciones de mapeo y estadísticas terminales. Después de la transformación, la canalización debe convertirse en un colector de estadísticas antes de poder llamar a métodos terminales como `.summate()`.
 
-// Estadísticas de BigInt
-let summate: bigint = useOf(10n, 20n, 30n, 40n)
-  .map((n: bigint): bigint => n * 2)
-  .toBigIntStatistics()   // Requerido antes de la operación terminal
-  .summate();             // 200n
+const numericSum: number = useOf(10, 20, 30, 40)
+  .map((n: number): number => n * 2)        // Duplica cada elemento: [20, 40, 60, 80]
+  .toNumericStatistics()                    // Convierte a un colector de estadísticas
+  .summate();                               // Operación terminal: 200
 
-// Invertir un flujo por índice
-useFrom([1, 2, 3, 4, 5])
-  .redirect((element: E, index: bigint): bigint => -index) // Índice negativo para inversión
-  .toOrdered() // Llamar a toOrdered() para preservar el orden del índice
-  .toArray(); // [5, 4, 3, 2, 1]
+// Otros métodos estadísticos (disponibles después de `.toNumericStatistics()`):
+// .average(), .median(), .mode(), .variance(), .skewness(), .kurtosis()
 
-// Mezclar un flujo
-useFrom([1, 2, 3, 4, 5])
+// ====================================================================
+// EJEMPLO 2: Estadísticas de BigInt
+// ====================================================================
+// Funciona de manera idéntica a las estadísticas numéricas pero está optimizado para datos BigInt.
+
+const bigintSum: bigint = useOf(10n, 20n, 30n, 40n)
+  .map((n: bigint): bigint => n * 2n)       // Aritmética BigInt
+  .toBigIntStatistics()                       // Convierte a un colector de estadísticas BigInt
+  .summate();                                // Operación terminal: 200n
+
+// ====================================================================
+// EJEMPLO 3: Manipulación de índices para invertir un flujo
+// ====================================================================
+// Ilustra cómo reordenar elementos reasignando estratégicamente sus índices utilizando el método `.redirect()`, permitiendo patrones personalizados como la inversión.
+
+const reversedArray: number[] = useFrom([1, 2, 3, 4, 5])
+  .redirect((_element: number, index: bigint): bigint => -index) // Mapea a índices negativos
+  .toOrdered()  // Esencial: recoge elementos ordenados por sus nuevos índices
+  .toArray();   // Resultado: [5, 4, 3, 2, 1]
+
+// Para una inversión simple, también está disponible `.reverse()`.
+
+// ====================================================================
+// EJEMPLO 4: Mezcla (Shuffle) de un flujo
+// ====================================================================
+// Permuta aleatoriamente los índices de los elementos usando un algoritmo de mezcla in situ.
+
+const shuffledArray: number[] = useFrom([1, 2, 3, 4, 5])
+  .shuffle()      // Reasigna índices aleatoriamente
+  .toOrdered()    // Ordena según los nuevos índices aleatorios
+  .toArray();     // Ejemplo: [2, 5, 1, 4, 3] (varía en cada ejecución)
+
+// ====================================================================
+// EJEMPLO 5: Rotación circular de un flujo
+// ====================================================================
+// Desplaza elementos cíclicamente. Los valores positivos rotan a la derecha; los negativos a la izquierda.
+
+// Rotación a la derecha 2 posiciones
+const rightRotated: number[] = useFrom([1, 2, 3, 4, 5])
+  .translate(2)   // Desplaza índices 2 posiciones a la derecha
+  .toOrdered()
+  .toArray();     // Resultado: [4, 5, 1, 2, 3]
+
+// ====================================================================
+// EJEMPLO 6: Evaluación diferida con rangos infinitos
+// ====================================================================
+// Procesa flujos teóricamente infinitos de forma diferida, calculando elementos solo cuando se necesitan.
+
+const firstTenMultiples: bigint[] = useRange(0n, 1_000_000n)
+  .filter(n => n % 17n === 0n)  // Conserva múltiplos de 17
+  .limit(10n)                    // Crítico: se detiene después de la décima coincidencia
+  .toUnordered()                 // No se requiere ordenación
+  .toArray();                    // Resultado: [0, 17, 34, 51, 68, 85, 102, 119, 136, 153]
+
+// Sin `.limit(10n)`, la canalización procesaría el millón de elementos.
+
+// ====================================================================
+// EJEMPLO 7: Composición de una canalización compleja
+// ====================================================================
+// Demuestra la composición secuencial de múltiples operaciones.
+
+const complexResult: number[] = useRange(1n, 100n)
+  .map(n => Number(n) * 2)
+  .filter(n => n > 50)
   .shuffle()
+  .limit(5n)
+  .translate(2)
   .toOrdered()
-  .toArray(); // ej., [2, 5, 1, 4, 3]
-
-// Trasladar elementos dentro de un flujo
-useFrom([1, 2, 3, 4, 5])
-  .translate(2)  // Desplazar elementos 2 posiciones a la derecha
-  .toOrdered()
-  .toArray(); // [4, 5, 1, 2, 3]
-
-useFrom([1, 2, 3, 4, 5])
-  .translate(-2) // Desplazar elementos 2 posiciones a la izquierda
-  .toOrdered()
-  .toArray(); // [3, 4, 5, 1, 2]
-
-// Rango infinito con terminación temprana
-useRange(0n, 1_000_000n)
-  .filter(n => n % 17n === 0n)
-  .limit(10n)          // Detenerse después de 10 elementos
-  .toUnordered()
   .toArray();
 
-// Redimensión de ventana en tiempo real (se detiene automáticamente tras 5 eventos)
-useWindow("resize")
-  .limit(5n)          // Crucial para flujos de eventos
-  .toUnordered()
-  .forEach((ev, idx) => console.log(`Redimensión #${idx}`));
+// ====================================================================
+// EJEMPLO 8: Suscripción gestionada a eventos del DOM
+// ====================================================================
+// Escucha eventos del navegador con limpieza automática y a prueba de fugas.
+// La llamada `.limit(n)` define el límite para la eliminación automática del oyente.
 
-// Escuchar un elemento HTML
-// <input id="input" type="text"/>
-useHTMLElement("#input", "change")
-  .limit(1)
-  .toUnordered()
-  .forEach((event: Event) => submit(event));
+// Define un suscriptor para un objetivo Window
+const windowSubscriber = {
+    mount: (target: Window): void => { /* Lógica de configuración */ },
+    subscribe: (target: Window, event: keyof WindowEventMap, handler: EventListener): void => {
+        target.addEventListener(event, handler);
+    },
+    unsubscribe: (target: Window, event: keyof WindowEventMap, handler: EventListener): void => {
+        target.removeEventListener(event, handler);
+    },
+    unmount: (): void => { /* Lógica de limpieza */ }
+};
 
-// Escuchar múltiples elementos y eventos
-useHTMLElement("input", ["change", "keyup"])
-  .takeWhile((event: Event): boolean => validate(event))
+useSubscription(window, windowSubscriber, "resize")
+  .limit(5n) // Se da de baja automáticamente después de 5 eventos
   .toUnordered()
-  .forEach((event: Event) => submit(event));
+  .forEach((ev: Event, idx) =>
+    console.log(`Redimensión #${idx}: ${(ev.target as Window).innerWidth}x${(ev.target as Window).innerHeight}`)
+  );
 
-// Escuchar un WebSocket
-let webSocket = new WebSocket("ws://localhost:8080");
-webSocket.addEventListener("close", (): void => {
-  webSocket.close();  // Gestionar el ciclo de vida del WebSocket manualmente
-});
-useWebSocket(webSocket, "message")
-  .limit(1)
-  .toUnordered()
-  .forEach((message: MessageEvent) => console.log(message.data));
+// ====================================================================
+// EJEMPLO 9: Procesamiento de cadenas por puntos de código Unicode
+// ====================================================================
+// Itera correctamente sobre una cadena, manejando caracteres Unicode de múltiples bytes.
 
-// Iterar sobre una cadena por punto de código
 useText("My emotion now is: 😊, and semantic is 👍")
   .toUnordered()
-  .log(); // Imprime la cadena
+  .log(); // Registra cada carácter (incluyendo emojis) en una nueva línea.
 
-// Convertir a cadena de forma segura un objeto con referencias circulares
-let o = {
+// ====================================================================
+// EJEMPLO 10: Transformación a cadena segura de referencias circulares
+// ====================================================================
+// Serializa de forma segura objetos que contienen referencias circulares.
+
+const obj = {
   a: 1,
-  b: "text",
-  c: [o.a, o.b, o.c] // Referencia circular
+  b: "texto"
 };
-// let text: string = JSON.stringify(o); // Lanza un error
-let text: string = useStringify(o); // Produce de forma segura `{a: 1, b: "text", c: []}`
+(obj as any).c = [obj.a, obj.b, (obj as any).c]; // Introduce una referencia circular
+
+// const text: string = JSON.stringify(obj); // Lanza un error
+const text: string = useStringify(obj); // Produce de forma segura `{a: 1, b: "texto", c: []}`
 ```
 
 ---
 
-### Conceptos centrales
+### Conceptos principales
 
-| Concepto | Propósito | Cuándo usarlo |
+| Concepto | Propósito | Caso de uso principal |
 | :--- | :--- | :--- |
-| `AsynchronousSemantic` | Constructor central para flujos asíncronos, eventos y pipelines perezosos. | Eventos en tiempo real, WebSockets, oyentes DOM, flujos de larga duración o infinitos. |
-| `SynchronousSemantic` | Constructor para flujos síncronos, en memoria o basados en bucle. | Datos estáticos, rangos, iteración inmediata. |
-| `toUnordered()` | Recolector terminal más rápido (indexación basada en Map). | Rutas críticas de rendimiento (tiempo y espacio O(n), sin ordenación). |
-| `toOrdered()` | Recolector ordenado, estable en índices. | Cuando se requiere orden estable o acceso indexado. |
-| `toNumericStatistics()` | Análisis estadístico numérico rico (media, mediana, varianza, asimetría, curtosis, etc.). | Análisis de datos y cálculos estadísticos. |
-| `toBigIntStatistics()` | Análisis estadístico de bigint. | Análisis de datos y cálculos estadísticos para enteros grandes. |
-| `toWindow()` | Soporte para ventanas deslizantes y fijas. | Procesamiento de series temporales, procesamiento por lotes y operaciones con ventanas. |
+| `AsynchronousSemantic` | El constructor principal para flujos asíncronos, eventos y canalizaciones diferidas basadas en *push*. | Eventos en tiempo real, WebSockets, oyentes del DOM o cualquier flujo de larga duración/infinito. |
+| `SynchronousSemantic` | El constructor para flujos síncronos, en memoria o basados en *pull* inmediatos (*eager*). | Datos estáticos, rangos finitos o tareas de iteración inmediata. |
+| `toUnordered()` | El colector terminal más rápido, utiliza un Map para almacenar índices. | Rutas críticas de rendimiento donde el orden estable no es requerido (tiempo y espacio O(n)). |
+| `toOrdered()` | Un colector terminal ordenado, estable en índices. | Cuando se debe preservar el orden de los elementos o se necesita acceso indexado. |
+| `toNumericStatistics()` | Un colector que habilita análisis estadísticos completos en flujos de `number`. | Análisis de datos, métricas y cálculos estadísticos. |
+| `toBigIntStatistics()` | Un colector que habilita análisis estadísticos completos en flujos de `bigint`. | Análisis y estadísticas para conjuntos de datos de enteros grandes. |
+| `toWindow()` | Proporciona operaciones de ventana deslizante (*sliding*) y fija (*tumbling*) sobre un flujo. | Análisis de series temporales, procesamiento por lotes y agregaciones por ventanas. |
 
 ---
 
-**Reglas de uso importantes**
+**Reglas de uso esenciales**
 
-1.  **Flujos de eventos** (`useWindow`, `useDocument`, `useHTMLElement`, `useWebSocket`, …) devuelven un `AsynchronousSemantic`.
-    → **Debe** llamar a `.limit(n)`, `.sub(start, end)` o `.takeWhile()` para dejar de escuchar. De lo contrario, el oyente permanece activo.
+1.  **Los flujos de eventos** (creados a través de fábricas como `useSubscription`) devuelven un `AsynchronousSemantic`.
+    → Debes llamar a un método que defina un límite, como `.limit(n)`, `.sub(start, end)` o `.takeWhile(predicate)` para terminar el oyente. De lo contrario, la suscripción permanecerá activa.
 
-2.  **Operaciones terminales** (`.toArray()`, `.count()`, `.average()`, `.reduce()`, `.findFirst()`, etc.) **solo están disponibles después** de la conversión a un recolector:
+2.  **Las operaciones terminales** (`.toArray()`, `.count()`, `.forEach()`, `.findFirst()`, etc.) solo están disponibles después de convertir la canalización en un colector:
     ```typescript
-    .toUnordered()   // Tiempo y espacio O(n), sin ordenación
+    .toUnordered()   // Para máxima velocidad, sin garantía de orden.
     // o
-    .toOrdered()     // Ordenado, mantiene el orden
+    .toOrdered()     // Para salida estable y ordenada.
+    // o
+    .toNumericStatistics() // Para métodos estadísticos.
     ```
 
 ---
 
 ### Características de rendimiento
 
-| Recolector | Complejidad Temporal | Complejidad Espacial | ¿Ordenado? | Mejor para |
+| Colector | Complejidad temporal | Complejidad espacial | ¿Orden garantizado? | Escenario ideal |
 | :--- | :--- | :--- | :--- | :--- |
-| `toUnordered()` | O(n) | O(n) | No | Velocidad bruta, orden no requerido. |
-| `toOrdered()` | O(2n) | O(n) | Sí | Orden estable, acceso indexado, análisis. |
-| `toNumericStatistics()` | O(2n) | O(n) | Sí | Operaciones estadísticas que requieren datos ordenados. |
-| `toBigIntStatistics()` | O(2n) | O(n) | Sí | Operaciones estadísticas para bigint. |
-| `toWindow()` | O(2n) | O(n) | Sí | Operaciones de ventana basadas en tiempo. |
+| `toUnordered()` | O(n) | O(n) | No | El rendimiento bruto es clave; el orden final es irrelevante. |
+| `toOrdered()` | O(n log n) | O(n) | Sí (ordenado) | Orden estable, acceso indexado o pre-ordenación para estadísticas. |
+| `toNumericStatistics()` | O(n log n) | O(n) | Sí (orden interno) | Realizar operaciones estadísticas que requieren datos ordenados. |
+| `toBigIntStatistics()` | O(n log n) | O(n) | Sí (orden interno) | Operaciones estadísticas en datos BigInt. |
+| `toWindow()` | O(n log n) | O(n) | Sí (orden interno) | Operaciones de ventana que se benefician de índices ordenados. |
 
-Opte por `toUnordered()` cuando la velocidad sea primordial. Use `toOrdered()` solo cuando necesite un orden estable o métodos estadísticos que dependan de datos ordenados.
+Elige `toUnordered()` cuando la velocidad absoluta es primordial. Opta por `toOrdered()` o un colector de estadísticas solo cuando tu lógica dependa del orden de los elementos.
 
 ---
 
-**Comparación con otros procesadores de flujo para Front-End**
+**Análisis comparativo con bibliotecas modernas de flujos**
 
-| Característica | Semantic-TypeScript | RxJS | Iteradores/Generadores Asíncronos Nativos | Most.js |
+| Característica | Semantic‑TypeScript | RxJS | Async Iterators / Generators nativos | Most.js |
 | :--- | :--- | :--- | :--- | :--- |
-| **Integración con TypeScript** | De primer nivel, profundamente tipado con consciencia nativa de índices. | Excelente, pero involucra genéricos complejos. | Buena, requiere tipado manual. | Estilo funcional fuerte. |
-| **Análisis Estadístico Integrado** | Soporte nativo integral para `number` y `bigint`. | No disponible de forma nativa (requiere operadores personalizados). | Ninguno. | Ninguno. |
-| **Indexación y Conciencia de Posición** | Indexación nativa y potente de bigint en cada elemento. | Requiere operadores personalizados (`scan`, `withLatestFrom`). | Se requiere contador manual. | Básica, sin índice incorporado. |
-| **Gestión de Flujos de Eventos** | Fábricas dedicadas y seguras en tipos con control explícito de parada temprana. | Potente pero requiere gestión manual de suscripciones. | Oyente de eventos manual + cancelación. | Buena `fromEvent`, ligero. |
-| **Rendimiento y Eficiencia de Memoria** | Excepcional – recolectores optimizados `toUnordered()` y `toOrdered()`. | Muy buena, pero las cadenas de operadores añaden sobrecarga. | Excelente (sobrecarga cero). | Excelente. |
-| **Tamaño del Paquete** | Muy ligero. | Grande (incluso con tree-shaking). | Cero (nativo). | Pequeño. |
-| **Filosofía de Diseño de API** | Patrón de recolector funcional con indexación explícita. | Patrón Observable Reactivo. | Patrón Iterador / Generador. | Funcional, point-free. |
-| **Terminación Temprana y Control** | Explícito (`interrupt`, `.limit()`, `.takeWhile()`, `.sub()`). | Bueno (`take`, `takeUntil`, `first`). | Manual (`break` en `for await…of`). | Bueno (`take`, `until`). |
-| **Soporte Síncrono y Asíncrono** | API unificada – soporte de primer nivel para ambos. | Principalmente asíncrono. | Ambos, pero manual. | Principalmente asíncrono. |
-| **Curva de Aprendizaje** | Suave para desarrolladores familiarizados con pipelines funcionales e indexados. | Más pronunciada (muchos operadores, observables fríos/calientes). | Baja. | Moderada. |
+| **Integración TypeScript** | De primera clase, fuertemente tipado con conciencia de índice inherente. | Excelente, pero a menudo implica cadenas genéricas complejas. | Buena, pero requiere anotaciones de tipo manuales. | Fuerte, con un estilo de tipado funcional-*first*. |
+| **Análisis estadístico integrado** | Soporte nativo completo para `number` y `bigint`. | No disponible de forma nativa (requiere operadores personalizados u otras bibliotecas). | Ninguno. | Ninguno. |
+| **Indexación y conciencia de posición** | Indexación BigInt nativa y poderosa en cada elemento. | Requiere operadores personalizados (ej. `scan`, `withLatestFrom`). | Se requiere gestión manual de contadores. | Básica, sin propiedad de índice incorporada. |
+| **Gestión de flujos de eventos** | Fábricas dedicadas, seguras en tipos, con control de ciclo de vida explícito y declarativo. | Poderosa pero requiere una gestión manual cuidadosa de las suscripciones para evitar fugas. | Adjuntar oyentes de eventos manualmente y gestionar tokens de cancelación. | Buen `fromEvent`, generalmente liviano. |
+| **Rendimiento y memoria** | Excepcional: ofrece colectores optimizados `toUnordered()` y `toOrdered()`. | Muy buena, aunque las cadenas profundas de operadores pueden introducir sobrecarga. | Excelente (sobrecarga nativa mínima). | Excelente. |
+| **Tamaño del paquete** | Muy liviano. | Sustancial (incluso con *tree-shaking*). | Cero (característica nativa del lenguaje). | Pequeño. |
+| **Filosofía de diseño de API** | Patrón de colector funcional con semántica de índice explícita. | Patrón Observable reactivo. | Patrón Iterator imperativo / Generator declarativo. | Funcional, composición *point-free*. |
+| **Control de flujo** | Explícito (`interrupt`, `.limit()`, `.takeWhile()`, `.sub()`). | Bueno (`take`, `takeUntil`, `first`). | Manual (`break` en bucles). | Bueno (`take`, `until`). |
+| **Soporte síncrono y asíncrono** | API unificada: soporte de primera clase para ambos paradigmas. | Principalmente asíncrono. | Ambos soportados, pero con puente manual. | Principalmente asíncrono. |
+| **Curva de aprendizaje** | Suave para desarrolladores familiarizados con canalizaciones de colecciones funcionales e indexadas. | Más pronunciada (amplio léxico de operadores, conceptos de Observable *hot/cold*). | Baja a media. | Media. |
 
-**Ventajas clave de Semantic-TypeScript**
+**La ventaja de Semantic‑TypeScript**
 
-*   Capacidades únicas de estadística e indexación integradas, eliminando la necesidad de `reduce` manual o librerías externas.
-*   Control explícito sobre los flujos de eventos previene las fugas de memoria comunes en RxJS.
-*   Un diseño síncrono/asíncrono unificado proporciona una única API consistente para diversos casos de uso.
+*   **Capacidades únicas:** Las características de estadística e indexación integradas eliminan la necesidad de operaciones manuales de `reduce` o bibliotecas de análisis de datos suplementarias.
+*   **Gestión de recursos predecible:** El control explícito sobre los flujos de eventos previene las fugas de memoria que pueden ser sutiles en las aplicaciones RxJS.
+*   **Diseño unificado:** Una API consistente para flujos de trabajo tanto síncronos como asíncronos reduce la carga cognitiva y la duplicación de código.
 
-Esta comparación ilustra por qué Semantic-TypeScript es particularmente adecuado para aplicaciones front-end modernas con TypeScript que exigen rendimiento, seguridad de tipos y análisis ricos sin la ceremonia de las librerías reactivas tradicionales.
+Esta comparación destaca por qué Semantic‑TypeScript es especialmente adecuado para aplicaciones TypeScript modernas que exigen alto rendimiento, solidez en la seguridad de tipos y amplias funciones de procesamiento de datos sin la complejidad de los marcos reactivos tradicionales.
 
 ---
 
-### ¿Listo para explorar?
+### Comienza tu exploración
 
-Semantic-TypeScript transforma flujos de datos complejos en pipelines legibles, componibles y de alto rendimiento. Ya sea que esté manejando eventos de UI en tiempo real, procesando grandes conjuntos de datos o construyendo paneles de análisis, proporciona el poder de la indexación a nivel de base de datos con la elegancia de la programación funcional.
+Semantic‑TypeScript transforma flujos de datos complejos en canalizaciones legibles, componibles y de alto rendimiento. Ya sea que estés manejando eventos de UI en tiempo real, procesando grandes conjuntos de datos o construyendo paneles de análisis, ofrece el poder de la indexación a nivel de base de datos con la elegancia de la programación funcional.
 
-**Próximos pasos:**
+**Tus próximos pasos:**
 
-*   Explore la API completamente tipada en su IDE (todas las exportaciones son del paquete principal).
-*   Únase a la creciente comunidad de desarrolladores que han reemplazado iteradores asíncronos complejos con pipelines Semantic limpios.
+*   Explora la API completamente tipificada directamente en tu IDE (todas las exportaciones están disponibles desde el punto de entrada principal del paquete).
+*   Únete a la creciente comunidad de desarrolladores que han reemplazado iteradores asíncronos complejos y cadenas reactivas con canalizaciones Semantic claras e intencionales.
 
-**Semantic-TypeScript** — donde los flujos se encuentran con la estructura.
+**Semantic‑TypeScript** – donde los flujos se encuentran con la estructura.
 
-Comience a construir hoy y experimente la diferencia que proporciona una indexación bien pensada.
+Comienza a construir hoy y experimenta la diferencia tangible que aporta un diseño de indexación reflexivo.
 
-**Construya con claridad, proceda con confianza y transforme los datos con intención.**
+**Construye con claridad, avanza con confianza y transforma datos con intención.**
 
 MIT © Eloy Kim

@@ -1,37 +1,33 @@
-# Semantic-TypeScript
-流動，索引。您的數據，精確掌控。
+# **Semantic‑TypeScript**
+**串流處理，索引化。** 讓您的數據處於精準控制之下。
 
 ---
 
 ### 概述
 
-Semantic-TypeScript 標誌著串流處理技術的重大飛躍，它綜合了 JavaScript `GeneratorFunction`、Java Streams 和 MySQL 風格索引中最有效的概念。其核心理念簡單而強大：透過智能索引，而非暴力迭代，來構建極其高效的數據處理管道。
+Semantic‑TypeScript 代表了串流處理領域的一次重大演進，它巧妙地**融合**了 JavaScript 產生器、Java Streams 和 MySQL 風格索引中最有效的典範。其核心理念強大而明確：透過智慧索引而非傳統的蠻力迭代，建構極其高效的資料處理管道。
 
-當傳統函式庫強加同步迴圈或笨重的 Promise 鏈時，Semantic-TypeScript 提供了一個完全非同步、函數純粹且嚴格型別安全的體驗，專為現代前端開發的需求而設計。
+傳統的函式庫通常強制使用同步迴圈或笨重的 Promise 鏈，而 Semantic‑TypeScript 則提供了一個**完全非同步**、函數式純正且型別絕對安全的體驗，專為滿足現代應用程式開發的需求而設計。
 
-在其優雅的模型中，數據僅在上游管道明確呼叫 `accept`（及可選的 `interrupt`）回調時，才會送達消費者。您能完全掌控時機——就在需要的那一刻。
+該模型體現了一種精煉的控制流：資料僅在上游管道明確呼叫 `accept` 回呼時，才會傳遞給下游消費者。您可以對處理時機保持完全、細粒度的掌控——處理僅在需要時、且僅在要求的時刻發生。
 
 ---
 
-### 開發者為何青睞它
+### 開發者為何選擇 Semantic‑TypeScript
 
-• 零樣板索引 — 每個元素都帶有其自然或自訂的索引。
-
-• 純函數式風格 — 具備完整的 TypeScript 型別推論。
-
-• 防洩漏事件串流 — `useWindow`、`useDocument`、`useHTMLElement` 和 `useWebSocket` 的設計以安全為本。您定義邊界（使用 `limit(n)`、`sub(start, end)` 或 `takeWhile(predicate)`），函式庫則負責清理。沒有殘留的監聽器，沒有記憶體洩漏。
-
-• 內建統計功能 — 全面的 `number` 與 `bigint` 分析，包括平均值、中位數、眾數、變異數、偏度和峰度。
-
-• 可預測的性能 — 根據需求選擇有序或無序收集器。
-
-• 記憶體高效 — 串流採用延遲求值，減輕記憶體負擔。
-
-• 無未定義行為 — TypeScript 保證型別安全與可空性。輸入數據保持不變，除非在您的回調函數中明確修改。
+-   **零模板索引** – 每個元素天生擁有其自然或自訂的索引，無需手動追蹤。
+-   **純函數式與型別安全** – 在支援不可變操作的同時，享受完整、地道的 TypeScript 型別推論。
+-   **無洩漏的事件串流** – `useSubscription` 模式將資源安全作為首要原則設計。您透過 `limit(n)`、`sub(start, end)` 或 `takeWhile(predicate)` 定義邏輯邊界，函式庫則管理完整的訂閱生命週期，確保沒有殘留的監聽器和記憶體洩漏。
+-   **內建統計套件** – 無需外部依賴，即可存取針對 `number` 和 `bigint` 串流的全面分析功能，包括平均值、中位數、眾數、變異數、偏態和峰態。
+-   **可預測、可調校的效能** – 根據您對效能和順序的精確需求，選擇有序或無序收集器。
+-   **天然的記憶體高效** – 串流採用惰性求值，按需處理元素以減輕記憶體壓力。
+-   **無未定義行為** – TypeScript 保證完整的型別安全性和可空性。除非在回呼函數中明確修改，否則您的來源資料保持不變。
 
 ---
 
 ### 安裝
+
+使用您偏好的套件管理器將 Semantic‑TypeScript 整合到專案中：
 
 ```bash
 npm install semantic-typescript
@@ -43,184 +39,229 @@ yarn add semantic-typescript
 
 ---
 
-### 快速開始
+### 快速入門
+
+以下範例演示了從基礎轉換到實際事件處理的核心概念。
 
 ```typescript
-import { useOf, useFrom, useRange, useWindow, useHTMLElement, useWebSocket, useText, useStringify } from "semantic-typescript";
+import { useOf, useFrom, useRange, useSubscription, useText, useStringify } from "semantic-typescript";
 
-// 數值統計
-let summate: number = useOf(10, 20, 30, 40)
-  .map((n: number): number => n * 2)
-  .toNumericStatistics()  // 終端操作前必需
-  .summate();             // 200
+// ====================================================================
+// 範例 1: 基礎操作與數值統計
+// ====================================================================
+// 演示映射和終端統計操作。轉換後，管道必須轉換為統計收集器才能呼叫 `.summate()` 等終端方法。
 
-// 大整數統計
-let summate: bigint = useOf(10n, 20n, 30n, 40n)
-  .map((n: bigint): bigint => n * 2)
-  .toBigIntStatistics()   // 終端操作前必需
-  .summate();             // 200n
+const numericSum: number = useOf(10, 20, 30, 40)
+  .map((n: number): number => n * 2)        // 每個元素翻倍: [20, 40, 60, 80]
+  .toNumericStatistics()                     // 轉換為統計收集器
+  .summate();                               // 終端操作: 200
 
-// 透過索引反轉串流
-useFrom([1, 2, 3, 4, 5])
-  .redirect((element: E, index: bigint): bigint => -index) // 使用負索引以反轉
-  .toOrdered() // 呼叫 toOrdered() 以保持索引順序
-  .toArray(); // [5, 4, 3, 2, 1]
+// 其他統計方法（在 .toNumericStatistics() 後可用）:
+// .average(), .median(), .mode(), .variance(), .skewness(), .kurtosis()
 
-// 隨機打亂串流
-useFrom([1, 2, 3, 4, 5])
+// ====================================================================
+// 範例 2: BigInt 統計
+// ====================================================================
+// 與數值統計操作相同，但針對 BigInt 資料進行了最佳化。
+
+const bigintSum: bigint = useOf(10n, 20n, 30n, 40n)
+  .map((n: bigint): bigint => n * 2n)       // BigInt 算術
+  .toBigIntStatistics()                      // 轉換為 BigInt 統計收集器
+  .summate();                                // 終端操作: 200n
+
+// ====================================================================
+// 範例 3: 透過索引操作實現串流反轉
+// ====================================================================
+// 使用 `.redirect()` 方法透過策略性地重新分配元素索引來說明如何重新排序元素，從而實現反轉等自訂模式。
+
+const reversedArray: number[] = useFrom([1, 2, 3, 4, 5])
+  .redirect((_element: number, index: bigint): bigint => -index) // 映射到負索引
+  .toOrdered()  // 關鍵步驟：按新索引收集並排序元素
+  .toArray();   // 結果: [5, 4, 3, 2, 1]
+
+// 對於簡單的反轉，`.reverse()` 方法同樣可用。
+
+// ====================================================================
+// 範例 4: 串流洗牌
+// ====================================================================
+// 使用原地洗牌演算法隨機置換元素索引。
+
+const shuffledArray: number[] = useFrom([1, 2, 3, 4, 5])
+  .shuffle()      // 隨機重新分配索引
+  .toOrdered()    // 按新的隨機索引排序
+  .toArray();     // 例如: [2, 5, 1, 4, 3] (每次執行結果不同)
+
+// ====================================================================
+// 範例 5: 循環串流旋轉
+// ====================================================================
+// 循環移動元素。正值向右旋轉；負值向左旋轉。
+
+// 向右旋轉 2 個位置
+const rightRotated: number[] = useFrom([1, 2, 3, 4, 5])
+  .translate(2)   // 將索引向右移動 2
+  .toOrdered()
+  .toArray();     // 結果: [4, 5, 1, 2, 3]
+
+// ====================================================================
+// 範例 6: 無限範圍的惰性求值
+// ====================================================================
+// 惰性地處理理論上的無限串流，僅在需要時計算元素。
+
+const firstTenMultiples: bigint[] = useRange(0n, 1_000_000n)
+  .filter(n => n % 17n === 0n)  // 保留 17 的倍數
+  .limit(10n)                   // 關鍵：在第 10 個匹配項後停止
+  .toUnordered()                // 不需要排序
+  .toArray();                   // 結果: [0, 17, 34, 51, 68, 85, 102, 119, 136, 153]
+
+// 沒有 `.limit(10n)` 的話，管道將處理所有一百萬個元素。
+
+// ====================================================================
+// 範例 7: 組合複雜管道
+// ====================================================================
+// 演示多個操作的順序組合。
+
+const complexResult: number[] = useRange(1n, 100n)
+  .map(n => Number(n) * 2)
+  .filter(n => n > 50)
   .shuffle()
+  .limit(5n)
+  .translate(2)
   .toOrdered()
-  .toArray(); // 例如：[2, 5, 1, 4, 3]
-
-// 平移串流中的元素
-useFrom([1, 2, 3, 4, 5])
-  .translate(2)  // 將元素向右平移 2 個位置
-  .toOrdered()
-  .toArray(); // [4, 5, 1, 2, 3]
-
-useFrom([1, 2, 3, 4, 5])
-  .translate(-2) // 將元素向左平移 2 個位置
-  .toOrdered()
-  .toArray(); // [3, 4, 5, 1, 2]
-
-// 無限範圍並提前終止
-useRange(0n, 1_000_000n)
-  .filter(n => n % 17n === 0n)
-  .limit(10n)          // 在 10 個元素後停止
-  .toUnordered()
   .toArray();
 
-// 即時視窗大小調整事件（在 5 個事件後自動停止）
-useWindow("resize")
-  .limit(5n)          // 對事件串流至關重要
-  .toUnordered()
-  .forEach((ev, idx) => console.log(`調整大小事件 #${idx}`));
+// ====================================================================
+// 範例 8: 託管 DOM 事件訂閱
+// ====================================================================
+// 監聽瀏覽器事件，並附帶自動、無洩漏的清理功能。
+// `.limit(n)` 呼叫定義了自動移除監聽器的邊界。
 
-// 監聽 HTML 元素
-// <input id="input" type="text"/>
-useHTMLElement("#input", "change")
-  .limit(1)
-  .toUnordered()
-  .forEach((event: Event) => submit(event));
+// 為 Window 目標定義一個訂閱者
+const windowSubscriber = {
+    mount: (target: Window): void => { /* 設定邏輯 */ },
+    subscribe: (target: Window, event: keyof WindowEventMap, handler: EventListener): void => {
+        target.addEventListener(event, handler);
+    },
+    unsubscribe: (target: Window, event: keyof WindowEventMap, handler: EventListener): void => {
+        target.removeEventListener(event, handler);
+    },
+    unmount: (): void => { /* 清理邏輯 */ }
+};
 
-// 監聽多個元素和事件
-useHTMLElement("input", ["change", "keyup"])
-  .takeWhile((event: Event): boolean => validate(event))
+useSubscription(window, windowSubscriber, "resize")
+  .limit(5n) // 5 個事件後自動取消訂閱
   .toUnordered()
-  .forEach((event: Event) => submit(event));
+  .forEach((ev: Event, idx) =>
+    console.log(`調整大小 #${idx}: ${(ev.target as Window).innerWidth}x${(ev.target as Window).innerHeight}`)
+  );
 
-// 監聽 WebSocket
-let webSocket = new WebSocket("ws://localhost:8080");
-webSocket.addEventListener("close", (): void => {
-  webSocket.close();  // 手動管理 WebSocket 生命週期
-});
-useWebSocket(webSocket, "message")
-  .limit(1)
-  .toUnordered()
-  .forEach((message: MessageEvent) => console.log(message.data));
+// ====================================================================
+// 範例 9: 按 Unicode 碼點處理字串
+// ====================================================================
+// 正確地遍歷一個字串，處理多位元組 Unicode 字元。
 
-// 依碼點遍歷字串
 useText("My emotion now is: 😊, and semantic is 👍")
   .toUnordered()
-  .log(); // 輸出字串
+  .log(); // 將每個字元（包括表情符號）在新行列印。
 
-// 安全地將具有循環參考的物件序列化
-let o = {
+// ====================================================================
+// 範例 10: 安全的循環引用字串化
+// ====================================================================
+// 安全地序列化包含循環引用的物件。
+
+const obj = {
   a: 1,
-  b: "text",
-  c: [o.a, o.b, o.c] // 循環參考
+  b: "text"
 };
-// let text: string = JSON.stringify(o); // 拋出錯誤
-let text: string = useStringify(o); // 安全地產生 `{a: 1, b: "text", c: []}`
+(obj as any).c = [obj.a, obj.b, (obj as any).c]; // 引入循環引用
+
+// const text: string = JSON.stringify(obj); // 拋出錯誤
+const text: string = useStringify(obj); // 安全地產生 `{a: 1, b: "text", c: []}`
 ```
 
 ---
 
 ### 核心概念
 
-| 概念 | 目的 | 使用時機 |
+| 概念 | 目的 | 主要使用場景 |
 | :--- | :--- | :--- |
-| `AsynchronousSemantic` | 非同步串流、事件和延遲管道的核心建構器。 | 即時事件、WebSockets、DOM 監聽器、長時間執行或無限串流。 |
-| `SynchronousSemantic` | 同步、記憶體內或基於迴圈的串流建構器。 | 靜態數據、範圍、立即迭代。 |
-| `toUnordered()` | 最快的終端收集器（基於 Map 索引）。 | 效能關鍵路徑（O(n) 時間與空間複雜度，無排序）。 |
-| `toOrdered()` | 已排序、索引穩定的收集器。 | 需要穩定順序或索引存取時。 |
-| `toNumericStatistics()` | 豐富的數值統計分析（平均值、中位數、變異數、偏度、峰度等）。 | 數據分析與統計計算。 |
-| `toBigIntStatistics()` | 豐富的大整數統計分析。 | 大整數的數據分析與統計計算。 |
-| `toWindow()` | 滑動視窗與翻轉視窗支援。 | 時間序列處理、批次處理和視窗化操作。 |
+| `AsynchronousSemantic` | 用於非同步串流、事件和基於推送的惰性管道的核心建構器。 | 即時事件、WebSockets、DOM 監聽器或任何長時間執行/無限串流。 |
+| `SynchronousSemantic` | 用於同步、記憶體中或基於拉取的急切串流的建構器。 | 靜態資料、有限範圍或需要立即迭代的任務。 |
+| `toUnordered()` | 最快的終端收集器，使用 Map 儲存索引。 | 效能關鍵路徑，且不需要穩定順序的場景（O(n) 時間和空間）。 |
+| `toOrdered()` | 有序、索引穩定的終端收集器。 | 當需要保持元素順序或需要索引存取時。 |
+| `toNumericStatistics()` | 啟用對 `number` 串流進行豐富統計分析功能的收集器。 | 資料分析、指標和統計計算。 |
+| `toBigIntStatistics()` | 啟用對 `bigint` 串流進行豐富統計分析功能的收集器。 | 大型整數資料集的分析和統計。 |
+| `toWindow()` | 提供對串流進行滑動和滾動視窗操作的功能。 | 時間序列分析、批次處理和視窗聚合。 |
 
 ---
 
-重要使用規則
+**基本使用規則**
 
-1.  事件串流（`useWindow`、`useDocument`、`useHTMLElement`、`useWebSocket`…）回傳 `AsynchronousSemantic`。
-    → 您必須呼叫 `.limit(n)`、`.sub(start, end)` 或 `.takeWhile()` 來停止監聽。否則，監聽器將保持活動狀態。
+1.  **事件串流**（透過 `useSubscription` 等工廠函數建立）返回一個 `AsynchronousSemantic`。
+    → 您**必須**呼叫一個定義邊界的方法，如 `.limit(n)`、`.sub(start, end)` 或 `.takeWhile(predicate)` 來終止監聽器。否則訂閱將保持活動狀態。
 
-2.  終端操作（`.toArray()`、`.count()`、`.average()`、`.reduce()`、`.findFirst()` 等）僅在轉換為收集器後可用：
+2.  **終端操作**（`.toArray()`、`.count()`、`.forEach()`、`.findFirst()` 等）**僅在**將管道轉換為收集器**之後**可用：
     ```typescript
-    .toUnordered()   // O(n) 時間與空間複雜度，無排序
+    .toUnordered()   // 用於最大速度，不保證順序。
     // 或
-    .toOrdered()     // 已排序，保持順序
+    .toOrdered()     // 用於穩定、有序的輸出。
+    // 或
+    .toNumericStatistics() // 用於統計方法。
     ```
 
 ---
 
-### 效能特性
+### 效能特徵
 
-| 收集器 | 時間複雜度 | 空間複雜度 | 已排序？ | 最適合用於 |
+| 收集器 | 時間複雜度 | 空間複雜度 | 保證順序？ | 理想場景 |
 | :--- | :--- | :--- | :--- | :--- |
-| `toUnordered()` | O(n) | O(n) | 否 | 原始速度，順序非必需。 |
-| `toOrdered()` | O(2n) | O(n) | 是 | 穩定排序，索引存取，分析。 |
-| `toNumericStatistics()` | O(2n) | O(n) | 是 | 需要已排序數據的統計操作。 |
-| `toBigIntStatistics()` | O(2n) | O(n) | 是 | 大整數的統計操作。 |
-| `toWindow()` | O(2n) | O(n) | 是 | 基於時間的視窗化操作。 |
+| `toUnordered()` | O(n) | O(n) | 否 | 原始吞吐量是關鍵；最終順序無關緊要。 |
+| `toOrdered()` | O(n log n) | O(n) | 是（已排序） | 需要穩定順序、索引存取或為統計進行預排序。 |
+| `toNumericStatistics()` | O(n log n) | O(n) | 是（內部排序） | 執行需要排序資料的統計操作。 |
+| `toBigIntStatistics()` | O(n log n) | O(n) | 是（內部排序） | 對 BigInt 資料進行統計操作。 |
+| `toWindow()` | O(n log n) | O(n) | 是（內部排序） | 能從排序索引中受益的視窗操作。 |
 
-當速度至關重要時，選擇 `toUnordered()`。僅在需要穩定排序或依賴已排序數據的統計方法時，才使用 `toOrdered()`。
+當絕對速度至關重要時，選擇 `toUnordered()`。僅當您的邏輯依賴於元素順序時，才選擇 `toOrdered()` 或統計收集器。
 
 ---
 
-與其他前端串流處理器比較
+**與現代串流處理函式庫的對比分析**
 
-| 特性 | Semantic-TypeScript | RxJS | 原生非同步迭代器 / 產生器 | Most.js |
+| 特性 | Semantic‑TypeScript | RxJS | 原生 Async Iterators / Generators | Most.js |
 | :--- | :--- | :--- | :--- | :--- |
-| TypeScript 整合 | 一流的深度型別整合，具備原生索引感知。 | 優秀，但涉及複雜的泛型。 | 良好，需要手動定義型別。 | 強大，函數優先風格。 |
-| 內建統計分析 | 對 `number` 和 `bigint` 提供全面的原生支援。 | 非原生提供（需要自訂操作符）。 | 無。 | 無。 |
-| 索引與位置感知 | 原生、強大的大整數索引，適用於每個元素。 | 需要自訂操作符（`scan`、`withLatestFrom`）。 | 需要手動計數器。 | 基本，無內建索引。 |
-| 事件串流管理 | 專用、型別安全的工廠函數，具備明確的提前停止控制。 | 強大，但需要手動管理訂閱。 | 手動事件監聽器 + 取消。 | 良好的 `fromEvent`，輕量。 |
-| 效能與記憶體效率 | 卓越 – 優化的 `toUnordered()` 和 `toOrdered()` 收集器。 | 非常好，但操作符鏈會增加開銷。 | 優秀（零開銷）。 | 優秀。 |
-| 套件大小 | 非常輕量。 | 大（即使進行 tree-shaking）。 | 零（原生）。 | 小。 |
-| API 設計理念 | 函數式收集器模式，具備明確索引。 | 響應式 Observable 模式。 | 迭代器 / 產生器模式。 | 函數式，無參數風格。 |
-| 提前終止與控制 | 明確（`interrupt`、`.limit()`、`.takeWhile()`、`.sub()`）。 | 良好（`take`、`takeUntil`、`first`）。 | 手動（`for await…of` 中的 `break`）。 | 良好（`take`、`until`）。 |
-| 同步與非同步支援 | 統一的 API – 對兩者提供一流的支援。 | 主要為非同步。 | 兩者皆可，但需手動處理。 | 主要為非同步。 |
-| 學習曲線 | 對於熟悉函數式和索引管道的開發者來說較平緩。 | 較陡峭（許多操作符，熱/冷 Observable）。 | 低。 | 中等。 |
+| **TypeScript 整合** | 一等公民，深度型別化，具有固有的索引感知。 | 優秀，但通常涉及複雜的泛型鏈。 | 良好，但需要手動型別註解。 | 強大，採用函數優先的編碼風格。 |
+| **內建統計分析** | 對 `number` 和 `bigint` 提供全面的原生支援。 | 非原生支援（需要自訂運算符或其他函式庫）。 | 無。 | 無。 |
+| **索引與位置感知** | 原生、強大的 BigInt 索引，每個元素都具備。 | 需要自訂運算符（如 `scan`、`withLatestFrom`）。 | 需要手動管理計數器。 | 基礎，無內建索引屬性。 |
+| **事件串流管理** | 專用的、型別安全的工廠，具有明確、宣告式的生命週期控制。 | 強大但需要謹慎的手動訂閱管理以防止洩漏。 | 手動事件監聽器附加和取消權杖管理。 | 良好的 `fromEvent`，通常較輕量。 |
+| **效能與記憶體** | 卓越 – 提供最佳化的 `toUnordered()` 和 `toOrdered()` 收集器。 | 非常好，但深度運算符鏈可能引入開銷。 | 優秀（最小的原生開銷）。 | 優秀。 |
+| **套件體積** | 非常輕量。 | 較大（即使有 tree-shaking）。 | 零（原生語言特性）。 | 小。 |
+| **API 設計理念** | 具有明確索引語義的函數式收集器模式。 | 響應式 Observable 模式。 | 命令式 Iterator / 宣告式 Generator 模式。 | 函數式、無點組合。 |
+| **流控制** | 顯式（`interrupt`、`.limit()`、`.takeWhile()`、`.sub()`）。 | 良好（`take`、`takeUntil`、`first`）。 | 手動（迴圈中的 `break`）。 | 良好（`take`、`until`）。 |
+| **同步與非同步支援** | 統一的 API – 對兩種典範都提供一等公民支援。 | 主要面向非同步。 | 兩者都支援，但需要手動橋接。 | 主要面向非同步。 |
+| **學習曲線** | 對於熟悉函數式和索引集合管道的開發者來說較平緩。 | 較陡峭（大量的運算符詞彙、熱/冷 Observable 概念）。 | 低到中等。 | 中等。 |
 
-Semantic-TypeScript 的主要優勢
+**Semantic‑TypeScript 的優勢**
 
-•   獨特的內建統計與索引功能，無需手動編寫 `reduce` 或依賴外部函式庫。
+*   **獨特能力：** 整合的統計和索引功能，無需手動 `reduce` 操作或輔助的資料分析函式庫。
+*   **可預測的資源管理：** 對事件串流的顯式控制，防止了 RxJS 應用中可能出現的微妙記憶體洩漏。
+*   **統一設計：** 同步和非同步工作流採用一致的 API，減少了認知負擔和程式碼重複。
 
-•   對事件串流的明確控制，防止了 RxJS 中常見的記憶體洩漏。
-
-•   統一的同步/非同步設計，為多樣化的使用場景提供了單一、一致的 API。
-
-此比較闡明了為何 Semantic-TypeScript 特別適合現代 TypeScript 前端應用程式，這些應用程式要求在不需要傳統響應式函式庫的繁瑣儀式下，仍能獲得高效能、型別安全和豐富的分析能力。
+此對比凸顯了為何 Semantic‑TypeScript 特別適合需要高效能、健壯的型別安全性和豐富資料處理功能，而又不希望引入傳統響應式框架複雜性的現代 TypeScript 應用程式。
 
 ---
 
-### 準備好探索了嗎？
+### 開始探索
 
-Semantic-TypeScript 將複雜的數據流轉化為可讀、可組合且高效能的管道。無論您是處理即時 UI 事件、處理大型資料集，還是建置分析儀表板，它都提供資料庫級索引的威力與函數式編程的優雅。
+Semantic‑TypeScript 將複雜的資料流轉化為可讀、可組合且高效能的管道。無論您是在處理即時 UI 事件、處理大量資料集，還是建構分析儀表板，它都能提供資料庫級索引的強大功能與函數式程式設計的優雅。
 
-下一步：
+**您的後續步驟：**
 
-•   在您的 IDE 中瀏覽完全型別化的 API（所有匯出皆來自主套件）。
+*   直接在您的 IDE 中探索完全型別化的 API（所有匯出都可在主套件入口點找到）。
+*   加入不斷壯大的開發者社群，他們已用清晰、有意的 Semantic 管道替代了複雜的非同步迭代器和響應式鏈。
 
-•   加入日益壯大的開發者社群，他們已用簡潔的 Semantic 管道取代了繁瑣的非同步迭代器。
+**Semantic‑TypeScript** – 流與結構的交匯點。
 
----
+立即開始建構，體驗深思熟慮的索引設計所帶來的切實差異。
 
-Semantic-TypeScript — 串流與結構相遇之處。
-
-立即開始構建，體驗深思熟慮的索引所帶來的不同。
-
-清晰構建，自信前行，並有目的地轉化數據。
+**清晰建構，自信前行，以意圖驅動資料轉換。**
 
 MIT © Eloy Kim
