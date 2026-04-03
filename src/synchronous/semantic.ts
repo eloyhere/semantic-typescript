@@ -262,9 +262,11 @@ export class SynchronousSemantic<E> {
         throw new TypeError("Invalid arguments.");
     }
 
+    public map(mapper: Functional<E, E>): SynchronousSemantic<E>;
+    public map(mapper: BiFunctional<E, bigint, E>): SynchronousSemantic<E>;
     public map<R>(mapper: Functional<E, R>): SynchronousSemantic<R>;
     public map<R>(mapper: BiFunctional<E, bigint, R>): SynchronousSemantic<R>;
-    public map<R>(mapper: Functional<E, R> | BiFunctional<E, bigint, R>): SynchronousSemantic<R> {
+    public map<R = E>(mapper: Functional<E, R> | BiFunctional<E, bigint, R>): SynchronousSemantic<R> {
         if (isFunction(mapper)) {
             return new SynchronousSemantic<R>((accept: Consumer<R> | BiConsumer<R, bigint>, interrupt: Predicate<R> | BiPredicate<R, bigint>): void => {
                 try {
@@ -429,7 +431,7 @@ export class SynchronousSemantic<E> {
             try {
                 let stop: boolean = false;
                 this.generator((element: E, index: bigint) => {
-                    if (predicate(element, index) && stop === false) {
+                    if (predicate(element, index) && !stop) {
                         accept(element, index);
                     } else {
                         stop = true;
@@ -871,6 +873,12 @@ export abstract class SynchronousCollectable<E> implements Iterable<E> {
             }
         }
         throw new TypeError("Classifier must be a function.");
+    }
+
+    public pipe(conversion: Functional<SynchronousGenerator<E>, SynchronousSemantic<E>>): SynchronousSemantic<E>;
+    public pipe<R>(conversion: Functional<SynchronousGenerator<E>, SynchronousSemantic<R>>): SynchronousSemantic<R>;
+    public pipe<R = E>(conversion: Functional<SynchronousGenerator<E>, SynchronousSemantic<R>>): SynchronousSemantic<R> {
+        return conversion(this.source());
     }
 
     public reduce(accumulator: BiFunctional<E, E, E>): E;
