@@ -76,6 +76,9 @@ register("number", (value: number): bigint => {
         if (primitive.has(value)) {
             return primitive.get(value) || 0n;
         }
+        if(Number.isNaN(value)){
+            return 0x7FF8000000000000n;
+        }
         let mask: bigint = maskOf("number");
         let bit: bigint = 0xFFFFFFFFFFFFFFFFn;
         let buffer = new ArrayBuffer(8);

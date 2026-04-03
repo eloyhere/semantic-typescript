@@ -207,25 +207,3 @@ export let isAsyncGeneratorFunction: (target: unknown) => target is AsyncGenerat
     return false;
 };
 
-export let isWindow: (target: unknown) => target is Window = (target: unknown): target is Window => {
-    if (isObject(target) && isObject(Reflect.get(target, "window"))) {
-        return Object.prototype.toString.call(Reflect.get(target, "window")) === "[object Window]";
-    }
-    return false;
-};
-
-export let isDocument: (target: unknown) => target is Document = (target: unknown): target is Document => {
-    if (isObject(target) && isObject(Reflect.get(target, "document"))) {
-        return Object.prototype.toString.call(Reflect.get(target, "document")) === "[object HTMLDocument]";
-    }
-    return false;
-};
-
-export let isHTMLElemet: (target: unknown) => target is HTMLElement = (target: unknown): target is HTMLElement => {
-    if (isObject(target)) {
-        let regex: RegExp = /^\[object HTML\w+Element\]$/;
-        return regex.test(Object.prototype.toString.call(target));
-    }
-    return false;
-};
-
