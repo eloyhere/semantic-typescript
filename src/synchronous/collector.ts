@@ -3,7 +3,7 @@ import { isFunction, isNumber, isBigInt, isBoolean, isString, isObject, isAsyncF
 import { useCompare, useToBigInt, useToNumber } from "../hook";
 import { Optional } from "../optional";
 import { SynchronousCollectorSymbol } from "../symbol";
-import type { BiFunctional, BiPredicate, Functional, Predicate, Supplier, TriFunctional, TriPredicate, Consumer, BiConsumer, Comparator, SynchronousGenerator } from "../utility";
+import type { BiFunctional, BiPredicate, Functional, Predicate, Supplier, TriFunctional, TriPredicate, Consumer, BiConsumer, Comparator, SynchronousGenerator, MaybeInvalid } from "../utility";
 import { invalidate, validate } from "../utility";
 
 export class SynchronousCollector<E, A, R> {
@@ -293,42 +293,50 @@ export let useSynchronousError: UseSynchronousError = <E = unknown>(argument1?: 
 };
 
 interface UseSynchronousFindAt {
+    <E>(index: number): SynchronousCollector<E, Optional<E>, Optional<E>>;
+    <E>(index: bigint): SynchronousCollector<E, Optional<E>, Optional<E>>;
+};
+export let useSynchronousFindAt: UseSynchronousFindAt = <E>(index: number | bigint): SynchronousCollector<E, Optional<E>, Optional<E>> => {
+    let target: bigint = useToBigInt(index);
+    if(target < 0n){
+        throw new Error("use \"useSynchronousFindNegativeAt\" for negative index.");
+    }
+    return SynchronousCollector.shortable(
+        Optional.empty,
+        (_element: E, _index: bigint, accumulator: Optional<E>): boolean => accumulator.isPresent(),
+        (accumulator: Optional<E>, element: E, index: bigint): Optional<E> => {
+            if (index === target) {
+                return Optional.of(element);
+            }
+            return accumulator;
+        },
+        (accumulator: Optional<E>): Optional<E> => accumulator
+    );
+};
+
+interface UseSynchronousFindNegativeAt {
     <E>(index: number): SynchronousCollector<E, Array<E>, Optional<E>>;
     <E>(index: bigint): SynchronousCollector<E, Array<E>, Optional<E>>;
 };
-export let useSynchronousFindAt: UseSynchronousFindAt = <E>(index: number | bigint): SynchronousCollector<E, Array<E>, Optional<E>> => {
+export let useSynchronousFindNegativeAt: UseSynchronousFindNegativeAt = <E>(index: number | bigint): SynchronousCollector<E, Array<E>, Optional<E>> => {
     let target: bigint = useToBigInt(index);
-    if (target < 0n) {
-        return SynchronousCollector.full(
-            (): Array<E> => [],
-            (accumulator: Array<E>, element: E): Array<E> => {
-                let accumulated: Array<E> = Array.isArray(accumulator) ? accumulator : [];
-                accumulated.push(element);
-                return accumulated;
-            },
-            (result: Array<E>): Optional<E> => {
-                if(Array.isArray(result) && result.length > 0){
-                    let index: number = ((Number(target) % result.length) + result.length) % result.length;
-                    return Optional.of(result[index]);
-                }
-                return Optional.empty<E>();
-            }
-        );
+    if(target > -1n){
+        throw new Error("use \"useSynchronousFindAt\" for none-negative index.");
     }
-    return SynchronousCollector.shortable(
-        (): Array<E> => [],
-        (_element: E, _index: bigint, accumulator: Array<E>): boolean => BigInt(accumulator.length) - 1n === target,
+    return SynchronousCollector.full(
+        () => [],
         (accumulator: Array<E>, element: E): Array<E> => {
-            let accumulated: Array<E> = Array.isArray(accumulator) ? accumulator : [];
-            accumulated.push(element);
-            return accumulated;
+            accumulator.push(element);
+            return accumulator;
         },
-        (result: Array<E>): Optional<E> => {
-            let index: number = ((Number(target) % result.length) + result.length) % result.length;
-            if(Array.isArray(result) && result.length > 0){
-                return Optional.of(result[index]);
+        (accumulator: Array<E>): Optional<E> => {
+            if(accumulator.length > 0){
+                let count: bigint = BigInt(accumulator.length);
+                let limit: bigint = ((target % count) + count) % count;
+                let element: MaybeInvalid<E> = accumulator.at(Number(limit));
+                return Optional.of(element);
             }
-            return Optional.empty<E>();
+            return Optional.empty();
         }
     );
 };

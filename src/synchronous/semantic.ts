@@ -4,7 +4,8 @@ import {
     useSynchronousJoin, useSynchronousLog, useSynchronousNoneMatch, useSynchronousPartition, useSynchronousPartitionBy, useSynchronousReduce, useSynchronousToArray,
     useSynchronousToMap, useSynchronousToSet, useSynchronousWrite, useSynchronousFrequency, useSynchronousBigIntAverage, useSynchronousBigIntMedian, useSynchronousBigIntMode,
     useSynchronousBigIntSummate, useSynchronousBigIntVariance, useSynchronousNumericAverage, useSynchronousNumericMedian, useSynchronousNumericMode,
-    useSynchronousNumericStandardDeviation, useSynchronousNumericSummate, useSynchronousNumericVariance
+    useSynchronousNumericStandardDeviation, useSynchronousNumericSummate, useSynchronousNumericVariance,
+    useSynchronousFindNegativeAt
 } from "./collector";
 import { isFunction, isSynchronousSemantic, isIterable, isNumber, isBigInt, isObject, isString, isSynchronousCollectable, isSynchronousCollector } from "../guard";
 import { useHash } from "../hash";
@@ -680,6 +681,25 @@ export abstract class SynchronousCollectable<E> implements Iterable<E> {
         } else if (isNumber(index)) {
             try {
                 return useSynchronousFindAt<E>(index).collect(this.source());
+            } catch (error) {
+                throw error;
+            }
+        }
+        throw new TypeError("Index must be a bigint.");
+    }
+
+    public findNegativeAt(index: number): Optional<E>;
+    public findNegativeAt(index: bigint): Optional<E>;
+    public findNegativeAt(index: number | bigint): Optional<E> {
+        if (isBigInt(index)) {
+            try {
+                return useSynchronousFindNegativeAt<E>(index).collect(this.source());
+            } catch (error) {
+                throw error;
+            }
+        } else if (isNumber(index)) {
+            try {
+                return useSynchronousFindNegativeAt<E>(index).collect(this.source());
             } catch (error) {
                 throw error;
             }
