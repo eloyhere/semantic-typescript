@@ -1,9 +1,11 @@
 import { isFunction, isNumber, isBigInt, isBoolean, isString, isObject, isAsyncIterable, isAsyncFunction } from "../guard";
 import { useCompare, useToBigInt, useToNumber } from "../hook";
+import { Optional } from "../optional";
 import { AsynchronousCollectorSymbol } from "../symbol";
 import type {
     BiFunctional, BiPredicate, Functional, Predicate, Supplier, TriFunctional, TriPredicate, Consumer, BiConsumer,
-    Comparator, AsynchronousGenerator
+    Comparator, AsynchronousGenerator,
+    MaybeInvalid
 } from "../utility";
 import { invalidate, validate } from "../utility";
 
@@ -305,39 +307,61 @@ export let useAsynchronousError: UseAsynchronousError = <E = unknown>(argument1?
 };
 
 interface UseAsynchronousFindAt {
+    <E>(index: number): AsynchronousCollector<E, Optional<E>, Promise<E>>;
+    <E>(index: bigint): AsynchronousCollector<E, Optional<E>, Promise<E>>;
+};
+export let useAsynchronousFindAt: UseAsynchronousFindAt = <E>(index: number | bigint): AsynchronousCollector<E, Optional<E>, Promise<E>> => {
+    let target: bigint = useToBigInt(index);
+    if(target < 0n){
+        throw new Error("Use \"useAsynchronousFindNegativeAt\" for negative index.");
+    }
+    return AsynchronousCollector.shortable(
+        Optional.empty,
+        (_element: E, _index: bigint, accumulator: Optional<E>): boolean => accumulator.isPresent(),
+        (accumulator: Optional<E>, element: E, index: bigint): Optional<E> => {
+            if(target === index){
+                return Optional.of(element);
+            }
+            return accumulator;
+        },
+        (a) => {
+            return new Promise<E>((resolve, reject): void => {
+                a.ifPresent(resolve, reject);
+            });
+        }
+    );
+};
+
+interface UseAsynchronousFindNegativeAt {
     <E>(index: number): AsynchronousCollector<E, Array<E>, Promise<E>>;
     <E>(index: bigint): AsynchronousCollector<E, Array<E>, Promise<E>>;
 };
-export let useAsynchronousFindAt: UseAsynchronousFindAt = <E>(index: number | bigint): AsynchronousCollector<E, Array<E>, Promise<E>> => {
+export let useAsynchronousFindNegativeAt: UseAsynchronousFindNegativeAt = <E>(index: number | bigint): AsynchronousCollector<E, Array<E>, Promise<E>> => {
     let target: bigint = useToBigInt(index);
-    if (target < 0n) {
-        return AsynchronousCollector.full(
-            (): Array<E> => [],
-            (accumulator: Array<E>, element: E): Array<E> => {
-                accumulator.push(element);
-                return accumulator;
-            },
-            (accumulator: Array<E>): Promise<E> => {
-                if (accumulator.length === 0) {
-                    return Promise.reject(new Error("No element found."));
-                }
-                let limited: bigint = (((BigInt(accumulator.length)) % target) + target) % target;
-                return Promise.resolve(accumulator[Number(limited)]);
-            }
-        );
+    if(target > -1n){
+        throw new Error("Use \"useAsynchronousFindAt\" for none-negative index.");
     }
-    return AsynchronousCollector.shortable(
-        (): Array<E> => [],
-        (_element: E, _index: bigint, accumulator: Array<E>): boolean => BigInt(accumulator.length) - 1n === target,
+    return AsynchronousCollector.full(
+        () => [],
         (accumulator: Array<E>, element: E): Array<E> => {
             accumulator.push(element);
             return accumulator;
         },
         (accumulator: Array<E>): Promise<E> => {
-            if (accumulator.length === 0) {
-                return Promise.reject(new Error("No element found."));
-            }
-            return Promise.resolve(accumulator[Number(target)]);
+            return new Promise<E>((resolve, reject): void => {
+                if(accumulator.length > 0){
+                    let count: bigint = BigInt(accumulator.length);
+                    let limit: bigint = (((target) % count) + count) % count;
+                    let element: MaybeInvalid<E> = accumulator.at(Number(limit));
+                    if(validate(element)){
+                        resolve(element);
+                    }else{
+                        reject("Element could not be found with given index.");
+                    }
+                }else{
+                    reject("Not element to be found.");
+                }
+            });
         }
     );
 };

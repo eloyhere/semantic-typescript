@@ -4,7 +4,8 @@ import {
     useAsynchronousGroupBy, useAsynchronousJoin, useAsynchronousLog, useAsynchronousNoneMatch, useAsynchronousPartition, useAsynchronousPartitionBy, useAsynchronousReduce,
     useAsynchronousToArray, useAsynchronousToMap, useAsynchronousToSet, useAsynchronousWrite, useAsynchronousFrequency, useAsynchronousBigIntAverage,
     useAsynchronousBigIntMedian, useAsynchronousBigIntMode, useAsynchronousBigIntSummate, useAsynchronousBigIntVariance, useAsynchronousNumericAverage,
-    useAsynchronousNumericMedian, useAsynchronousNumericMode, useAsynchronousNumericStandardDeviation, useAsynchronousNumericSummate, useAsynchronousNumericVariance
+    useAsynchronousNumericMedian, useAsynchronousNumericMode, useAsynchronousNumericStandardDeviation, useAsynchronousNumericSummate, useAsynchronousNumericVariance,
+    useAsynchronousFindNegativeAt
 } from "./collector";
 import { isFunction, isAsynchronousSemantic, isIterable, isNumber, isBigInt, isObject, isString, isAsynchronousCollectable, isAsyncIterable, isAsynchronousCollector } from "../guard";
 import { useHash } from "../hash";
@@ -495,13 +496,13 @@ export class AsynchronousSemantic<E> {
                     return AsynchronousCollectable;
                 }
             } catch (error) {
-                throw new Error("Uncaught error on toAsynchronousCollectable.");
+                throw error;
             }
         }
         try {
             return new AsynchronousUnorderedCollectable(this.generator);
         } catch (error) {
-            throw new Error("Uncaught error on toAsynchronousCollectable.");
+            throw error;
         }
     }
 
@@ -509,7 +510,7 @@ export class AsynchronousSemantic<E> {
         try {
             return new AsynchronousBigIntStatistics<E>(this.generator);
         } catch (error) {
-            throw new Error("Uncaught error on toBigintStatistics.");
+            throw error;
         }
     }
 
@@ -517,7 +518,7 @@ export class AsynchronousSemantic<E> {
         try {
             return new AsynchronousNumericStatistics<E>(this.generator);
         } catch (error) {
-            throw new Error("Uncaught error on toNumericStatistics.");
+            throw error;
         }
     }
 
@@ -525,7 +526,7 @@ export class AsynchronousSemantic<E> {
         try {
             return new AsynchronousOrderedCollectable(this.generator);
         } catch (error) {
-            throw new Error("Uncaught error on toOrdered.");
+            throw error;
         }
     }
 
@@ -541,7 +542,7 @@ export class AsynchronousSemantic<E> {
         try {
             return new AsynchronousWindowCollectable<E>(this.generator);
         } catch (error) {
-            throw new Error("Uncaught error on toWindow.");
+            throw error;
         }
     }
 
@@ -557,7 +558,7 @@ export class AsynchronousSemantic<E> {
                         accept(element, index + BigInt(offset));
                     }, interrupt);
                 } catch (error) {
-                    throw new Error("Uncaught error on translate.");
+                    throw error;
                 }
             });
         } else if (isBigInt(argument1)) {
@@ -568,7 +569,7 @@ export class AsynchronousSemantic<E> {
                         accept(element, index + offset);
                     }, interrupt);
                 } catch (error) {
-                    throw new Error("Uncaught error on translate.");
+                    throw error;
                 }
             });
         } else if (isFunction(argument1)) {
@@ -579,7 +580,7 @@ export class AsynchronousSemantic<E> {
                         accept(element, index + translator(element, index));
                     }, interrupt);
                 } catch (error) {
-                    throw new Error("Uncaught error on translate.");
+                    throw error;
                 }
             });
         }
@@ -613,7 +614,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             try {
                 return await useAsynchronousAnyMatch(predicate).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on anyMatch.");
+                throw error;
             }
         }
         throw new TypeError("Predicate must be a function.");
@@ -652,7 +653,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
                 return await useAsynchronousCollect(identity, interrupt, accumulator, finisher).collect(this.source());
             }
         } catch (error) {
-            throw new Error("Uncaught error on collect.");
+            throw error;
         }
         throw new TypeError("Invalid arguments.");
     }
@@ -671,14 +672,14 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             try {
                 await useAsynchronousError<E>().collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on error.");
+                throw error;
             }
         } else if (isFunction(argument1) && invalidate(argument2) && invalidate(argument3)) {
             try {
                 let accumulator: BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string> = argument1 as BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string>;
                 await useAsynchronousError<E>(accumulator).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on error.");
+                throw error;
             }
         } else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
             try {
@@ -687,7 +688,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
                 let suffix: string = argument3;
                 await useAsynchronousError<E>(prefix, accumulator, suffix).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on error.");
+                throw error;
             }
         } else {
             throw new TypeError("Invalid arguments.");
@@ -702,7 +703,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
         try {
             return await useAsynchronousFindAny<E>().collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on findAny.");
+            throw error;
         }
     }
 
@@ -713,23 +714,42 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             try {
                 return await useAsynchronousFindAt<E>(index).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on findAt.");
+                throw error;
             }
         } else if (isNumber(index)) {
             try {
                 return await useAsynchronousFindAt<E>(index).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on findAt.");
+                throw error;
             }
         }
         throw new TypeError("Index must be a bigint.");
+    }
+
+    public async findNegativeAt(index: number): Promise<E>;
+    public async findNegativeAt(index: bigint): Promise<E>;
+    public async findNegativeAt(index: number | bigint): Promise<E> {
+        if (isBigInt(index)) {
+            try {
+                return await useAsynchronousFindNegativeAt<E>(index).collect(this.source());
+            } catch (error) {
+                throw error;
+            }
+        } else if (isNumber(index)) {
+            try {
+                return await useAsynchronousFindNegativeAt<E>(index).collect(this.source());
+            } catch (error) {
+                throw error;
+            }
+        }
+        throw new TypeError("Index must be a bigint or a number.");
     }
 
     public async findFirst(): Promise<E> {
         try {
             return await useAsynchronousFindFirst<E>().collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on findFirst.");
+            throw error;
         }
     }
 
@@ -737,7 +757,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
         try {
             return await useAsynchronousFindLast<E>().collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on findLast.");
+            throw error;
         }
     }
 
@@ -748,7 +768,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             let comparator: Comparator<E> = isFunction(argument1) ? argument1 : useCompare;
             return await useAsynchronousFindMaximum(comparator).collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on findMaximum.");
+            throw error;
         }
     }
 
@@ -759,7 +779,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             let comparator: Comparator<E> = isFunction(argument1) ? argument1 : useCompare;
             return await useAsynchronousFindMinimum(comparator).collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on findMinimum.");
+            throw error;
         }
     }
 
@@ -770,7 +790,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             try {
                 await useAsynchronousForEach(action).collect(this);
             } catch (error) {
-                throw new Error("Uncaught error on forEach.");
+                throw error;
             }
         } else {
             throw new TypeError("Action must be a function.");
@@ -784,7 +804,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             try {
                 return await useAsynchronousGroup(classifier).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on group.");
+                throw error;
             }
         }
         throw new TypeError("Classifier must be a function.");
@@ -797,7 +817,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             try {
                 return await useAsynchronousGroupBy(keyExtractor, valueExtractor).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on groupBy.");
+                throw error;
             }
         }
         throw new TypeError("Key and value extractors must be functions.");
@@ -813,14 +833,14 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             try {
                 return await useAsynchronousJoin<E>().collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on join.");
+                throw error;
             }
         } else if (isString(argument1) && invalidate(argument2) && invalidate(argument3)) {
             try {
                 let delimiter: string = argument1;
                 return await useAsynchronousJoin<E>(delimiter).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on join.");
+                throw error;
             }
         } else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
             try {
@@ -829,7 +849,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
                 let suffix: string = argument3;
                 return await useAsynchronousJoin<E>(prefix, accumulator, suffix).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on join.");
+                throw error;
             }
         } else if (isString(argument1) && isString(argument2) && isString(argument3)) {
             try {
@@ -838,7 +858,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
                 let suffix: string = argument3;
                 return await useAsynchronousJoin<E>(prefix, delimiter, suffix).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on join.");
+                throw error;
             }
         }
         throw new TypeError("Invalid arguments.");
@@ -855,7 +875,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
                 let accumulator: BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string> = argument1 as BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string>;
                 await useAsynchronousLog<E>(accumulator).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on log.");
+                throw error;
             }
         } else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
             try {
@@ -864,13 +884,13 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
                 let suffix: string = argument3;
                 await useAsynchronousLog<E>(prefix, accumulator, suffix).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on log.");
+                throw error;
             }
         } else {
             try {
                 useAsynchronousLog<E>().collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on log.");
+                throw error;
             }
         }
     }
@@ -882,7 +902,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             try {
                 return await useAsynchronousNoneMatch(predicate).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on nonMatch.");
+                throw error;
             }
         }
         throw new TypeError("Predicate must be a function.");
@@ -893,7 +913,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             try {
                 return await useAsynchronousPartition<E>(count).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on partition.");
+                throw error;
             }
         }
         throw new TypeError("Count must be a BigInt.");
@@ -907,7 +927,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
                 let collector: AsynchronousCollector<E, Array<E[]>, Array<E[]>> = useAsynchronousPartitionBy(classifier);
                 return await collector.collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on partitionBy.");
+                throw error;
             }
         }
         throw new TypeError("Classifier must be a function.");
@@ -925,24 +945,24 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
                 let accumulator = argument1 as BiFunctional<E, E, E> | TriFunctional<E, E, bigint, E>;
                 return await useAsynchronousReduce(accumulator).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on reduce.");
+                throw error;
             }
         } else if (validate(argument1) && isFunction(argument2) && invalidate(argument3)) {
             try {
-                let identity = argument1 as E;
-                let accumulator = argument2 as BiFunctional<E, E, E> & TriFunctional<E, E, bigint, E>;
+                let identity: E = argument1 as E;
+                let accumulator: BiFunctional<E, E, E> & TriFunctional<E, E, bigint, E> = argument2 as BiFunctional<E, E, E> & TriFunctional<E, E, bigint, E>;
                 return await useAsynchronousReduce(identity, accumulator).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on reduce.");
+                throw error;
             }
         } else if (validate(argument1) && isFunction(argument2) && isFunction(argument3)) {
             try {
-                let identity = argument1 as R;
-                let accumulator = argument2 as BiFunctional<R, E, R> & TriFunctional<R, E, bigint, R>;
-                let finisher = argument3 as Functional<R, R>;
+                let identity: R = argument1 as R;
+                let accumulator: BiFunctional<R, E, R> & TriFunctional<R, E, bigint, R> = argument2 as BiFunctional<R, E, R> & TriFunctional<R, E, bigint, R>;
+                let finisher: Functional<R, R> = argument3 as Functional<R, R>;
                 return await useAsynchronousReduce(identity, accumulator, finisher).collect(this.source());
             } catch (error) {
-                throw new Error("Uncaught error on reduce.");
+                throw error;
             }
         } else {
             throw new TypeError("Invalid arguments.");
@@ -955,7 +975,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             try {
                 return new AsynchronousSemantic(source);
             } catch (error) {
-                throw new Error("Uncaught error on semantic.");
+                throw error;
             }
         } else {
             throw new TypeError("Invalid source.");
@@ -968,7 +988,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
         try {
             return useAsynchronousToArray<E>().collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on toArray.");
+            throw error;
         }
     }
 
@@ -979,7 +999,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
         try {
             return await useAsynchronousToMap<E, K, V>(keyExtractor, valueExtractor).collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on toMap.");
+            throw error;
         }
     }
 
@@ -987,7 +1007,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
         try {
             return await useAsynchronousToSet<E>().collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on toSet.");
+            throw error;
         }
     }
 
@@ -1005,7 +1025,7 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
                     return await useAsynchronousWrite(stream).collect(this.source());
                 }
             } catch (error) {
-                throw new Error("Uncaught error on write.");
+                throw error;
             }
         }
         throw new TypeError("Invalid arguments.");
@@ -1078,7 +1098,7 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                     }
                 });
             } catch (error) {
-                throw new Error("Uncaught error on creating buffer.");
+                throw error;
             }
         } else {
             throw new TypeError("Source must be an iterable or a generator function.");
@@ -1553,7 +1573,7 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return await useAsynchronousBigIntAverage(mapper).collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on average.");
+            throw error;
         }
     }
 
@@ -1570,7 +1590,7 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let difference: bigint = mapper(maximum) - mapper(minimum);
             return difference < 0 ? -difference : difference;
         } catch (error) {
-            throw new Error("Uncaught error on range.");
+            throw error;
         }
     }
 
@@ -1584,7 +1604,7 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return await useAsynchronousBigIntVariance(mapper).collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on variance.");
+            throw error;
         }
     }
 
@@ -1596,7 +1616,7 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let variance: bigint = await this.variance(mapper);
             return BigInt(Math.sqrt(Number(variance)));
         } catch (error) {
-            throw new Error("Uncaught error on standardDeviation.");
+            throw error;
         }
     }
 
@@ -1610,7 +1630,7 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return await useAsynchronousBigIntAverage(mapper).collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on mean.");
+            throw error;
         }
     }
 
@@ -1624,7 +1644,7 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return useAsynchronousBigIntMedian(mapper).collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on median.");
+            throw error;
         }
     }
 
@@ -1638,7 +1658,7 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return useAsynchronousBigIntMode(mapper).collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on mode.");
+            throw error;
         }
     }
 
@@ -1652,7 +1672,7 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return await useAsynchronousBigIntSummate(mapper).collect(this.source() as AsynchronousGenerator<bigint>);
         } catch (error) {
-            throw new Error("Uncaught error on summate.");
+            throw error;
         }
     }
 
@@ -1675,7 +1695,7 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let value: bigint = mapper(await this.findAt(index));
             return value;
         } catch (error) {
-            throw new Error("Uncaught error on quantile.");
+            throw error;
         }
     }
 
@@ -1691,7 +1711,7 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let upper: bigint = await this.quantile(0.75, mapper);
             return upper - lower;
         } catch (error) {
-            throw new Error("Uncaught error on interquartileRange.");
+            throw error;
         }
     }
 
@@ -1716,7 +1736,7 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             }
             return summate / BigInt(data.length);
         } catch (error) {
-            throw new Error("Uncaught error on skewness.");
+            throw error;
         }
     }
 
@@ -1742,7 +1762,7 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             }
             return summate / BigInt(count * count) - 3n;
         } catch (error) {
-            throw new Error("Uncaught error on kurtosis.");
+            throw error;
         }
     }
 };
@@ -1785,7 +1805,7 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             }
             return useAsynchronousNumericAverage().collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on average.");
+            throw error;
         }
     }
 
@@ -1804,7 +1824,7 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             let maximum: E = await this.findLast();
             return mapper(maximum) - mapper(minimum);
         } catch (error) {
-            throw new Error("Uncaught error on range.");
+            throw error;
         }
     }
 
@@ -1818,7 +1838,7 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return await useAsynchronousNumericVariance(mapper).collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on variance.");
+            throw error;
         }
     }
 
@@ -1829,7 +1849,7 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return await useAsynchronousNumericStandardDeviation(mapper).collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on standardDeviation.");
+            throw error;
         }
     }
 
@@ -1843,7 +1863,7 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return useAsynchronousNumericAverage(mapper).collect(this.source() as AsynchronousGenerator<number>);
         } catch (error) {
-            throw new Error("Uncaught error on mean.");
+            throw error;
         }
     }
 
@@ -1857,7 +1877,7 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return await useAsynchronousNumericMedian(mapper).collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on median.");
+            throw error;
         }
     }
 
@@ -1871,7 +1891,7 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return await useAsynchronousNumericMode(mapper).collect(this.source());
         } catch (error) {
-            throw new Error("Uncaught error on mode.");
+            throw error;
         }
     }
 
@@ -1885,7 +1905,7 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return useAsynchronousNumericSummate(mapper).collect(this.source() as AsynchronousGenerator<number>);
         } catch (error) {
-            throw new Error("Uncaught error on summate.");
+            throw error;
         }
     }
 
@@ -1908,7 +1928,7 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             let value = mapper(await this.findAt(index));
             return value;
         } catch (error) {
-            throw new Error("Uncaught error on quantile.");
+            throw error;
         }
     }
 
@@ -1924,7 +1944,7 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             let upper: number = await this.quantile(0.75, mapper);
             return upper - lower;
         } catch (error) {
-            throw new Error("Uncaught error on interquartileRange.");
+            throw error;
         }
     }
 
@@ -1949,7 +1969,7 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             }
             return summate / data.length;
         } catch (error) {
-            throw new Error("Uncaught error on skewness.");
+            throw error;
         }
     }
 
@@ -1974,7 +1994,7 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             }
             return summate / (data.length * data.length) - 3;
         } catch (error) {
-            throw new Error("Uncaught error on kurtosis.");
+            throw error;
         }
     }
 };
@@ -2038,7 +2058,7 @@ export class AsynchronousWindowCollectable<E> extends AsynchronousOrderedCollect
                         }
                         resolve();
                     } catch (error) {
-                        throw new Error("Uncaught error on slide.");
+                        throw error;
                     }
                 });
             });
@@ -2051,7 +2071,7 @@ export class AsynchronousWindowCollectable<E> extends AsynchronousOrderedCollect
             try {
                 return this.slide(size, size);
             } catch (error) {
-                throw new Error("Uncaught error on tumble.");
+                throw error;
             }
         }
         throw new RangeError("Invalid arguments.");
