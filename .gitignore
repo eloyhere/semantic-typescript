@@ -23,3 +23,6 @@ node_modules
 
 # 构建产物
 dist
+
+# 智能体工作数据
+.workbuddy
