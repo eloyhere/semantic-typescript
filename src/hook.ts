@@ -2,7 +2,6 @@ import { useSynchronousToArray, type SynchronousCollector } from "./synchronous/
 import { isBigInt, isFunction, isIterable, isNumber, isObject, isPrimitive } from "./guard.js";
 import { invalidate, validate, type BiPredicate, type DeepPropertyKey, type DeepPropertyValue, type MaybePrimitive } from "./utility.js";
 import type { BiConsumer, BiFunctional, Comparator, Consumer, Indexed, Predicate, Supplier, SynchronousGenerator } from "./utility.js";
-
 export let useCompare: <T>(t1: T, t2: T) => number = <T>(t1: T, t2: T): number => {
     if (t1 === t2 || Object.is(t1, t2)) {
         return 0;
@@ -46,21 +45,25 @@ export let useCompare: <T>(t1: T, t2: T) => number = <T>(t1: T, t2: T): number =
     }
     throw new TypeError("Cannot compare values of different types.");
 };
-
 interface UseRandom {
     <N extends number | bigint>(start: N): N extends number ? number : (N extends bigint ? bigint : never);
     <N extends number | bigint>(start: N, end: N): N;
-};
+}
+;
 export let useRandom: UseRandom = <N extends number | bigint>(start: N, end?: N): N => {
-    let getRandomBits: Supplier<[number, number]> = (): [number, number] => {
+    let getRandomBits: Supplier<[
+        number,
+        number
+    ]> = (): [
+        number,
+        number
+    ] => {
         let random = Math.random();
         let full = random * 0x10000000000000;
         let high = Math.floor(full / 0x100000000);
-        let low = Math.floor(full) & 0xFFFFFFFF
+        let low = Math.floor(full) & 0xFFFFFFFF;
         return [high, low];
     };
-    // 原实现的每个分片都至少左移 3 位，导致结果的低 3 位恒为 0（useRandom(1n,10n) 只会得到 1 或 9）。
-    // 这里按 53 位一段拼接，保证低位也是均匀随机的。
     let getRandomBigInt: Supplier<bigint> = (): bigint => {
         let result: bigint = 0n;
         for (let i = 0; i < 4; i++) {
@@ -76,11 +79,11 @@ export let useRandom: UseRandom = <N extends number | bigint>(start: N, end?: N)
             let maximum: number = Math.max(start, end);
             let range: number = maximum - minimum;
             return (minimum + seed * range) as N;
-        } else {
+        }
+        else {
             return Math.exp(-seed) as N;
         }
     }
-    /** 以拒绝采样返回 [0n, bound) 内的随机大整数；原实现在 do/while 里复用同一个随机数，会死循环。 */
     let getRandomBelow: (bound: bigint) => bigint = (bound: bigint): bigint => {
         if (bound <= 0n) {
             return 0n;
@@ -105,7 +108,8 @@ export let useRandom: UseRandom = <N extends number | bigint>(start: N, end?: N)
                 return minimum as N;
             }
             return (minimum + getRandomBelow(range)) as N;
-        } else {
+        }
+        else {
             if (start <= 0n) {
                 return 0n as N;
             }
@@ -114,20 +118,22 @@ export let useRandom: UseRandom = <N extends number | bigint>(start: N, end?: N)
     }
     throw new TypeError("Invalid arguments.");
 };
-
 export type UseTraverseKey<T extends object> = DeepPropertyKey<T> & (symbol | string | number);
 export type UseTraverseValue<T extends object> = DeepPropertyValue<T>;
 export type UseTraversePath<T extends object> = Array<UseTraverseKey<T> & (symbol | string | number)>;
 export interface UseTraverseCallback<T extends object> {
     (key: UseTraverseKey<T>, value: UseTraverseValue<T>): boolean;
-};
+}
+;
 export interface UseTraversePathCallback<T extends object> {
     (key: UseTraverseKey<T>, value: UseTraverseValue<T>, path: UseTraversePath<T>): boolean;
-};
+}
+;
 interface UseTraverse {
     <T extends object>(t: T, callback: UseTraverseCallback<T>): void;
     <T extends object>(t: T, callback: UseTraversePathCallback<T>): void;
-};
+}
+;
 export let useTraverse: UseTraverse = <T extends object>(t: T, callback: UseTraverseCallback<T> | UseTraversePathCallback<T>): void => {
     if (isObject(t)) {
         let seen: WeakSet<object> = new WeakSet<object>();
@@ -157,7 +163,8 @@ export let useTraverse: UseTraverse = <T extends object>(t: T, callback: UseTrav
                                 if (validate(item)) {
                                     if (isObject(item)) {
                                         traverse(item);
-                                    } else {
+                                    }
+                                    else {
                                         if (!callback(index as UseTraverseKey<T>, item as UseTraverseValue<T>, path)) {
                                             stop = true;
                                         }
@@ -166,23 +173,23 @@ export let useTraverse: UseTraverse = <T extends object>(t: T, callback: UseTrav
                                 path.pop();
                                 index++;
                             }
-                        } else {
+                        }
+                        else {
                             traverse(value);
                         }
-                    } else {
+                    }
+                    else {
                         if (!callback(property as UseTraverseKey<T>, value as UseTraverseValue<T>, path)) {
                             stop = true;
                         }
                     }
                 }
-                // 必须成对弹出，否则 path 会跨兄弟节点累积（原来只 push 不 pop）
                 path.pop();
             }
-        }
+        };
         traverse(t);
     }
 };
-
 export let useGenerator: <E>(iterable: Iterable<E>) => SynchronousGenerator<E> = <E>(iterable: Iterable<E>): SynchronousGenerator<E> => {
     if (isIterable(iterable)) {
         return (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): void => {
@@ -197,20 +204,20 @@ export let useGenerator: <E>(iterable: Iterable<E>) => SynchronousGenerator<E> =
     }
     return (): void => { };
 };
-
 interface UseArrange {
     <E>(source: Iterable<E>): SynchronousGenerator<E>;
     <E>(source: Iterable<E>, comparator: Comparator<E>): SynchronousGenerator<E>;
     <E>(source: SynchronousGenerator<E>): SynchronousGenerator<E>;
     <E>(source: SynchronousGenerator<E>, comparator: Comparator<E>): SynchronousGenerator<E>;
-};
-
+}
+;
 export let useArrange: UseArrange = <E>(source: Iterable<E> | SynchronousGenerator<E>, comparator?: Comparator<E>): SynchronousGenerator<E> => {
     if (isIterable(source)) {
         let buffer: Array<E> = [...source];
         if (validate(comparator) && isFunction(comparator)) {
             return useGenerator(buffer.sort(comparator));
-        } else {
+        }
+        else {
             return useGenerator(buffer.map((element: E, index: number): Indexed<E> => {
                 return {
                     element: element,
@@ -222,12 +229,14 @@ export let useArrange: UseArrange = <E>(source: Iterable<E> | SynchronousGenerat
                 return indexed.element;
             }));
         }
-    } else if (isFunction(source)) {
+    }
+    else if (isFunction(source)) {
         let collector: SynchronousCollector<E, Array<E>, Array<E>> = useSynchronousToArray();
         let buffer: Array<E> = collector.collect(source);
         if (validate(comparator) && isFunction(comparator)) {
             return useGenerator(buffer.sort(comparator));
-        } else {
+        }
+        else {
             return useGenerator(buffer.map((element: E, index: number): Indexed<E> => {
                 return {
                     element: element,
@@ -242,7 +251,6 @@ export let useArrange: UseArrange = <E>(source: Iterable<E> | SynchronousGenerat
     }
     return useGenerator([]);
 };
-
 export let useToNumber: <T = unknown>(target: T) => number = <T>(target: T): number => {
     switch (typeof target) {
         case "number":
@@ -267,7 +275,6 @@ export let useToNumber: <T = unknown>(target: T) => number = <T>(target: T): num
             return 0;
     }
 };
-
 export let useToBigInt: <T = unknown>(target: T) => bigint = <T>(target: T): bigint => {
     switch (typeof target) {
         case "number":
@@ -292,16 +299,13 @@ export let useToBigInt: <T = unknown>(target: T) => bigint = <T>(target: T): big
             return 0n;
     }
 };
-
 interface UseStringify {
     <T extends object>(target: T): string;
     <T extends object, K extends DeepPropertyKey<T>, V extends DeepPropertyValue<T>>(target: T, callback: BiFunctional<K, V, string>): string;
-};
+}
+;
 export let useStringify: UseStringify = <T extends object, K extends DeepPropertyKey<T> & string, V extends DeepPropertyValue<T>>(target: T, callback?: BiFunctional<K, V, string>): string => {
     let seen: WeakSet<object> = new WeakSet<object>();
-    // 原实现在 replacer 内部再次调用 JSON.stringify(value)，等于在序列化过程中重复递归，
-    // 一旦遇到循环引用就会抛 TypeError。这里改为原样返回，由最外层的一次序列化负责编码。
-    // 根节点（key 为空串）不参与回调，否则整份文档会被替换成回调对根对象的返回值
     let resolve: BiFunctional<K, V, unknown> = isFunction(callback) ? ((key: K, value: V): unknown => (String(key).length > 0 ? callback(key, value) as unknown : value)) : (_key: K, value: V): unknown => (value as unknown);
     return JSON.stringify(target, (key: string, value: V): unknown => {
         if (isObject(value)) {

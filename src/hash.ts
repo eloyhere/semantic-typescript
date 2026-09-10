@@ -1,7 +1,6 @@
 import { isBigInt, isBoolean, isFunction, isNumber, isObject, isString, isSymbol } from "./guard.js";
 import { useTraverse, type UseTraverseKey, type UseTraversePath, type UseTraverseValue } from "./hook.js";
 import { typeOf, type DeepPropertyKey, type DeepPropertyValue, type Primitive, type Type } from "./utility.js";
-
 const masks: Map<Type, bigint> = new Map<Type, bigint>();
 masks.set("undefined", BigInt(masks.size));
 masks.set("null", BigInt(masks.size));
@@ -16,13 +15,9 @@ Object.freeze(masks);
 export let maskOf: (type: Type) => bigint = (type: Type): bigint => {
     return masks.get(type) || masks.get("object") || 0n;
 };
-
 let primitive: Map<Primitive, bigint> = new Map<Primitive, bigint>();
 let complex: WeakMap<object, bigint> = new WeakMap<object, bigint>();
-
-/** 原始值缓存是无上限的模块级 Map，长跑进程会持续增长，达到阈值后整体清空。 */
-const PRIMITIVE_CACHE_LIMIT: number = 100_000;
-
+const PRIMITIVE_CACHE_LIMIT: number = 100000;
 interface Handler<T> {
     (value: T): bigint;
 }
@@ -79,11 +74,11 @@ register("number", (value: number): bigint => {
         if (primitive.has(value)) {
             return primitive.get(value) || 0n;
         }
-        if(Number.isNaN(value)){
-            return 0x7FF8000000000000n;
+        if (Number.isNaN(value)) {
+            return 0x7ff8000000000000n;
         }
         let mask: bigint = maskOf("number");
-        let bit: bigint = 0xFFFFFFFFFFFFFFFFn;
+        let bit: bigint = 0xffffffffffffffffn;
         let buffer = new ArrayBuffer(8);
         let array = new Float64Array(buffer);
         array[0] = value;
@@ -100,7 +95,7 @@ register("bigint", (value: bigint): bigint => {
             return primitive.get(value) || 0n;
         }
         let mask: bigint = maskOf("bigint");
-        let bit: bigint = 0xFFFFFFFFFFFFFFFFn;
+        let bit: bigint = 0xffffffffffffffffn;
         let result: bigint = ((value << 4n) & bit) | mask;
         primitive.set(value, result);
         return result;
@@ -113,7 +108,7 @@ register("string", (value: string): bigint => {
             return primitive.get(value) || 0n;
         }
         let mask: bigint = maskOf("string");
-        let bit: bigint = 0xFFFFFFFFFFFFFFFFn;
+        let bit: bigint = 0xffffffffffffffffn;
         let gap: number = value.length < 64 ? 1 : Math.ceil(Math.log2(value.length));
         let result: bigint = 0n;
         for (let i = 0; i < value.length; i += gap) {
@@ -132,7 +127,7 @@ register("symbol", (value: symbol): bigint => {
             return primitive.get(value) || 0n;
         }
         let mask: bigint = maskOf("symbol");
-        let bit: bigint = 0xFFFFFFFFFFFFFFFFn;
+        let bit: bigint = 0xffffffffffffffffn;
         let description: string = (value.description || "") + String(value);
         let result: bigint = 0n;
         let gap: number = description.length < 64 ? 1 : Math.ceil(Math.log2(description.length));
@@ -152,7 +147,7 @@ register("function", (value: Function): bigint => {
             return primitive.get(value) || 0n;
         }
         let mask: bigint = maskOf("function");
-        let bit: bigint = 0xFFFFFFFFFFFFFFFFn;
+        let bit: bigint = 0xffffffffffffffffn;
         let description: string = (value.name || "") + String(value);
         let result: bigint = 0n;
         let gap: number = description.length < 64 ? 1 : Math.ceil(Math.log2(description.length));
@@ -173,7 +168,7 @@ register("object", (value: object): bigint => {
         }
         try {
             let mask: bigint = maskOf("object");
-            let bit: bigint = 0xFFFFFFFFFFFFFFFFn;
+            let bit: bigint = 0xffffffffffffffffn;
             let result: bigint = 0n;
             useTraverse(value, (key: UseTraverseKey<object>, value: UseTraverseValue<object>, path: UseTraversePath<object>): boolean => {
                 let keyHashHandler: Handler<DeepPropertyKey<object>> = handlers.get(typeOf(key)) as Handler<DeepPropertyKey<object>>;
@@ -181,29 +176,29 @@ register("object", (value: object): bigint => {
                 let valueHashHandler: Handler<DeepPropertyValue<object>> = handlers.get(typeOf(value)) as Handler<DeepPropertyValue<object>>;
                 let valueHash: bigint = valueHashHandler ? valueHashHandler(value) : 0n;
                 let pathHash: bigint = 0n;
-                // path 数组会被 useTraverse 复用（push/pop），不能按引用缓存，必须每次重算
                 for (let p of path) {
                     let pathHashHandler: Handler<unknown> = handlers.get(typeOf(p)) as Handler<unknown>;
                     pathHash = (((pathHash << 5n) - pathHash) ^ (pathHashHandler ? pathHashHandler(p) : 0n)) & bit;
                 }
-                result = (((result << 13n) | (result >> 51n)) ^ (keyHash * 0x243F6A8885A308D3n) ^ (valueHash * 0x517CC1B727220A95n) ^ (pathHash * 0x9E3779B97F4A7C15n)) & bit;
+                result = (((result << 13n) | (result >> 51n)) ^ (keyHash * 0x243f6a8885a308d3n) ^ (valueHash * 0x517cc1b727220a95n) ^ (pathHash * 0x9e3779b97f4a7c15n)) & bit;
                 return true;
             });
             result = (result ^ (result >> 32n)) * 0x9e3779b97f4a7c15n;
             result = (((result ^ (result >> 32n)) << 4n) & bit) | mask;
             complex.set(value, result);
             return result;
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on hashing object.");
         }
     }
     return 0n;
 });
-
 interface UseHash {
     <T = unknown>(target: T): bigint;
     (...value: Array<unknown>): bigint;
-};
+}
+;
 export let useHash: UseHash = <T = unknown>(...value: Array<T>): bigint => {
     if (primitive.size >= PRIMITIVE_CACHE_LIMIT) {
         primitive.clear();
@@ -215,4 +210,4 @@ export let useHash: UseHash = <T = unknown>(...value: Array<T>): bigint => {
         return handler(target);
     }
     return 0n;
-}
+};

@@ -1,31 +1,14 @@
-import {
-    useSynchronousAnyMatch, useSynchronousAllMatch, useSynchronousCollect, useSynchronousCount, useSynchronousError, useSynchronousFindAny, useSynchronousFindAt,
-    useSynchronousFindFirst, useSynchronousFindLast, useSynchronousFindMaximum, useSynchronousFindMinimum, useSynchronousForEach, useSynchronousGroup, useSynchronousGroupBy,
-    useSynchronousJoin, useSynchronousLog, useSynchronousNoneMatch, useSynchronousPartition, useSynchronousPartitionBy, useSynchronousReduce, useSynchronousToArray,
-    useSynchronousToMap, useSynchronousToSet, useSynchronousWrite, useSynchronousFrequency, useSynchronousBigIntAverage, useSynchronousBigIntMedian, useSynchronousBigIntMode,
-    useSynchronousBigIntSummate, useSynchronousNumericAverage, useSynchronousNumericMedian, useSynchronousNumericMode,
-    useSynchronousNumericStandardDeviation, useSynchronousNumericSummate, useSynchronousNumericVariance,
-    useSynchronousFindNegativeAt, useSynchronousToIndexedArray
-} from "./collector.js";
+import { useSynchronousAnyMatch, useSynchronousAllMatch, useSynchronousCollect, useSynchronousCount, useSynchronousError, useSynchronousFindAny, useSynchronousFindAt, useSynchronousFindFirst, useSynchronousFindLast, useSynchronousFindMaximum, useSynchronousFindMinimum, useSynchronousForEach, useSynchronousGroup, useSynchronousGroupBy, useSynchronousJoin, useSynchronousLog, useSynchronousNoneMatch, useSynchronousPartition, useSynchronousPartitionBy, useSynchronousReduce, useSynchronousToArray, useSynchronousToMap, useSynchronousToSet, useSynchronousWrite, useSynchronousFrequency, useSynchronousBigIntAverage, useSynchronousBigIntMedian, useSynchronousBigIntMode, useSynchronousBigIntSummate, useSynchronousNumericAverage, useSynchronousNumericMedian, useSynchronousNumericMode, useSynchronousNumericStandardDeviation, useSynchronousNumericSummate, useSynchronousNumericVariance, useSynchronousFindNegativeAt, useSynchronousToIndexedArray } from "./collector.js";
 import { isFunction, isSynchronousSemantic, isIterable, isNumber, isBigInt, isObject, isString, isSynchronousCollectable, isSynchronousCollector } from "../guard.js";
 import { useCompare, useRandom, useToBigInt, useToNumber } from "../hook.js";
-import {
-    SynchronousOrderedCollectableSymbol, SynchronousBigIntStatisticsSymbol, SynchronousCollectableSymbol, SynchronousNumericStatisticsSymbol, SynchronousSemanticSymbol,
-    SynchronousWindowCollectableSymbol, SynchronousUnorderedCollectableSymbol, SynchronousStatisticsSymbol
-} from "../symbol.js";
-import { invalidate, validate, type BiConsumer, type BiFunctional, type BiPredicate, type Comparator, type Consumer, type Functional, type Indexed, type Predicate, 
-    type Supplier, type SynchronousGenerator, type TriFunctional, type TriPredicate } from "../utility.js";
+import { SynchronousOrderedCollectableSymbol, SynchronousBigIntStatisticsSymbol, SynchronousCollectableSymbol, SynchronousNumericStatisticsSymbol, SynchronousSemanticSymbol, SynchronousWindowCollectableSymbol, SynchronousUnorderedCollectableSymbol, SynchronousStatisticsSymbol } from "../symbol.js";
+import { invalidate, validate, type BiConsumer, type BiFunctional, type BiPredicate, type Comparator, type Consumer, type Functional, type Indexed, type Predicate, type Supplier, type SynchronousGenerator, type TriFunctional, type TriPredicate } from "../utility.js";
 import { SynchronousCollector } from "./collector.js";
 import type { Optional } from "../optional.js";
-
 export class SynchronousSemantic<E> {
-
     protected generator: SynchronousGenerator<E>;
-
     protected readonly SynchronousSemantic: Symbol = SynchronousSemanticSymbol;
-
     [Symbol.toStringTag]: string = "SynchronousSemantic";
-
     public constructor(generator: SynchronousGenerator<E>) {
         if (isFunction(generator)) {
             this.generator = generator;
@@ -43,11 +26,11 @@ export class SynchronousSemantic<E> {
                     configurable: false
                 }
             });
-        } else {
+        }
+        else {
             throw new TypeError("Invalid arguments.");
         }
     }
-
     public concat(other: SynchronousSemantic<E>): SynchronousSemantic<E>;
     public concat(other: Iterable<E>): SynchronousSemantic<E>;
     public concat(argument: SynchronousSemantic<E> | Iterable<E>): SynchronousSemantic<E> {
@@ -65,7 +48,8 @@ export class SynchronousSemantic<E> {
                         accept(element, count);
                         count++;
                     }, interrupt);
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
@@ -83,14 +67,14 @@ export class SynchronousSemantic<E> {
                         accept(element, count);
                         count++;
                     }
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public distinct(): SynchronousSemantic<E>;
     public distinct<K>(keyExtractor: Functional<E, K>): SynchronousSemantic<E>;
     public distinct<K>(keyExtractor: BiFunctional<E, bigint, K>): SynchronousSemantic<E>;
@@ -106,37 +90,36 @@ export class SynchronousSemantic<E> {
                         accept(element, index);
                     }
                 }, interrupt);
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         });
     }
-
     public dropWhile(predicate: Predicate<E>): SynchronousSemantic<E>;
     public dropWhile(predicate: BiPredicate<E, bigint>): SynchronousSemantic<E>;
     public dropWhile(predicate: Predicate<E> | BiPredicate<E, bigint>): SynchronousSemantic<E> {
         if (isFunction(predicate)) {
             return new SynchronousSemantic<E>((accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): void => {
                 try {
-                    let count: bigint = -1n;
+                    let count: bigint = 0n;
+                    let dropping: boolean = true;
                     this.generator((element: E, index: bigint): void => {
-                        if (count === -1n) {
-                            if (!predicate(element, index)) {
-                                count++;
-                            }
-                        } else {
-                            accept(element, count);
-                            count++;
+                        if (dropping && predicate(element, index)) {
+                            return;
                         }
+                        dropping = false;
+                        accept(element, count);
+                        count++;
                     }, interrupt);
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public filter(predicate: Predicate<E>): SynchronousSemantic<E>;
     public filter(predicate: BiPredicate<E, bigint>): SynchronousSemantic<E>;
     public filter(predicate: Predicate<E> | BiPredicate<E, bigint>): SynchronousSemantic<E> {
@@ -148,14 +131,14 @@ export class SynchronousSemantic<E> {
                             accept(element, index);
                         }
                     }, interrupt);
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public flat(mapper: Functional<E, Iterable<E>>): SynchronousSemantic<E>;
     public flat(mapper: BiFunctional<E, bigint, Iterable<E>>): SynchronousSemantic<E>;
     public flat(mapper: Functional<E, SynchronousSemantic<E>>): SynchronousSemantic<E>;
@@ -174,7 +157,8 @@ export class SynchronousSemantic<E> {
                                 stop = stop || interrupt(subElement, count);
                                 count++;
                             }
-                        } else if (isSynchronousSemantic(result)) {
+                        }
+                        else if (isSynchronousSemantic(result)) {
                             result.generator((subElement: E): void => {
                                 accept(subElement, count);
                                 stop = stop || interrupt(subElement, count);
@@ -182,14 +166,14 @@ export class SynchronousSemantic<E> {
                             }, (element: E): boolean => interrupt(element, count) || stop);
                         }
                     }, (element: E): boolean => interrupt(element, count) || stop);
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public flatMap<R>(mapper: Functional<E, Iterable<R>>): SynchronousSemantic<R>;
     public flatMap<R>(mapper: BiFunctional<E, bigint, Iterable<R>>): SynchronousSemantic<R>;
     public flatMap<R>(mapper: Functional<E, SynchronousSemantic<R>>): SynchronousSemantic<R>;
@@ -208,22 +192,23 @@ export class SynchronousSemantic<E> {
                                 stop = stop || interrupt(subElement, count);
                                 count++;
                             }
-                        } else if (isSynchronousSemantic(transform)) {
+                        }
+                        else if (isSynchronousSemantic(transform)) {
                             transform.source()((subElement: R): void => {
                                 accept(subElement, count);
                                 stop = stop || interrupt(subElement, count);
                                 count++;
-                            }, (element: R): boolean => interrupt(element, count) || stop)
+                            }, (element: R): boolean => interrupt(element, count) || stop);
                         }
                     }, (): boolean => stop);
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public limit(count: number): SynchronousSemantic<E>;
     public limit(count: bigint): SynchronousSemantic<E>;
     public limit(argument: bigint | number): SynchronousSemantic<E> {
@@ -238,7 +223,8 @@ export class SynchronousSemantic<E> {
                             count++;
                         }
                     }, (element: E, index: bigint): boolean => interrupt(element, index) || count >= limit);
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
@@ -254,14 +240,14 @@ export class SynchronousSemantic<E> {
                             count++;
                         }
                     }, (element: E, index: bigint): boolean => interrupt(element, index) || count >= limit);
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public map(mapper: Functional<E, E>): SynchronousSemantic<E>;
     public map(mapper: BiFunctional<E, bigint, E>): SynchronousSemantic<E>;
     public map<R>(mapper: Functional<E, R>): SynchronousSemantic<R>;
@@ -276,14 +262,14 @@ export class SynchronousSemantic<E> {
                         accept(resolved, index);
                         stop = stop || interrupt(resolved, index);
                     }, (): boolean => stop);
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public peek(consumer: Consumer<E>): SynchronousSemantic<E>;
     public peek(consumer: BiConsumer<E, bigint>): SynchronousSemantic<E>;
     public peek(consumer: Consumer<E> | BiConsumer<E, bigint>): SynchronousSemantic<E> {
@@ -294,14 +280,14 @@ export class SynchronousSemantic<E> {
                         accept(element, index);
                         consumer(element, index);
                     }, interrupt);
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public redirect(redirector: BiFunctional<E, bigint, bigint>): SynchronousSemantic<E> {
         if (isFunction(redirector)) {
             return new SynchronousSemantic<E>((accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): void => {
@@ -309,26 +295,26 @@ export class SynchronousSemantic<E> {
                     this.generator((element: E, index: bigint): void => {
                         accept(element, redirector(element, index));
                     }, interrupt);
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public reverse(): SynchronousSemantic<E> {
         return new SynchronousSemantic<E>((accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): void => {
             try {
                 this.generator((element: E, index: bigint): void => {
-                    accept(element, -index);
+                    accept(element, -index - 1n);
                 }, interrupt);
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         });
     }
-
     public shuffle(): SynchronousSemantic<E>;
     public shuffle(mapper: BiFunctional<E, bigint, bigint>): SynchronousSemantic<E>;
     public shuffle(mapper?: BiFunctional<E, bigint, bigint>): SynchronousSemantic<E> {
@@ -338,7 +324,8 @@ export class SynchronousSemantic<E> {
                     this.generator((element: E, index: bigint): void => {
                         accept(element, mapper(element, index));
                     }, interrupt);
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
@@ -346,15 +333,14 @@ export class SynchronousSemantic<E> {
         return new SynchronousSemantic<E>((accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): void => {
             try {
                 this.generator((element: E, _index: bigint): void => {
-                    // 用每次调用都不同的随机索引实现真正的洗牌（原实现按元素哈希，结果恒定）
                     accept(element, useRandom(0n, SHUFFLE_BOUND));
                 }, interrupt);
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         });
     }
-
     public skip(count: number): SynchronousSemantic<E>;
     public skip(count: bigint): SynchronousSemantic<E>;
     public skip(argument: number | bigint): SynchronousSemantic<E> {
@@ -367,11 +353,13 @@ export class SynchronousSemantic<E> {
                     this.generator((element: E, index: bigint): void => {
                         if (count < limit) {
                             count++;
-                        } else {
+                        }
+                        else {
                             accept(element, index);
                         }
                     }, interrupt);
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
@@ -384,22 +372,22 @@ export class SynchronousSemantic<E> {
                     this.generator((element: E, index: bigint): void => {
                         if (count < n) {
                             count++;
-                        } else {
+                        }
+                        else {
                             accept(element, index);
                         }
                     }, interrupt);
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public source(): SynchronousGenerator<E> {
         return this.generator;
     }
-
     public sub(start: number, end: number): SynchronousSemantic<E>;
     public sub(start: bigint, end: bigint): SynchronousSemantic<E>;
     public sub(start: number | bigint, end: number | bigint): SynchronousSemantic<E> {
@@ -412,20 +400,19 @@ export class SynchronousSemantic<E> {
                     let minimum: bigint = resolvedStart < resolvedEnd ? resolvedStart : resolvedEnd;
                     let maximum: bigint = resolvedStart < resolvedEnd ? resolvedEnd : resolvedStart;
                     this.generator((element: E, index: bigint): void => {
-                        // count 统计上游第几个元素（不能只在 accept 分支自增，否则条件永远不成立）
                         if (minimum <= count && count < maximum) {
                             accept(element, index);
                         }
                         count++;
                     }, (element: E, index: bigint): boolean => count >= maximum || interrupt(element, index));
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public takeWhile(predicate: Predicate<E>): SynchronousSemantic<E>;
     public takeWhile(predicate: BiPredicate<E, bigint>): SynchronousSemantic<E>;
     public takeWhile(predicate: Predicate<E> | BiPredicate<E, bigint>): SynchronousSemantic<E> {
@@ -435,16 +422,17 @@ export class SynchronousSemantic<E> {
                 this.generator((element: E, index: bigint) => {
                     if (predicate(element, index) && !stop) {
                         accept(element, index);
-                    } else {
+                    }
+                    else {
                         stop = true;
                     }
                 }, (element: E, index: bigint): boolean => stop || interrupt(element, index));
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         });
     }
-
     public toCollectable(): SynchronousCollectable<E>;
     public toCollectable<C extends SynchronousCollectable<E>>(mapper: Functional<SynchronousGenerator<E>, C>): C;
     public toCollectable<C extends SynchronousCollectable<E>>(mapper?: Functional<SynchronousGenerator<E>, C>): SynchronousCollectable<E> | C {
@@ -454,117 +442,100 @@ export class SynchronousSemantic<E> {
                 if (isSynchronousCollectable(SynchronousCollectable)) {
                     return SynchronousCollectable;
                 }
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         try {
             return new SynchronousUnorderedCollectable(this.generator);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public toBigintStatistics(): SynchronousBigIntStatistics<E> {
         try {
             return new SynchronousBigIntStatistics<E>(this.generator);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public toNumericStatistics(): SynchronousNumericStatistics<E> {
         try {
             return new SynchronousNumericStatistics<E>(this.generator);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public toOrdered(): SynchronousOrderedCollectable<E>;
     public toOrdered(comparator: Comparator<E>): SynchronousOrderedCollectable<E>;
     public toOrdered(comparator?: Comparator<E>): SynchronousOrderedCollectable<E> {
         try {
-            // 传入比较器时按值排序并重排索引（统计类强依赖该语义）；否则按元素真实索引排序
             if (isFunction(comparator)) {
                 return new SynchronousOrderedCollectable(this.generator, comparator);
             }
             return new SynchronousOrderedCollectable(this.generator);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public toUnordered(): SynchronousUnorderedCollectable<E> {
         try {
             return new SynchronousUnorderedCollectable(this.generator);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public toWindow(): SynchronousWindowCollectable<E> {
         try {
             return new SynchronousWindowCollectable<E>(this.generator);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public translate(offset: number): SynchronousSemantic<E>;
     public translate(offset: bigint): SynchronousSemantic<E>;
     public translate(translator: BiFunctional<E, bigint, bigint>): SynchronousSemantic<E>;
     public translate(argument1: number | bigint | BiFunctional<E, bigint, bigint>): SynchronousSemantic<E> {
         if (isNumber(argument1) || isBigInt(argument1)) {
             let offset: bigint = useToBigInt(argument1);
-            // README 示例 5 的语义是循环平移（正数右旋、负数左旋），而循环平移必须知道流长度，
-            // 因此数值重载会先物化整条流，再按 (position + offset) mod n 分配索引；
-            // 函数式重载保持逐元素映射，仍是惰性的。
             return new SynchronousSemantic<E>((accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): void => {
                 try {
-                    let elements: Array<E> = [];
-                    this.generator((element: E): void => {
-                        elements.push(element);
-                    }, (): boolean => false);
-                    let count: bigint = BigInt(elements.length);
-                    if (count === 0n) {
-                        return;
-                    }
-                    let normalized: bigint = ((offset % count) + count) % count;
-                    for (let position: number = 0; position < elements.length; position++) {
-                        let element: E = elements[position];
-                        let index: bigint = (BigInt(position) + normalized) % count;
-                        if (interrupt(element, index)) {
-                            break;
-                        }
-                        accept(element, index);
-                    }
-                } catch (error) {
+                    this.generator((element: E, index: bigint): void => {
+                        accept(element, index + offset);
+                    }, interrupt);
+                }
+                catch (error) {
                     throw error;
                 }
             });
-        } else if (isFunction(argument1)) {
+        }
+        else if (isFunction(argument1)) {
             let translator: BiFunctional<E, bigint, bigint> = argument1;
             return new SynchronousSemantic<E>((accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): void => {
                 try {
                     this.generator((element: E, index: bigint): void => {
                         accept(element, index + translator(element, index));
                     }, interrupt);
-                } catch (error) {
+                }
+                catch (error) {
                     throw error;
                 }
             });
         }
         throw new TypeError("Invalid arguments.");
     }
-};
-
+}
+;
 export abstract class SynchronousCollectable<E> implements Iterable<E> {
-
     protected readonly SynchronousCollectable: symbol = SynchronousCollectableSymbol;
-
     [Symbol.toStringTag]: string = "SynchronousCollectable";
-
     public constructor() {
         Object.defineProperty(this, "SynchronousCollectable", {
             value: SynchronousCollectableSymbol,
@@ -573,32 +544,29 @@ export abstract class SynchronousCollectable<E> implements Iterable<E> {
             configurable: false
         });
     }
-
     public *[Symbol.iterator](): globalThis.Generator<E, void, undefined> {
         for (let element of this.toArray()) {
             yield element;
         }
     }
-
     public anyMatch(predicate: Predicate<E>): boolean;
     public anyMatch(predicate: BiPredicate<E, bigint>): boolean;
     public anyMatch(predicate: Predicate<E> | BiPredicate<E, bigint>): boolean {
         if (isFunction(predicate)) {
             try {
                 return useSynchronousAnyMatch(predicate).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Predicate must be a function.");
     }
-
     public allMatch(predicate: Predicate<E>): boolean;
     public allMatch(predicate: BiPredicate<E, bigint>): boolean;
     public allMatch(predicate: Predicate<E> | BiPredicate<E, bigint>): boolean {
         return useSynchronousAllMatch(predicate).collect(this.source());
     }
-
     public collect<A, R>(collector: SynchronousCollector<E, A, R>): R;
     public collect<A, R>(identity: Supplier<A>, accumulator: BiFunctional<A, E, A>, finisher: Functional<A, R>): R;
     public collect<A, R>(identity: Supplier<A>, accumulator: TriFunctional<A, E, bigint, A>, finisher: Functional<A, R>): R;
@@ -627,16 +595,15 @@ export abstract class SynchronousCollectable<E> implements Iterable<E> {
                 let finisher: Functional<A, R> = argument4 as Functional<A, R>;
                 return useSynchronousCollect(identity, interrupt, accumulator, finisher).collect(this.source());
             }
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public count(): bigint {
         return useSynchronousCount<E>().collect(this.source());
     }
-
     public error(): void;
     public error(accumulator: BiFunctional<string, E, string>): void;
     public error(accumulator: TriFunctional<string, E, bigint, string>): void;
@@ -646,158 +613,167 @@ export abstract class SynchronousCollectable<E> implements Iterable<E> {
         if (invalidate(argument1) && invalidate(argument2) && invalidate(argument3)) {
             try {
                 useSynchronousError<E>().collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isFunction(argument1) && invalidate(argument2) && invalidate(argument3)) {
+        }
+        else if (isFunction(argument1) && invalidate(argument2) && invalidate(argument3)) {
             try {
                 let accumulator: BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string> = argument1 as BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string>;
                 useSynchronousError<E>(accumulator).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
+        }
+        else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
             try {
                 let prefix: string = argument1;
                 let accumulator: BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string> = argument2 as BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string>;
                 let suffix: string = argument3;
                 useSynchronousError<E>(prefix, accumulator, suffix).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else {
+        }
+        else {
             throw new TypeError("Invalid arguments.");
         }
     }
-
     public isEmpty(): boolean {
         return this.count() === 0n;
     }
-
     public findAny(): Optional<E> {
         try {
             return useSynchronousFindAny<E>().collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public findAt(index: number): Optional<E>;
     public findAt(index: bigint): Optional<E>;
     public findAt(index: number | bigint): Optional<E> {
         if (isBigInt(index)) {
             try {
                 return useSynchronousFindAt<E>(index).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isNumber(index)) {
+        }
+        else if (isNumber(index)) {
             try {
                 return useSynchronousFindAt<E>(index).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Index must be a bigint.");
     }
-
     public findNegativeAt(index: number): Optional<E>;
     public findNegativeAt(index: bigint): Optional<E>;
     public findNegativeAt(index: number | bigint): Optional<E> {
         if (isBigInt(index)) {
             try {
                 return useSynchronousFindNegativeAt<E>(index).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isNumber(index)) {
+        }
+        else if (isNumber(index)) {
             try {
                 return useSynchronousFindNegativeAt<E>(index).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Index must be a bigint.");
     }
-
     public findFirst(): Optional<E> {
         try {
             return useSynchronousFindFirst<E>().collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public findLast(): Optional<E> {
         try {
             return useSynchronousFindLast<E>().collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public findMaximum(): Optional<E>;
     public findMaximum(comparator: Comparator<E>): Optional<E>;
     public findMaximum(argument1?: Comparator<E>): Optional<E> {
         try {
             let comparator: Comparator<E> = isFunction(argument1) ? argument1 : useCompare;
             return useSynchronousFindMaximum(comparator).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public findMinimum(): Optional<E>;
     public findMinimum(comparator: Comparator<E>): Optional<E>;
     public findMinimum(argument1?: Comparator<E>): Optional<E> {
         try {
             let comparator: Comparator<E> = isFunction(argument1) ? argument1 : useCompare;
             return useSynchronousFindMinimum(comparator).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public forEach(action: Consumer<E>): void;
     public forEach(action: BiConsumer<E, bigint>): void;
     public forEach(action: Consumer<E> | BiConsumer<E, bigint>): void {
         if (isFunction(action)) {
             try {
                 useSynchronousForEach(action).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else {
+        }
+        else {
             throw new TypeError("Action must be a function.");
         }
     }
-
     public group<K>(classifier: Functional<E, K>): Map<K, Array<E>>;
-    public group<K>(classifier: BiFunctional<E, bigint, K>): Map<K, Array<E>>
+    public group<K>(classifier: BiFunctional<E, bigint, K>): Map<K, Array<E>>;
     public group<K>(classifier: Functional<E, K> | BiFunctional<E, bigint, K>): Map<K, Array<E>> {
         if (isFunction(classifier)) {
             try {
                 return useSynchronousGroup(classifier).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Classifier must be a function.");
     }
-
     public groupBy<K, V>(keyExtractor: Functional<E, K>, valueExtractor: Functional<E, V>): Map<K, Array<V>>;
-    public groupBy<K, V>(keyExtractor: BiFunctional<E, bigint, K>, valueExtractor: BiFunctional<E, bigint, K>): Map<K, Array<V>>
+    public groupBy<K, V>(keyExtractor: BiFunctional<E, bigint, K>, valueExtractor: BiFunctional<E, bigint, K>): Map<K, Array<V>>;
     public groupBy<K, V>(keyExtractor: Functional<E, K> | BiFunctional<E, bigint, K>, valueExtractor: Functional<E, V> | BiFunctional<E, bigint, V>): Map<K, Array<V>> {
         if (isFunction(keyExtractor) && isFunction(valueExtractor)) {
             try {
                 return useSynchronousGroupBy(keyExtractor, valueExtractor).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Key and value extractors must be functions.");
     }
-
     public join(): string;
     public join(delimiter: string): string;
     public join(prefix: string, delimiter: string, suffix: string): string;
@@ -807,38 +783,44 @@ export abstract class SynchronousCollectable<E> implements Iterable<E> {
         if (invalidate(argument1) && invalidate(argument2) && invalidate(argument3)) {
             try {
                 return useSynchronousJoin<E>().collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isString(argument1) && invalidate(argument2) && invalidate(argument3)) {
+        }
+        else if (isString(argument1) && invalidate(argument2) && invalidate(argument3)) {
             try {
                 let delimiter: string = argument1;
                 return useSynchronousJoin<E>(delimiter).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
+        }
+        else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
             try {
                 let prefix: string = argument1;
                 let accumulator: BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string> = argument2 as BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string>;
                 let suffix: string = argument3;
                 return useSynchronousJoin<E>(prefix, accumulator, suffix).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isString(argument1) && isString(argument2) && isString(argument3)) {
+        }
+        else if (isString(argument1) && isString(argument2) && isString(argument3)) {
             try {
                 let prefix: string = argument1;
                 let delimiter: string = argument2;
                 let suffix: string = argument3;
                 return useSynchronousJoin<E>(prefix, delimiter, suffix).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public log(): void;
     public log(accumulator: BiFunctional<string, E, string>): void;
     public log(accumulator: TriFunctional<string, E, bigint, string>): void;
@@ -849,51 +831,55 @@ export abstract class SynchronousCollectable<E> implements Iterable<E> {
             try {
                 let accumulator: BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string> = argument1 as BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string>;
                 useSynchronousLog<E>(accumulator).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
+        }
+        else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
             try {
                 let prefix: string = argument1;
                 let accumulator: BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string> = argument2 as BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string>;
                 let suffix: string = argument3;
                 useSynchronousLog<E>(prefix, accumulator, suffix).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else {
+        }
+        else {
             try {
                 useSynchronousLog<E>().collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
     }
-
     public nonMatch(predicate: Predicate<E>): boolean;
     public nonMatch(predicate: BiPredicate<E, bigint>): boolean;
     public nonMatch(predicate: Predicate<E> | BiPredicate<E, bigint>): boolean {
         if (isFunction(predicate)) {
             try {
                 return useSynchronousNoneMatch(predicate).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Predicate must be a function.");
     }
-
     public partition(count: bigint): Array<Array<E>> {
         if (isBigInt(count)) {
             try {
                 return useSynchronousPartition<E>(count).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Count must be a BigInt.");
     }
-
     public partitionBy(classifier: Functional<E, bigint>): Array<Array<E>>;
     public partitionBy(classifier: BiFunctional<E, bigint, bigint>): Array<Array<E>>;
     public partitionBy(classifier: Functional<E, bigint> | BiFunctional<E, bigint, bigint>): Array<Array<E>> {
@@ -901,19 +887,18 @@ export abstract class SynchronousCollectable<E> implements Iterable<E> {
             try {
                 let collector: SynchronousCollector<E, Array<E[]>, Array<E[]>> = useSynchronousPartitionBy(classifier);
                 return collector.collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Classifier must be a function.");
     }
-
     public pipe(conversion: Functional<SynchronousGenerator<E>, SynchronousSemantic<E>>): SynchronousSemantic<E>;
     public pipe<R>(conversion: Functional<SynchronousGenerator<E>, SynchronousSemantic<R>>): SynchronousSemantic<R>;
     public pipe<R = E>(conversion: Functional<SynchronousGenerator<E>, SynchronousSemantic<R>>): SynchronousSemantic<R> {
         return conversion(this.source());
     }
-
     public reduce(accumulator: BiFunctional<E, E, E>): E;
     public reduce(accumulator: TriFunctional<E, E, bigint, E>): E;
     public reduce(identity: E, accumulator: BiFunctional<E, E, E>): E;
@@ -925,73 +910,78 @@ export abstract class SynchronousCollectable<E> implements Iterable<E> {
             try {
                 let accumulator = argument1 as BiFunctional<E, E, E> | TriFunctional<E, E, bigint, E>;
                 return useSynchronousReduce(accumulator).collect(this.source()) as R;
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (validate(argument1) && isFunction(argument2) && invalidate(argument3)) {
+        }
+        else if (validate(argument1) && isFunction(argument2) && invalidate(argument3)) {
             try {
                 let identity = argument1 as E;
                 let accumulator = argument2 as BiFunctional<E, E, E> & TriFunctional<E, E, bigint, E>;
                 return useSynchronousReduce(identity, accumulator).collect(this.source()) as unknown as R;
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (validate(argument1) && isFunction(argument2) && isFunction(argument3)) {
+        }
+        else if (validate(argument1) && isFunction(argument2) && isFunction(argument3)) {
             try {
                 let identity = argument1 as R;
                 let accumulator = argument2 as BiFunctional<R, E, R> & TriFunctional<R, E, bigint, R>;
                 let finisher = argument3 as Functional<R, R>;
                 return useSynchronousReduce(identity, accumulator, finisher).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else {
+        }
+        else {
             throw new TypeError("Invalid arguments.");
         }
     }
-
     public semantic(): SynchronousSemantic<E> {
         let source: SynchronousGenerator<E> = this.source();
         if (isFunction(source)) {
             try {
                 return new SynchronousSemantic(source);
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else {
+        }
+        else {
             throw new TypeError("Invalid source.");
         }
     }
-
     public abstract source(): SynchronousGenerator<E>;
-
     public toArray(): Array<E> {
         try {
             return useSynchronousToArray<E>().collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public toMap<K, E>(keyExtractor: Functional<E, K>): Map<K, E>;
     public toMap<K, V>(keyExtractor: Functional<E, K>, valueExtractor: Functional<E, V>): Map<K, V>;
     public toMap<K, V>(keyExtractor: BiFunctional<E, bigint, K>, valueExtractor: BiFunctional<E, bigint, V>): Map<K, V>;
     public toMap<K, V = E>(keyExtractor: Functional<E, K> | BiFunctional<E, bigint, K>, valueExtractor: Functional<E, V> | BiFunctional<E, bigint, V> = (element: E): V => element as unknown as V): Map<K, V> {
         try {
             return useSynchronousToMap<E, K, V>(keyExtractor, valueExtractor).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public toSet(): Set<E> {
         try {
             return useSynchronousToSet<E>().collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public write<S = string>(stream: WritableStream<S>): Promise<WritableStream<S>>;
     public write<S = string>(stream: WritableStream<S>, accumulator: BiFunctional<WritableStream<S>, E, WritableStream<S>>): Promise<WritableStream<S>>;
     public write<S = string>(stream: WritableStream<S>, accumulator: TriFunctional<WritableStream<S>, E, bigint, WritableStream<S>>): Promise<WritableStream<S>>;
@@ -1002,34 +992,25 @@ export abstract class SynchronousCollectable<E> implements Iterable<E> {
                 if (isFunction(argument2)) {
                     let accumulator: BiFunctional<WritableStream<S>, E, WritableStream<S>> & TriFunctional<WritableStream<S>, E, bigint, WritableStream<S>> = argument2 as BiFunctional<WritableStream<S>, E, WritableStream<S>> & TriFunctional<WritableStream<S>, E, bigint, WritableStream<S>>;
                     return useSynchronousWrite(stream, accumulator).collect(this.source());
-                } else {
+                }
+                else {
                     return useSynchronousWrite(stream).collect(this.source());
                 }
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Invalid arguments.");
     }
-};
-
-/**
- * 无序收集器在遇到重复索引时使用的兜底键起点。
- * 取一个远离常规索引（0、负数、哈希值通常远小于 2^96）的高位区间，保证不会与真实索引相撞。
- */
+}
+;
 const SURROGATE_BASE: bigint = 1n << 96n;
-
-/** shuffle 使用的随机索引上界（62 位随机空间，碰撞概率可忽略）。 */
 const SHUFFLE_BOUND: bigint = 1n << 62n;
-
 export class SynchronousOrderedCollectable<E> extends SynchronousCollectable<E> {
-
     protected readonly OrderedCollectable: symbol = SynchronousOrderedCollectableSymbol;
-
     protected buffer: Array<Indexed<E>> = [];
-
     [Symbol.toStringTag]: string = "SynchronousOrderedCollectable";
-
     public constructor(generator: SynchronousGenerator<E>);
     public constructor(generator: SynchronousGenerator<E>, comparator: Comparator<E>);
     public constructor(argument1: SynchronousGenerator<E>, argument2?: Comparator<E>) {
@@ -1039,7 +1020,6 @@ export class SynchronousOrderedCollectable<E> extends SynchronousCollectable<E> 
                 let collector: SynchronousCollector<E, Array<Indexed<E>>, Array<Indexed<E>>> = useSynchronousToIndexedArray();
                 let indexed: Array<Indexed<E>> = collector.collect(argument1);
                 if (isFunction(argument2)) {
-                    // 显式比较器：按值排序，索引重建为顺序位（统计类依赖该语义）
                     let comparator: Comparator<E> = argument2;
                     this.buffer = indexed.slice().sort((a: Indexed<E>, b: Indexed<E>): number => {
                         return comparator(a.element, b.element);
@@ -1049,9 +1029,15 @@ export class SynchronousOrderedCollectable<E> extends SynchronousCollectable<E> 
                             index: BigInt(index)
                         };
                     });
-                } else {
-                    // 默认：按元素携带的真实索引排序，保留 redirect / reverse / translate 的效果
-                    this.buffer = indexed.sort((a: Indexed<E>, b: Indexed<E>): number => {
+                }
+                else {
+                    let count: bigint = BigInt(indexed.length);
+                    this.buffer = indexed.map((entry: Indexed<E>): Indexed<E> => {
+                        return {
+                            element: entry.element,
+                            index: count === 0n ? entry.index : ((entry.index % count) + count) % count
+                        };
+                    }).sort((a: Indexed<E>, b: Indexed<E>): number => {
                         return Number(a.index - b.index);
                     });
                 }
@@ -1069,32 +1055,26 @@ export class SynchronousOrderedCollectable<E> extends SynchronousCollectable<E> 
                         configurable: false
                     }
                 });
-            } catch (error) {
+            }
+            catch (error) {
                 throw new Error(`Uncaught error on creating buffer: ${String(error)}`);
             }
-        } else {
+        }
+        else {
             throw new TypeError("Source must be an iterable or a generator function.");
         }
     }
-
     public *[Symbol.iterator](): globalThis.Generator<E, void, undefined> {
         for (let { element } of this.buffer) {
             yield element;
         }
     }
-
     public override allMatch(predicate: Predicate<E>): boolean;
     public override allMatch(predicate: BiPredicate<E, bigint>): boolean;
     public override allMatch(predicate: Predicate<E> | BiPredicate<E, bigint>): boolean {
-        let collector: SynchronousCollector<Indexed<E>, boolean, boolean> = SynchronousCollector.shortable(
-            (): boolean => false,
-            (element: Indexed<E>, index: bigint, accumulator: boolean): boolean => predicate(element.element, index) && accumulator,
-            (accumulator: boolean, element: Indexed<E>, index: bigint): boolean => predicate(element.element, index) && accumulator,
-            (result: boolean): boolean => result
-        );
+        let collector: SynchronousCollector<Indexed<E>, boolean, boolean> = SynchronousCollector.shortable((): boolean => false, (element: Indexed<E>, index: bigint, accumulator: boolean): boolean => predicate(element.element, index) && accumulator, (accumulator: boolean, element: Indexed<E>, index: bigint): boolean => predicate(element.element, index) && accumulator, (result: boolean): boolean => result);
         return collector.collect(this.buffer);
     }
-
     public override source(): SynchronousGenerator<E> {
         return (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): void => {
             for (let { element, index } of this.buffer) {
@@ -1105,24 +1085,18 @@ export class SynchronousOrderedCollectable<E> extends SynchronousCollectable<E> 
             }
         };
     }
-
     public override isEmpty(): boolean {
         return this.buffer.length === 0;
     }
-
     public override count(): bigint {
         return BigInt(this.buffer.length);
     }
-};
-
+}
+;
 export class SynchronousUnorderedCollectable<E> extends SynchronousCollectable<E> {
-
     protected readonly SynchronousUnorderedCollectable: symbol = SynchronousUnorderedCollectableSymbol;
-
     [Symbol.toStringTag]: string = "SynchronousUnorderedCollectable";
-
     protected buffer: Map<bigint, E> = new Map<bigint, E>();
-
     public constructor(generator: SynchronousGenerator<E>);
     public constructor(argument1: SynchronousGenerator<E>) {
         super();
@@ -1130,7 +1104,6 @@ export class SynchronousUnorderedCollectable<E> extends SynchronousCollectable<E
             let generator: SynchronousGenerator<E> = argument1;
             let surrogate: bigint = 0n;
             generator((element: E, index: bigint): void => {
-                // 索引重复时改用兜底槽位，避免 Map 键冲突造成静默丢数据
                 let key: bigint = this.buffer.has(index) ? SURROGATE_BASE + (surrogate++) : index;
                 this.buffer.set(key, element);
             }, (): boolean => false);
@@ -1143,17 +1116,16 @@ export class SynchronousUnorderedCollectable<E> extends SynchronousCollectable<E
                     configurable: false
                 }
             });
-        } else {
+        }
+        else {
             throw new TypeError("Source must be an iterable or a generator function.");
         }
     }
-
     public *[Symbol.iterator](): globalThis.Generator<E, void, undefined> {
         for (let [_index, element] of this.buffer) {
             yield element;
         }
     }
-
     public override source(): SynchronousGenerator<E> {
         return (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): void => {
             for (let [_index, element] of this.buffer) {
@@ -1164,15 +1136,11 @@ export class SynchronousUnorderedCollectable<E> extends SynchronousCollectable<E
             }
         };
     }
-
-};
-
+}
+;
 export abstract class SynchronousStatistics<E, D extends number | bigint> extends SynchronousOrderedCollectable<E> {
-
     protected readonly SynchronousStatistics: symbol = SynchronousStatisticsSymbol;
-
     [Symbol.toStringTag]: string = "SynchronousStatistics";
-
     public constructor(generator: SynchronousGenerator<E>);
     public constructor(generator: SynchronousGenerator<E>, comparator: Comparator<E>);
     public constructor(parameter: SynchronousGenerator<E>, comparator?: Comparator<E>) {
@@ -1186,60 +1154,43 @@ export abstract class SynchronousStatistics<E, D extends number | bigint> extend
             }
         });
     }
-
     public *[Symbol.iterator](): globalThis.Generator<E, void, undefined> {
         for (let { element } of this.buffer) {
             yield element;
         }
     }
-
     public abstract average(): D;
     public abstract average(mapper: Functional<E, D>): D;
-
     public abstract range(): D;
     public abstract range(mapper: Functional<E, D>): D;
-
     public abstract variance(): D;
     public abstract variance(mapper: Functional<E, D>): D;
-
     public abstract standardDeviation(): D;
     public abstract standardDeviation(mapper: Functional<E, D>): D;
-
     public abstract mean(): D;
     public abstract mean(mapper: Functional<E, D>): D;
-
     public abstract median(): D;
     public abstract median(mapper: Functional<E, D>): D;
-
     public abstract mode(): D;
     public abstract mode(mapper: Functional<E, D>): D;
-
     public frequency(): Map<E, bigint> {
         return useSynchronousFrequency<E>().collect(this.source());
     }
-
     public abstract summate(): D;
     public abstract summate(mapper: Functional<E, D>): D;
-
     public abstract quantile(quantile: number): D;
     public abstract quantile(quantile: number, mapper: Functional<E, D>): D;
-
     public abstract interquartileRange(): D;
     public abstract interquartileRange(mapper: Functional<E, D>): D;
-
     public abstract skewness(): D;
     public abstract skewness(mapper: Functional<E, D>): D;
-
     public abstract kurtosis(): D;
     public abstract kurtosis(mapper: Functional<E, D>): D;
-};
-
+}
+;
 export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, bigint> {
-
     protected readonly BigIntStatistics: symbol = SynchronousBigIntStatisticsSymbol;
-
     [Symbol.toStringTag]: string = "SynchronousBigIntStatistics";
-
     public constructor(generator: SynchronousGenerator<E>);
     public constructor(generator: SynchronousGenerator<E>, comparator: Comparator<E>);
     public constructor(parameter: SynchronousGenerator<E>, comparator?: Comparator<E>) {
@@ -1253,13 +1204,11 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
             }
         });
     }
-
     public *[Symbol.iterator](): globalThis.Generator<E, void, undefined> {
         for (let { element } of this.buffer) {
             yield element;
         }
     }
-
     public average(): bigint;
     public average(mapper: Functional<E, bigint>): bigint;
     public average(argument1?: Functional<E, bigint>): bigint {
@@ -1269,11 +1218,11 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return useSynchronousBigIntAverage(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on average.");
         }
     }
-
     public range(): bigint;
     public range(mapper: Functional<E, bigint>): bigint;
     public range(argument1?: Functional<E, bigint>): bigint {
@@ -1290,11 +1239,11 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
                     return difference < 0n ? -difference : difference;
                 });
             }).get(0n);
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on range.");
         }
     }
-
     public variance(): bigint;
     public variance(mapper: Functional<E, bigint>): bigint;
     public variance(argument1?: Functional<E, bigint>): bigint {
@@ -1305,15 +1254,14 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             let data: Array<bigint> = (this.toArray()).map((element: E): bigint => mapper(element));
             let count: number = data.length;
-            // 直接用浮点计算总体方差：整数除法会把 [1,2,3,4] 的方差 1.25 截断成 3，结果再四舍五入回 bigint
             let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
             let variance: number = data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count;
             return BigInt(Math.round(variance));
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on variance.");
         }
     }
-
     public standardDeviation(): bigint;
     public standardDeviation(mapper: Functional<E, bigint>): bigint;
     public standardDeviation(argument1?: Functional<E, bigint>): bigint {
@@ -1326,13 +1274,12 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
             }
             let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
             let variance: number = data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count;
-            // 标准差通常不是整数，取整后转 BigInt（同时避免 sqrt 结果非整数导致 RangeError）
             return BigInt(Math.round(Math.sqrt(variance)));
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on standardDeviation.");
         }
     }
-
     public mean(): bigint;
     public mean(mapper: Functional<E, bigint>): bigint;
     public mean(argument1?: Functional<E, bigint>): bigint {
@@ -1342,11 +1289,11 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return useSynchronousBigIntAverage(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on mean.");
         }
     }
-
     public median(): bigint;
     public median(mapper: Functional<E, bigint>): bigint;
     public median(argument1?: Functional<E, bigint>): bigint {
@@ -1356,11 +1303,11 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return useSynchronousBigIntMedian(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on median.");
         }
     }
-
     public mode(): bigint;
     public mode(mapper: Functional<E, bigint>): bigint;
     public mode(argument1?: Functional<E, bigint>): bigint {
@@ -1370,11 +1317,11 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return useSynchronousBigIntMode(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on mode.");
         }
     }
-
     public summate(): bigint;
     public summate(mapper: Functional<E, bigint>): bigint;
     public summate(argument1?: Functional<E, bigint>): bigint {
@@ -1384,11 +1331,11 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return useSynchronousBigIntSummate(mapper).collect(this.source() as SynchronousGenerator<bigint>);
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on summate.");
         }
     }
-
     public quantile(quantile: number): bigint;
     public quantile(quantile: number, mapper: Functional<E, bigint>): bigint;
     public quantile(quantile: number, argument1?: Functional<E, bigint>): bigint {
@@ -1406,11 +1353,11 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
                 index--;
             }
             return this.findAt(index).map(mapper).get(0n);
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on quantile.");
         }
     }
-
     public interquartileRange(): bigint;
     public interquartileRange(mapper: Functional<E, bigint>): bigint;
     public interquartileRange(argument1?: Functional<E, bigint>): bigint {
@@ -1422,11 +1369,11 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
             let lower: bigint = this.quantile(0.25, mapper);
             let upper: bigint = this.quantile(0.75, mapper);
             return upper - lower;
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on interquartileRange.");
         }
     }
-
     public skewness(): bigint;
     public skewness(mapper: Functional<E, bigint>): bigint;
     public skewness(argument1?: Functional<E, bigint>): bigint {
@@ -1437,8 +1384,6 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             let data: Array<bigint> = (this.toArray()).map((element: E): bigint => mapper(element));
             let count: number = data.length;
-            // 大整数的 variance / standardDeviation 会被整数化截断（例如 [1,2,3,4] 的方差是 3 而非 1.25），
-            // 这里直接用浮点计算均值与标准差，保证偏度/峰度与数值版语义一致，最后四舍五入回 bigint。
             let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
             let deviation: number = Math.sqrt(data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count);
             if (deviation === 0) {
@@ -1446,11 +1391,11 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
             }
             let summate: number = data.reduce((total: number, value: bigint): number => total + Math.pow((Number(value) - mean) / deviation, 3), 0);
             return BigInt(Math.round(summate / count));
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on skewness.");
         }
     }
-
     public kurtosis(): bigint;
     public kurtosis(mapper: Functional<E, bigint>): bigint;
     public kurtosis(argument1?: Functional<E, bigint>): bigint {
@@ -1461,8 +1406,6 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             let data: Array<bigint> = (this.toArray()).map((element: E): bigint => mapper(element));
             let count: number = data.length;
-            // 大整数的 variance / standardDeviation 会被整数化截断（例如 [1,2,3,4] 的方差是 3 而非 1.25），
-            // 这里直接用浮点计算均值与标准差，保证偏度/峰度与数值版语义一致，最后四舍五入回 bigint。
             let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
             let deviation: number = Math.sqrt(data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count);
             if (deviation === 0) {
@@ -1470,18 +1413,16 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
             }
             let summate: number = data.reduce((total: number, value: bigint): number => total + Math.pow((Number(value) - mean) / deviation, 4), 0);
             return BigInt(Math.round(summate / count - 3));
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on kurtosis.");
         }
     }
-};
-
+}
+;
 export class SynchronousNumericStatistics<E> extends SynchronousStatistics<E, number> {
-
     protected readonly SynchronousNumericStatistics: symbol = SynchronousNumericStatisticsSymbol;
-
     [Symbol.toStringTag]: string = "SynchronousNumericStatistics";
-
     public constructor(generator: SynchronousGenerator<E>);
     public constructor(generator: SynchronousGenerator<E>, comparator: Comparator<E>);
     public constructor(parameter: SynchronousGenerator<E>, comparator?: Comparator<E>) {
@@ -1495,13 +1436,11 @@ export class SynchronousNumericStatistics<E> extends SynchronousStatistics<E, nu
             }
         });
     }
-
     public *[Symbol.iterator](): globalThis.Generator<E, void, undefined> {
         for (let { element } of this.buffer) {
             yield element;
         }
     }
-
     public average(): number;
     public average(mapper: Functional<E, number>): number;
     public average(mapper?: Functional<E, number>): number {
@@ -1513,11 +1452,11 @@ export class SynchronousNumericStatistics<E> extends SynchronousStatistics<E, nu
                 return useSynchronousNumericAverage(mapper).collect(this.source() as SynchronousGenerator<number>);
             }
             return useSynchronousNumericAverage().collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on average.");
         }
     }
-
     public range(): number;
     public range(mapper: Functional<E, number>): number;
     public range(argument1?: Functional<E, number>): number {
@@ -1537,11 +1476,11 @@ export class SynchronousNumericStatistics<E> extends SynchronousStatistics<E, nu
                     return difference < 0 ? -difference : difference;
                 });
             }).get(0);
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on range.");
         }
     }
-
     public variance(): number;
     public variance(mapper: Functional<E, number>): number;
     public variance(argument1?: Functional<E, number>): number {
@@ -1551,22 +1490,22 @@ export class SynchronousNumericStatistics<E> extends SynchronousStatistics<E, nu
         try {
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return useSynchronousNumericVariance(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on variance.");
         }
     }
-
     public standardDeviation(): number;
     public standardDeviation(mapper: Functional<E, number>): number;
     public standardDeviation(argument1?: Functional<E, number>): number {
         try {
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return useSynchronousNumericStandardDeviation(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on standardDeviation.");
         }
     }
-
     public mean(): number;
     public mean(mapper: Functional<E, number>): number;
     public mean(argument1?: Functional<E, number>): number {
@@ -1576,11 +1515,11 @@ export class SynchronousNumericStatistics<E> extends SynchronousStatistics<E, nu
         try {
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return useSynchronousNumericAverage(mapper).collect(this.source() as SynchronousGenerator<number>);
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on mean.");
         }
     }
-
     public median(): number;
     public median(mapper: Functional<E, number>): number;
     public median(argument1?: Functional<E, number>): number {
@@ -1590,11 +1529,11 @@ export class SynchronousNumericStatistics<E> extends SynchronousStatistics<E, nu
         try {
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return useSynchronousNumericMedian(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on median.");
         }
     }
-
     public mode(): number;
     public mode(mapper: Functional<E, number>): number;
     public mode(argument1?: Functional<E, number>): number {
@@ -1604,11 +1543,11 @@ export class SynchronousNumericStatistics<E> extends SynchronousStatistics<E, nu
         try {
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return useSynchronousNumericMode(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on mode.");
         }
     }
-
     public summate(): number;
     public summate(mapper: Functional<E, number>): number;
     public summate(argument1?: Functional<E, number>): number {
@@ -1618,11 +1557,11 @@ export class SynchronousNumericStatistics<E> extends SynchronousStatistics<E, nu
         try {
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return useSynchronousNumericSummate(mapper).collect(this.source() as SynchronousGenerator<number>);
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on summate.");
         }
     }
-
     public quantile(quantile: number): number;
     public quantile(quantile: number, mapper: Functional<E, number>): number;
     public quantile(quantile: number, argument1?: Functional<E, number>): number {
@@ -1640,11 +1579,11 @@ export class SynchronousNumericStatistics<E> extends SynchronousStatistics<E, nu
                 index--;
             }
             return this.findAt(index).map(mapper).get(0);
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on quantile.");
         }
     }
-
     public interquartileRange(): number;
     public interquartileRange(mapper: Functional<E, number>): number;
     public interquartileRange(argument1?: Functional<E, number>): number {
@@ -1656,11 +1595,11 @@ export class SynchronousNumericStatistics<E> extends SynchronousStatistics<E, nu
             let lower: number = this.quantile(0.25, mapper);
             let upper: number = this.quantile(0.75, mapper);
             return upper - lower;
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on interquartileRange.");
         }
     }
-
     public skewness(): number;
     public skewness(mapper: Functional<E, number>): number;
     public skewness(argument1?: Functional<E, number>): number {
@@ -1681,11 +1620,11 @@ export class SynchronousNumericStatistics<E> extends SynchronousStatistics<E, nu
                 summate += Math.pow(z, 3);
             }
             return summate / data.length;
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on skewness.");
         }
     }
-
     public kurtosis(): number;
     public kurtosis(mapper: Functional<E, number>): number;
     public kurtosis(argument1?: Functional<E, number>): number {
@@ -1706,18 +1645,16 @@ export class SynchronousNumericStatistics<E> extends SynchronousStatistics<E, nu
                 summate += Math.pow(z, 4);
             }
             return summate / data.length - 3;
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error("Uncaught error on kurtosis.");
         }
     }
-};
-
+}
+;
 export class SynchronousWindowCollectable<E> extends SynchronousOrderedCollectable<E> {
-
     protected readonly WindowCollectable: symbol = SynchronousWindowCollectableSymbol;
-
     [Symbol.toStringTag]: string = "SynchronousWindowCollectable";
-
     public constructor(generator: SynchronousGenerator<E>);
     public constructor(generator: SynchronousGenerator<E>, comparator: Comparator<E>);
     public constructor(parameter: SynchronousGenerator<E>, comparator: Comparator<E> = useCompare) {
@@ -1731,13 +1668,11 @@ export class SynchronousWindowCollectable<E> extends SynchronousOrderedCollectab
             }
         });
     }
-
     public *[Symbol.iterator](): globalThis.Generator<E, void, undefined> {
         for (let { element } of this.buffer) {
             yield element;
         }
     }
-
     public slide(size: bigint, step: bigint = 1n): SynchronousSemantic<SynchronousSemantic<E>> {
         if (size > 0n && step > 0n) {
             return new SynchronousSemantic<SynchronousSemantic<E>>((accepet: Consumer<SynchronousSemantic<E>> | BiConsumer<SynchronousSemantic<E>, bigint>, interrupt: Predicate<SynchronousSemantic<E>> | BiPredicate<SynchronousSemantic<E>, bigint>): void => {
@@ -1763,22 +1698,24 @@ export class SynchronousWindowCollectable<E> extends SynchronousOrderedCollectab
                         accepet(inner, index);
                         index++;
                     }
-                } catch (error) {
+                }
+                catch (error) {
                     throw new Error("Uncaught error on slide.");
                 }
             });
         }
         throw new RangeError("Invalid arguments.");
     }
-
     public tumble(size: bigint): SynchronousSemantic<SynchronousSemantic<E>> {
         if (isBigInt(size) && size > 0n) {
             try {
                 return this.slide(size, size);
-            } catch (error) {
+            }
+            catch (error) {
                 throw new Error("Uncaught error on tumble.");
             }
         }
         throw new RangeError("Invalid arguments.");
     }
-};
+}
+;

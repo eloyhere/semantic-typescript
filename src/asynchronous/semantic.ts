@@ -1,37 +1,15 @@
-import {
-    useAsynchronousAnyMatch, useAsynchronousAllMatch, useAsynchronousCollect, useAsynchronousCount, useAsynchronousError, useAsynchronousFindAny, useAsynchronousFindAt,
-    useAsynchronousFindFirst, useAsynchronousFindLast, useAsynchronousFindMaximum, useAsynchronousFindMinimum, useAsynchronousForEach, useAsynchronousGroup,
-    useAsynchronousGroupBy, useAsynchronousJoin, useAsynchronousLog, useAsynchronousNoneMatch, useAsynchronousPartition, useAsynchronousPartitionBy, useAsynchronousReduce,
-    useAsynchronousToArray, useAsynchronousToMap, useAsynchronousToSet, useAsynchronousWrite, useAsynchronousFrequency, useAsynchronousBigIntAverage,
-    useAsynchronousBigIntMedian, useAsynchronousBigIntMode, useAsynchronousBigIntSummate, useAsynchronousNumericAverage,
-    useAsynchronousNumericMedian, useAsynchronousNumericMode, useAsynchronousNumericStandardDeviation, useAsynchronousNumericSummate, useAsynchronousNumericVariance,
-    useAsynchronousFindNegativeAt, useAsynchronousToIndexedArray
-} from "./collector.js";
+import { useAsynchronousAnyMatch, useAsynchronousAllMatch, useAsynchronousCollect, useAsynchronousCount, useAsynchronousError, useAsynchronousFindAny, useAsynchronousFindAt, useAsynchronousFindFirst, useAsynchronousFindLast, useAsynchronousFindMaximum, useAsynchronousFindMinimum, useAsynchronousForEach, useAsynchronousGroup, useAsynchronousGroupBy, useAsynchronousJoin, useAsynchronousLog, useAsynchronousNoneMatch, useAsynchronousPartition, useAsynchronousPartitionBy, useAsynchronousReduce, useAsynchronousToArray, useAsynchronousToMap, useAsynchronousToSet, useAsynchronousWrite, useAsynchronousFrequency, useAsynchronousBigIntAverage, useAsynchronousBigIntMedian, useAsynchronousBigIntMode, useAsynchronousBigIntSummate, useAsynchronousNumericAverage, useAsynchronousNumericMedian, useAsynchronousNumericMode, useAsynchronousNumericStandardDeviation, useAsynchronousNumericSummate, useAsynchronousNumericVariance, useAsynchronousFindNegativeAt, useAsynchronousToIndexedArray } from "./collector.js";
 import { isFunction, isAsynchronousSemantic, isIterable, isNumber, isBigInt, isObject, isString, isAsynchronousCollectable, isAsyncIterable, isAsynchronousCollector } from "../guard.js";
 import { useCompare, useRandom, useToBigInt, useToNumber } from "../hook.js";
-import {
-    AsynchronousOrderedCollectableSymbol, AsynchronousBigIntStatisticsSymbol, AsynchronousCollectableSymbol, AsynchronousNumericStatisticsSymbol, AsynchronousSemanticSymbol, AsynchronousWindowCollectableSymbol,
-    AsynchronousUnorderedCollectableSymbol, AsynchronousStatisticsSymbol
-} from "../symbol.js";
+import { AsynchronousOrderedCollectableSymbol, AsynchronousBigIntStatisticsSymbol, AsynchronousCollectableSymbol, AsynchronousNumericStatisticsSymbol, AsynchronousSemanticSymbol, AsynchronousWindowCollectableSymbol, AsynchronousUnorderedCollectableSymbol, AsynchronousStatisticsSymbol } from "../symbol.js";
 import { invalidate, validate, type BiConsumer, type BiFunctional, type BiPredicate, type Comparator, type Consumer, type Functional, type Indexed, type Predicate, type Supplier, type AsynchronousGenerator, type TriFunctional, type TriPredicate, type Runnable } from "../utility.js";
 import type { AsynchronousCollector } from "./collector.js";
-
-/**
- * 无序收集器在遇到重复索引时使用的兜底键起点，避免 Map 键冲突造成静默丢数据。
- */
 const SURROGATE_BASE: bigint = 1n << 96n;
-
-/** shuffle 使用的随机索引上界（62 位随机空间，碰撞概率可忽略）。 */
 const SHUFFLE_BOUND: bigint = 1n << 62n;
-
 export class AsynchronousSemantic<E> {
-
     protected generator: AsynchronousGenerator<E>;
-
     protected readonly AsynchronousSemantic: Symbol = AsynchronousSemanticSymbol;
-
     [Symbol.toStringTag]: string = "AsynchronousSemantic";
-
     public constructor(generator: AsynchronousGenerator<E>) {
         if (isFunction(generator)) {
             this.generator = generator;
@@ -49,11 +27,11 @@ export class AsynchronousSemantic<E> {
                     configurable: false
                 }
             });
-        } else {
+        }
+        else {
             throw new TypeError("Invalid arguments.");
         }
     }
-
     public concat(other: AsynchronousSemantic<E>): AsynchronousSemantic<E>;
     public concat(other: AsyncIterable<E>): AsynchronousSemantic<E>;
     public concat(argument: AsynchronousSemantic<E> | AsyncIterable<E>): AsynchronousSemantic<E> {
@@ -91,7 +69,8 @@ export class AsynchronousSemantic<E> {
                             }
                             resolve();
                         }).catch(reject);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         reject(error);
                     }
                 });
@@ -99,7 +78,6 @@ export class AsynchronousSemantic<E> {
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public distinct(): AsynchronousSemantic<E>;
     public distinct<K>(keyExtractor: Functional<E, K>): AsynchronousSemantic<E>;
     public distinct<K>(keyExtractor: BiFunctional<E, bigint, K>): AsynchronousSemantic<E>;
@@ -116,13 +94,13 @@ export class AsynchronousSemantic<E> {
                             accept(element, index);
                         }
                     }, interrupt).then(resolve).catch(reject);
-                } catch (error) {
+                }
+                catch (error) {
                     reject(error);
                 }
             });
         });
     }
-
     public dropWhile(predicate: Predicate<E>): AsynchronousSemantic<E>;
     public dropWhile(predicate: BiPredicate<E, bigint>): AsynchronousSemantic<E>;
     public dropWhile(predicate: Predicate<E> | BiPredicate<E, bigint>): AsynchronousSemantic<E> {
@@ -130,18 +108,18 @@ export class AsynchronousSemantic<E> {
             return new AsynchronousSemantic<E>(async (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): Promise<void> => {
                 return new Promise<void>((resolve: Consumer<void>, reject: Consumer<any>): void => {
                     try {
-                        let count: bigint = -1n;
+                        let count: bigint = 0n;
+                        let dropping: boolean = true;
                         this.generator((element: E, index: bigint): void => {
-                            if (count === -1n) {
-                                if (!predicate(element, index)) {
-                                    count++;
-                                }
-                            } else {
-                                accept(element, count);
-                                count++;
+                            if (dropping && predicate(element, index)) {
+                                return;
                             }
+                            dropping = false;
+                            accept(element, count);
+                            count++;
                         }, interrupt).then(resolve).catch(reject);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         reject(error);
                     }
                 });
@@ -149,7 +127,6 @@ export class AsynchronousSemantic<E> {
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public filter(predicate: Predicate<E>): AsynchronousSemantic<E>;
     public filter(predicate: BiPredicate<E, bigint>): AsynchronousSemantic<E>;
     public filter(predicate: Predicate<E> | BiPredicate<E, bigint>): AsynchronousSemantic<E> {
@@ -162,7 +139,8 @@ export class AsynchronousSemantic<E> {
                                 accept(element, index);
                             }
                         }, interrupt).then(resolve).catch(reject);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         reject(error);
                     }
                 });
@@ -170,7 +148,6 @@ export class AsynchronousSemantic<E> {
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public flat(mapper: Functional<E, Iterable<E>>): AsynchronousSemantic<E>;
     public flat(mapper: BiFunctional<E, bigint, Iterable<E>>): AsynchronousSemantic<E>;
     public flat(mapper: Functional<E, AsynchronousSemantic<E>>): AsynchronousSemantic<E>;
@@ -182,6 +159,13 @@ export class AsynchronousSemantic<E> {
                     try {
                         let count: bigint = 0n;
                         let stop: boolean = false;
+                        let pending: number = 0;
+                        let completed: boolean = false;
+                        let settle: Runnable = (): void => {
+                            if (completed && pending === 0) {
+                                resolve();
+                            }
+                        };
                         this.generator((element: E, index: bigint): void => {
                             let result: AsynchronousSemantic<E> | Iterable<E> = mapper(element, index);
                             if (isIterable(result)) {
@@ -190,15 +174,24 @@ export class AsynchronousSemantic<E> {
                                     stop = stop || interrupt(subElement, count);
                                     count++;
                                 }
-                            } else if (isAsynchronousSemantic(result)) {
+                            }
+                            else if (isAsynchronousSemantic(result)) {
+                                pending++;
                                 result.generator((subElement: E): void => {
                                     accept(subElement, count);
                                     stop = stop || interrupt(subElement, count);
                                     count++;
-                                }, (element: E): boolean => interrupt(element, count) || stop);
+                                }, (element: E): boolean => interrupt(element, count) || stop).then((): void => {
+                                    pending--;
+                                    settle();
+                                }, reject);
                             }
-                        }, (element: E): boolean => interrupt(element, count) || stop).then(resolve, reject);
-                    } catch (error) {
+                        }, (): boolean => stop).then((): void => {
+                            completed = true;
+                            settle();
+                        }, reject);
+                    }
+                    catch (error) {
                         reject(error);
                     }
                 });
@@ -206,7 +199,6 @@ export class AsynchronousSemantic<E> {
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public flatMap<R>(mapper: Functional<E, Iterable<R>>): AsynchronousSemantic<R>;
     public flatMap<R>(mapper: BiFunctional<E, bigint, Iterable<R>>): AsynchronousSemantic<R>;
     public flatMap<R>(mapper: Functional<E, AsynchronousSemantic<R>>): AsynchronousSemantic<R>;
@@ -218,6 +210,13 @@ export class AsynchronousSemantic<E> {
                     try {
                         let count: bigint = 0n;
                         let stop: boolean = false;
+                        let pending: number = 0;
+                        let completed: boolean = false;
+                        let settle: Runnable = (): void => {
+                            if (completed && pending === 0) {
+                                resolve();
+                            }
+                        };
                         this.generator((element: E, index: bigint): void => {
                             let result: AsynchronousSemantic<R> | Iterable<R> = mapper(element, index);
                             if (isIterable(result)) {
@@ -226,16 +225,24 @@ export class AsynchronousSemantic<E> {
                                     stop = stop || interrupt(subElement, count);
                                     count++;
                                 }
-                                resolve();
-                            } else if (isAsynchronousSemantic(result)) {
+                            }
+                            else if (isAsynchronousSemantic(result)) {
+                                pending++;
                                 result.generator((subElement: R): void => {
                                     accept(subElement, count);
                                     stop = stop || interrupt(subElement, count);
                                     count++;
-                                }, (element: R): boolean => interrupt(element, count) || stop).then(resolve, reject);
+                                }, (element: R): boolean => interrupt(element, count) || stop).then((): void => {
+                                    pending--;
+                                    settle();
+                                }, reject);
                             }
-                        }, (): boolean => stop);
-                    } catch (error) {
+                        }, (): boolean => stop).then((): void => {
+                            completed = true;
+                            settle();
+                        }, reject);
+                    }
+                    catch (error) {
                         reject(error);
                     }
                 });
@@ -243,7 +250,6 @@ export class AsynchronousSemantic<E> {
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public limit(count: number): AsynchronousSemantic<E>;
     public limit(count: bigint): AsynchronousSemantic<E>;
     public limit(argument: bigint | number): AsynchronousSemantic<E> {
@@ -259,7 +265,8 @@ export class AsynchronousSemantic<E> {
                                 count++;
                             }
                         }, (element: E, index: bigint): boolean => interrupt(element, index) || count >= limit).then(resolve, reject);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         reject(error);
                     }
                 });
@@ -277,7 +284,8 @@ export class AsynchronousSemantic<E> {
                                 count++;
                             }
                         }, (element: E, index: bigint): boolean => interrupt(element, index) || count >= limit).then(resolve, reject);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         reject(error);
                     }
                 });
@@ -285,7 +293,6 @@ export class AsynchronousSemantic<E> {
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public map(mapper: Functional<E, E>): AsynchronousSemantic<E>;
     public map(mapper: BiFunctional<E, bigint, E>): AsynchronousSemantic<E>;
     public map<R>(mapper: Functional<E, R>): AsynchronousSemantic<R>;
@@ -301,7 +308,8 @@ export class AsynchronousSemantic<E> {
                             accept(resolved, index);
                             stop = stop || interrupt(resolved, index);
                         }, (): boolean => stop).then(resolve, reject);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         reject(error);
                     }
                 });
@@ -309,7 +317,6 @@ export class AsynchronousSemantic<E> {
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public peek(consumer: Consumer<E>): AsynchronousSemantic<E>;
     public peek(consumer: BiConsumer<E, bigint>): AsynchronousSemantic<E>;
     public peek(consumer: Consumer<E> | BiConsumer<E, bigint>): AsynchronousSemantic<E> {
@@ -321,7 +328,8 @@ export class AsynchronousSemantic<E> {
                             accept(element, index);
                             consumer(element, index);
                         }, interrupt).then(resolve, reject);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         reject(error);
                     }
                 });
@@ -329,13 +337,11 @@ export class AsynchronousSemantic<E> {
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public pipe(conversion: Functional<AsynchronousGenerator<E>, AsynchronousSemantic<E>>): AsynchronousSemantic<E>;
     public pipe<R>(conversion: Functional<AsynchronousGenerator<E>, AsynchronousSemantic<R>>): AsynchronousSemantic<R>;
     public pipe<R = E>(conversion: Functional<AsynchronousGenerator<E>, AsynchronousSemantic<R>>): AsynchronousSemantic<R> {
         return conversion(this.source());
     }
-
     public redirect(redirector: BiFunctional<E, bigint, bigint>): AsynchronousSemantic<E> {
         if (isFunction(redirector)) {
             return new AsynchronousSemantic<E>(async (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): Promise<void> => {
@@ -344,7 +350,8 @@ export class AsynchronousSemantic<E> {
                         this.generator((element: E, index: bigint): void => {
                             accept(element, redirector(element, index));
                         }, interrupt).then(resolve, reject);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         reject(error);
                     }
                 });
@@ -352,21 +359,20 @@ export class AsynchronousSemantic<E> {
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public reverse(): AsynchronousSemantic<E> {
         return new AsynchronousSemantic<E>(async (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): Promise<void> => {
             return new Promise<void>((resolve: Consumer<void>, reject: Consumer<any>): void => {
                 try {
                     this.generator((element: E, index: bigint): void => {
-                        accept(element, -index);
+                        accept(element, -index - 1n);
                     }, interrupt).then(resolve, reject);
-                } catch (error) {
+                }
+                catch (error) {
                     reject(error);
                 }
             });
         });
     }
-
     public shuffle(): AsynchronousSemantic<E>;
     public shuffle(mapper: BiFunctional<E, bigint, bigint>): AsynchronousSemantic<E>;
     public shuffle(mapper?: BiFunctional<E, bigint, bigint>): AsynchronousSemantic<E> {
@@ -377,7 +383,8 @@ export class AsynchronousSemantic<E> {
                         this.generator((element: E, index: bigint): void => {
                             accept(element, mapper(element, index));
                         }, interrupt).then(resolve, reject);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         reject(error);
                     }
                 });
@@ -387,16 +394,15 @@ export class AsynchronousSemantic<E> {
             return new Promise<void>((resolve: Consumer<void>, reject: Consumer<any>): void => {
                 try {
                     this.generator((element: E, _index: bigint): void => {
-                        // 用每次调用都不同的随机索引实现真正的洗牌（原实现按元素哈希，结果恒定）
                         accept(element, useRandom(0n, SHUFFLE_BOUND));
                     }, interrupt).then(resolve, reject);
-                } catch (error) {
+                }
+                catch (error) {
                     reject(error);
                 }
             });
         });
     }
-
     public skip(count: number): AsynchronousSemantic<E>;
     public skip(count: bigint): AsynchronousSemantic<E>;
     public skip(argument: number | bigint): AsynchronousSemantic<E> {
@@ -410,11 +416,13 @@ export class AsynchronousSemantic<E> {
                         this.generator((element: E, index: bigint): void => {
                             if (count < limit) {
                                 count++;
-                            } else {
+                            }
+                            else {
                                 accept(element, index);
                             }
                         }, interrupt).then(resolve, reject);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         reject(error);
                     }
                 });
@@ -429,11 +437,13 @@ export class AsynchronousSemantic<E> {
                         this.generator((element: E, index: bigint): void => {
                             if (count < n) {
                                 count++;
-                            } else {
+                            }
+                            else {
                                 accept(element, index);
                             }
                         }, interrupt).then(resolve, reject);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         reject(error);
                     }
                 });
@@ -441,11 +451,9 @@ export class AsynchronousSemantic<E> {
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public source(): AsynchronousGenerator<E> {
         return this.generator;
     }
-
     public sub(start: number, end: number): AsynchronousSemantic<E>;
     public sub(start: bigint, end: bigint): AsynchronousSemantic<E>;
     public sub(start: number | bigint, end: number | bigint): AsynchronousSemantic<E> {
@@ -459,13 +467,13 @@ export class AsynchronousSemantic<E> {
                         let minimum: bigint = resolvedStart < resolvedEnd ? resolvedStart : resolvedEnd;
                         let maximum: bigint = resolvedStart < resolvedEnd ? resolvedEnd : resolvedStart;
                         this.generator((element: E, index: bigint): void => {
-                            // count 统计上游第几个元素（不能只在 accept 分支自增，否则条件永远不成立）
                             if (minimum <= count && count < maximum) {
                                 accept(element, index);
                             }
                             count++;
                         }, (element: E, index: bigint): boolean => count >= maximum || interrupt(element, index)).then(resolve, reject);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         reject(error);
                     }
                 });
@@ -473,7 +481,6 @@ export class AsynchronousSemantic<E> {
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public takeWhile(predicate: Predicate<E>): AsynchronousSemantic<E>;
     public takeWhile(predicate: BiPredicate<E, bigint>): AsynchronousSemantic<E>;
     public takeWhile(predicate: Predicate<E> | BiPredicate<E, bigint>): AsynchronousSemantic<E> {
@@ -484,17 +491,18 @@ export class AsynchronousSemantic<E> {
                     this.generator((element: E, index: bigint) => {
                         if (predicate(element, index) && stop === false) {
                             accept(element, index);
-                        } else {
+                        }
+                        else {
                             stop = true;
                         }
                     }, (element: E, index: bigint): boolean => stop || interrupt(element, index)).then(resolve, reject);
-                } catch (error) {
+                }
+                catch (error) {
                     reject(error);
                 }
             });
         });
     }
-
     public toCollectable(): AsynchronousCollectable<E>;
     public toCollectable<C extends AsynchronousCollectable<E>>(mapper: Functional<AsynchronousGenerator<E>, C>): C;
     public toCollectable<C extends AsynchronousCollectable<E>>(mapper?: Functional<AsynchronousGenerator<E>, C>): AsynchronousCollectable<E> | C {
@@ -504,116 +512,104 @@ export class AsynchronousSemantic<E> {
                 if (isAsynchronousCollectable(AsynchronousCollectable)) {
                     return AsynchronousCollectable;
                 }
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         try {
             return new AsynchronousUnorderedCollectable(this.generator);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public toBigintStatistics(): AsynchronousBigIntStatistics<E> {
         try {
             return new AsynchronousBigIntStatistics<E>(this.generator);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public toNumericStatistics(): AsynchronousNumericStatistics<E> {
         try {
             return new AsynchronousNumericStatistics<E>(this.generator);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public toOrdered(): AsynchronousOrderedCollectable<E>;
     public toOrdered(comparator: Comparator<E>): AsynchronousOrderedCollectable<E>;
     public toOrdered(comparator?: Comparator<E>): AsynchronousOrderedCollectable<E> {
         try {
-            // 传入比较器时按值排序并重排索引（统计类强依赖该语义）；否则按元素真实索引排序
             if (isFunction(comparator)) {
                 return new AsynchronousOrderedCollectable(this.generator, comparator);
             }
             return new AsynchronousOrderedCollectable(this.generator);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public toUnordered(): AsynchronousUnorderedCollectable<E> {
         try {
             return new AsynchronousUnorderedCollectable(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error(String(error));
         }
     }
-
     public toWindow(): AsynchronousWindowCollectable<E> {
         try {
             return new AsynchronousWindowCollectable<E>(this.generator);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public translate(offset: number): AsynchronousSemantic<E>;
     public translate(offset: bigint): AsynchronousSemantic<E>;
     public translate(translator: BiFunctional<E, bigint, bigint>): AsynchronousSemantic<E>;
     public translate(argument1: number | bigint | BiFunctional<E, bigint, bigint>): AsynchronousSemantic<E> {
         if (isNumber(argument1) || isBigInt(argument1)) {
             let offset: bigint = useToBigInt(argument1);
-            // README 示例 5 的语义是循环平移，而循环平移必须知道流长度，
-            // 因此数值重载会先物化整条流，再按 (position + offset) mod n 分配索引。
             return new AsynchronousSemantic<E>(async (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): Promise<void> => {
-                try {
-                    let elements: Array<E> = [];
-                    await this.generator((element: E): void => {
-                        elements.push(element);
-                    }, (): boolean => false);
-                    let count: bigint = BigInt(elements.length);
-                    if (count === 0n) {
-                        return;
+                return new Promise<void>((resolve: Consumer<void>, reject: Consumer<any>): void => {
+                    try {
+                        this.generator((element: E, index: bigint): void => {
+                            accept(element, index + offset);
+                        }, interrupt).then(resolve, reject);
                     }
-                    let normalized: bigint = ((offset % count) + count) % count;
-                    for (let position: number = 0; position < elements.length; position++) {
-                        let element: E = elements[position];
-                        let index: bigint = (BigInt(position) + normalized) % count;
-                        if (interrupt(element, index)) {
-                            break;
-                        }
-                        accept(element, index);
+                    catch (error) {
+                        reject(error);
                     }
-                } catch (error) {
-                    throw error;
-                }
+                });
             });
-        } else if (isFunction(argument1)) {
+        }
+        else if (isFunction(argument1)) {
             let translator: BiFunctional<E, bigint, bigint> = argument1;
             return new AsynchronousSemantic<E>(async (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): Promise<void> => {
-                try {
-                    this.generator((element: E, index: bigint): void => {
-                        accept(element, index + translator(element, index));
-                    }, interrupt);
-                } catch (error) {
-                    throw error;
-                }
+                return new Promise<void>((resolve: Consumer<void>, reject: Consumer<any>): void => {
+                    try {
+                        this.generator((element: E, index: bigint): void => {
+                            accept(element, index + translator(element, index));
+                        }, interrupt).then(resolve, reject);
+                    }
+                    catch (error) {
+                        reject(error);
+                    }
+                });
             });
         }
         throw new TypeError("Invalid arguments.");
     }
-};
-
+}
+;
 export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
-
     protected readonly AsynchronousCollectable: symbol = AsynchronousCollectableSymbol;
-
     [Symbol.toStringTag]: string = "AsynchronousCollectable";
-
     public constructor() {
         Object.defineProperty(this, "AsynchronousCollectable", {
             value: AsynchronousCollectableSymbol,
@@ -622,28 +618,25 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             configurable: false
         });
     }
-
     public async *[Symbol.asyncIterator](): globalThis.AsyncGenerator<E, void, undefined> {
         for await (let element of await this.toArray()) {
             yield element;
         }
     }
-
     public async anyMatch(predicate: Predicate<E>): Promise<boolean> {
         if (isFunction(predicate)) {
             try {
                 return await useAsynchronousAnyMatch(predicate).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Predicate must be a function.");
     }
-
     public async allMatch(predicate: Predicate<E>): Promise<boolean> {
         return useAsynchronousAllMatch(predicate).collect(this.source());
     }
-
     public async collect<A, R>(collector: AsynchronousCollector<E, A, R>): Promise<R>;
     public async collect<A, R>(identity: Supplier<A>, accumulator: BiFunctional<A, E, A>, finisher: Functional<A, R>): Promise<R>;
     public async collect<A, R>(identity: Supplier<A>, accumulator: TriFunctional<A, E, bigint, A>, finisher: Functional<A, R>): Promise<R>;
@@ -672,16 +665,15 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
                 let finisher: Functional<A, R> = argument4 as Functional<A, R>;
                 return await useAsynchronousCollect(identity, interrupt, accumulator, finisher).collect(this.source());
             }
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public async count(): Promise<bigint> {
         return await useAsynchronousCount<E>().collect(this.source());
     }
-
     public async error(): Promise<void>;
     public async error(accumulator: BiFunctional<string, E, string>): Promise<void>;
     public async error(accumulator: TriFunctional<string, E, bigint, string>): Promise<void>;
@@ -691,158 +683,167 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
         if (invalidate(argument1) && invalidate(argument2) && invalidate(argument3)) {
             try {
                 await useAsynchronousError<E>().collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isFunction(argument1) && invalidate(argument2) && invalidate(argument3)) {
+        }
+        else if (isFunction(argument1) && invalidate(argument2) && invalidate(argument3)) {
             try {
                 let accumulator: BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string> = argument1 as BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string>;
                 await useAsynchronousError<E>(accumulator).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
+        }
+        else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
             try {
                 let prefix: string = argument1;
                 let accumulator: BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string> = argument2 as BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string>;
                 let suffix: string = argument3;
                 await useAsynchronousError<E>(prefix, accumulator, suffix).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else {
+        }
+        else {
             throw new TypeError("Invalid arguments.");
         }
     }
-
     public async isEmpty(): Promise<boolean> {
         return await this.count() === 0n;
     }
-
     public async findAny(): Promise<E> {
         try {
             return await useAsynchronousFindAny<E>().collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async findAt(index: number): Promise<E>;
     public async findAt(index: bigint): Promise<E>;
     public async findAt(index: number | bigint): Promise<E> {
         if (isBigInt(index)) {
             try {
                 return await useAsynchronousFindAt<E>(index).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isNumber(index)) {
+        }
+        else if (isNumber(index)) {
             try {
                 return await useAsynchronousFindAt<E>(index).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Index must be a bigint.");
     }
-
     public async findNegativeAt(index: number): Promise<E>;
     public async findNegativeAt(index: bigint): Promise<E>;
     public async findNegativeAt(index: number | bigint): Promise<E> {
         if (isBigInt(index)) {
             try {
                 return await useAsynchronousFindNegativeAt<E>(index).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isNumber(index)) {
+        }
+        else if (isNumber(index)) {
             try {
                 return await useAsynchronousFindNegativeAt<E>(index).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Index must be a bigint or a number.");
     }
-
     public async findFirst(): Promise<E> {
         try {
             return await useAsynchronousFindFirst<E>().collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async findLast(): Promise<E> {
         try {
             return await useAsynchronousFindLast<E>().collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async findMaximum(): Promise<E>;
     public async findMaximum(comparator: Comparator<E>): Promise<E>;
     public async findMaximum(argument1?: Comparator<E>): Promise<E> {
         try {
             let comparator: Comparator<E> = isFunction(argument1) ? argument1 : useCompare;
             return await useAsynchronousFindMaximum(comparator).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async findMinimum(): Promise<E>;
     public async findMinimum(comparator: Comparator<E>): Promise<E>;
     public async findMinimum(argument1?: Comparator<E>): Promise<E> {
         try {
             let comparator: Comparator<E> = isFunction(argument1) ? argument1 : useCompare;
             return await useAsynchronousFindMinimum(comparator).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async forEach(action: Consumer<E>): Promise<void>;
     public async forEach(action: BiConsumer<E, bigint>): Promise<void>;
     public async forEach(action: Consumer<E> | BiConsumer<E, bigint>): Promise<void> {
         if (isFunction(action)) {
             try {
                 await useAsynchronousForEach(action).collect(this);
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else {
+        }
+        else {
             throw new TypeError("Action must be a function.");
         }
     }
-
     public async group<K>(classifier: Functional<E, K>): Promise<Map<K, Array<E>>>;
-    public async group<K>(classifier: BiFunctional<E, bigint, K>): Promise<Map<K, Array<E>>>
+    public async group<K>(classifier: BiFunctional<E, bigint, K>): Promise<Map<K, Array<E>>>;
     public async group<K>(classifier: Functional<E, K> | BiFunctional<E, bigint, K>): Promise<Map<K, Array<E>>> {
         if (isFunction(classifier)) {
             try {
                 return await useAsynchronousGroup(classifier).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Classifier must be a function.");
     }
-
     public async groupBy<K, V>(keyExtractor: Functional<E, K>, valueExtractor: Functional<E, V>): Promise<Map<K, Array<V>>>;
-    public async groupBy<K, V>(keyExtractor: BiFunctional<E, bigint, K>, valueExtractor: BiFunctional<E, bigint, K>): Promise<Map<K, Array<V>>>
+    public async groupBy<K, V>(keyExtractor: BiFunctional<E, bigint, K>, valueExtractor: BiFunctional<E, bigint, K>): Promise<Map<K, Array<V>>>;
     public async groupBy<K, V>(keyExtractor: Functional<E, K> | BiFunctional<E, bigint, K>, valueExtractor: Functional<E, V> | BiFunctional<E, bigint, V>): Promise<Map<K, Array<V>>> {
         if (isFunction(keyExtractor) && isFunction(valueExtractor)) {
             try {
                 return await useAsynchronousGroupBy(keyExtractor, valueExtractor).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Key and value extractors must be functions.");
     }
-
     public async join(): Promise<string>;
     public async join(delimiter: string): Promise<string>;
     public async join(prefix: string, delimiter: string, suffix: string): Promise<string>;
@@ -852,38 +853,44 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
         if (invalidate(argument1) && invalidate(argument2) && invalidate(argument3)) {
             try {
                 return await useAsynchronousJoin<E>().collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isString(argument1) && invalidate(argument2) && invalidate(argument3)) {
+        }
+        else if (isString(argument1) && invalidate(argument2) && invalidate(argument3)) {
             try {
                 let delimiter: string = argument1;
                 return await useAsynchronousJoin<E>(delimiter).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
+        }
+        else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
             try {
                 let prefix: string = argument1;
                 let accumulator: BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string> = argument2 as BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string>;
                 let suffix: string = argument3;
                 return await useAsynchronousJoin<E>(prefix, accumulator, suffix).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isString(argument1) && isString(argument2) && isString(argument3)) {
+        }
+        else if (isString(argument1) && isString(argument2) && isString(argument3)) {
             try {
                 let prefix: string = argument1;
                 let delimiter: string = argument2;
                 let suffix: string = argument3;
                 return await useAsynchronousJoin<E>(prefix, delimiter, suffix).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Invalid arguments.");
     }
-
     public async log(): Promise<void>;
     public async log(accumulator: BiFunctional<string, E, string>): Promise<void>;
     public async log(accumulator: TriFunctional<string, E, bigint, string>): Promise<void>;
@@ -894,51 +901,55 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             try {
                 let accumulator: BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string> = argument1 as BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string>;
                 await useAsynchronousLog<E>(accumulator).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
+        }
+        else if (isString(argument1) && isFunction(argument2) && isString(argument3)) {
             try {
                 let prefix: string = argument1;
                 let accumulator: BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string> = argument2 as BiFunctional<string, E, string> & TriFunctional<string, E, bigint, string>;
                 let suffix: string = argument3;
                 await useAsynchronousLog<E>(prefix, accumulator, suffix).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else {
+        }
+        else {
             try {
                 useAsynchronousLog<E>().collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
     }
-
     public async nonMatch(predicate: Predicate<E>): Promise<boolean>;
     public async nonMatch(predicate: BiPredicate<E, bigint>): Promise<boolean>;
     public async nonMatch(predicate: Predicate<E> | BiPredicate<E, bigint>): Promise<boolean> {
         if (isFunction(predicate)) {
             try {
                 return await useAsynchronousNoneMatch(predicate).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Predicate must be a function.");
     }
-
     public async partition(count: bigint): Promise<Array<Array<E>>> {
         if (isBigInt(count)) {
             try {
                 return await useAsynchronousPartition<E>(count).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Count must be a BigInt.");
     }
-
     public async partitionBy(classifier: Functional<E, bigint>): Promise<Array<Array<E>>>;
     public async partitionBy(classifier: BiFunctional<E, bigint, bigint>): Promise<Array<Array<E>>>;
     public async partitionBy(classifier: Functional<E, bigint> | BiFunctional<E, bigint, bigint>): Promise<Array<Array<E>>> {
@@ -946,13 +957,13 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             try {
                 let collector: AsynchronousCollector<E, Array<E[]>, Array<E[]>> = useAsynchronousPartitionBy(classifier);
                 return await collector.collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Classifier must be a function.");
     }
-
     public async reduce(accumulator: BiFunctional<E, E, E>): Promise<E>;
     public async reduce(accumulator: TriFunctional<E, E, bigint, E>): Promise<E>;
     public async reduce(identity: E, accumulator: BiFunctional<E, E, E>): Promise<E>;
@@ -964,73 +975,78 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
             try {
                 let accumulator = argument1 as BiFunctional<E, E, E> | TriFunctional<E, E, bigint, E>;
                 return await useAsynchronousReduce(accumulator).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (validate(argument1) && isFunction(argument2) && invalidate(argument3)) {
+        }
+        else if (validate(argument1) && isFunction(argument2) && invalidate(argument3)) {
             try {
                 let identity: E = argument1 as E;
                 let accumulator: BiFunctional<E, E, E> & TriFunctional<E, E, bigint, E> = argument2 as BiFunctional<E, E, E> & TriFunctional<E, E, bigint, E>;
                 return await useAsynchronousReduce(identity, accumulator).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else if (validate(argument1) && isFunction(argument2) && isFunction(argument3)) {
+        }
+        else if (validate(argument1) && isFunction(argument2) && isFunction(argument3)) {
             try {
                 let identity: R = argument1 as R;
                 let accumulator: BiFunctional<R, E, R> & TriFunctional<R, E, bigint, R> = argument2 as BiFunctional<R, E, R> & TriFunctional<R, E, bigint, R>;
                 let finisher: Functional<R, R> = argument3 as Functional<R, R>;
                 return await useAsynchronousReduce(identity, accumulator, finisher).collect(this.source());
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else {
+        }
+        else {
             throw new TypeError("Invalid arguments.");
         }
     }
-
     public semantic(): AsynchronousSemantic<E> {
         let source: AsynchronousGenerator<E> = this.source();
         if (isFunction(source)) {
             try {
                 return new AsynchronousSemantic(source);
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
-        } else {
+        }
+        else {
             throw new TypeError("Invalid source.");
         }
     }
-
     public abstract source(): AsynchronousGenerator<E>;
-
     public async toArray(): Promise<Array<E>> {
         try {
             return useAsynchronousToArray<E>().collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async toMap<K, E>(keyExtractor: Functional<E, K>): Promise<Map<K, E>>;
     public async toMap<K, V>(keyExtractor: Functional<E, K>, valueExtractor: Functional<E, V>): Promise<Map<K, V>>;
     public async toMap<K, V>(keyExtractor: BiFunctional<E, bigint, K>, valueExtractor: BiFunctional<E, bigint, V>): Promise<Map<K, V>>;
     public async toMap<K, V = E>(keyExtractor: Functional<E, K> | BiFunctional<E, bigint, K>, valueExtractor: Functional<E, V> | BiFunctional<E, bigint, V> = (element: E): V => element as unknown as V): Promise<Map<K, V>> {
         try {
             return await useAsynchronousToMap<E, K, V>(keyExtractor, valueExtractor).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async toSet(): Promise<Set<E>> {
         try {
             return await useAsynchronousToSet<E>().collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async write<S = string>(stream: WritableStream<S>): Promise<WritableStream<S>>;
     public async write<S = string>(stream: WritableStream<S>, accumulator: BiFunctional<WritableStream<S>, E, WritableStream<S>>): Promise<WritableStream<S>>;
     public async write<S = string>(stream: WritableStream<S>, accumulator: TriFunctional<WritableStream<S>, E, bigint, WritableStream<S>>): Promise<WritableStream<S>>;
@@ -1041,29 +1057,25 @@ export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
                 if (isFunction(argument2)) {
                     let accumulator: BiFunctional<WritableStream<S>, E, WritableStream<S>> & TriFunctional<WritableStream<S>, E, bigint, WritableStream<S>> = argument2 as BiFunctional<WritableStream<S>, E, WritableStream<S>> & TriFunctional<WritableStream<S>, E, bigint, WritableStream<S>>;
                     return await useAsynchronousWrite(stream, accumulator).collect(this.source());
-                } else {
+                }
+                else {
                     return await useAsynchronousWrite(stream).collect(this.source());
                 }
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new TypeError("Invalid arguments.");
     }
-};
-
+}
+;
 export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E> {
-
     protected readonly OrderedCollectable: symbol = AsynchronousOrderedCollectableSymbol;
-
     protected buffer: Array<Indexed<E>> = [];
-
     protected listeners: Array<Consumer<Array<Indexed<E>>>> = [];
-
     protected complete: boolean = false;
-
     [Symbol.toStringTag]: string = "AsynchronousOrderedCollectable";
-
     public constructor(generator: AsynchronousGenerator<E>);
     public constructor(generator: AsynchronousGenerator<E>, comparator: Comparator<E>);
     public constructor(argument1: AsynchronousGenerator<E>, argument2?: Comparator<E>) {
@@ -1072,11 +1084,8 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
             let collector: AsynchronousCollector<E, Array<Indexed<E>>, Array<Indexed<E>>> = useAsynchronousToIndexedArray();
             let hasComparator: boolean = isFunction(argument2);
             let comparator: Comparator<E> = isFunction(argument2) ? argument2 : useCompare<E>;
-            // 注意：不能在构造期把 buffer 定义成只读属性，否则 then 回调里的赋值会抛 TypeError，
-            // 导致 toOrdered / 统计类在异步路径上永远拿到空结果。
             collector.collect(argument1).then((indexed: Array<Indexed<E>>) => {
                 if (hasComparator) {
-                    // 显式比较器：按值排序，索引重建为顺序位（统计类依赖该语义）
                     this.buffer = indexed.slice().sort((a: Indexed<E>, b: Indexed<E>): number => {
                         return comparator(a.element, b.element);
                     }).map((entry: Indexed<E>, index: number): Indexed<E> => {
@@ -1085,9 +1094,15 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                             index: BigInt(index)
                         };
                     });
-                } else {
-                    // 默认：按元素携带的真实索引排序（保留 redirect / reverse / translate 的效果）
-                    this.buffer = indexed.sort((a: Indexed<E>, b: Indexed<E>): number => {
+                }
+                else {
+                    let count: bigint = BigInt(indexed.length);
+                    this.buffer = indexed.map((entry: Indexed<E>): Indexed<E> => {
+                        return {
+                            element: entry.element,
+                            index: count === 0n ? entry.index : ((entry.index % count) + count) % count
+                        };
+                    }).sort((a: Indexed<E>, b: Indexed<E>): number => {
                         return Number(a.index - b.index);
                     });
                 }
@@ -1104,29 +1119,29 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                     configurable: false
                 }
             });
-        } else {
+        }
+        else {
             throw new TypeError("Source must be an iterable or a generator function.");
         }
     }
-
     public override async *[Symbol.asyncIterator](): globalThis.AsyncGenerator<E, void, undefined> {
         for await (let element of await this.toArray()) {
             yield element;
         }
     }
-
     public override async findAny(): Promise<E> {
         await this.settled();
         if (this.complete === true) {
             return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
                 try {
                     if (this.buffer.length > 0) {
-                        // 随机取任意一个元素，必须保证 settle（原实现可能一个都没选中导致挂起）
                         resolve(this.buffer[Math.floor(Math.random() * this.buffer.length)].element);
-                    } else {
+                    }
+                    else {
                         reject(new Error("No element found."));
                     }
-                } catch (error) {
+                }
+                catch (error) {
                     reject(error);
                 }
             });
@@ -1142,76 +1157,24 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                         }
                     }
                 });
-            } catch (error) {
+            }
+            catch (error) {
                 reject(error);
             }
         });
     }
-
-
     public override async findAt(index: number): Promise<E>;
     public override async findAt(index: bigint): Promise<E>;
     public override async findAt(target: number | bigint): Promise<E> {
         await this.settled();
         if (isBigInt(target)) {
-            return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
-                try {
-                    if (this.complete === true) {
-                        if (this.buffer.length > 0) {
-                            for (let { element, index } of this.buffer) {
-                                if (index === target) {
-                                    resolve(element);
-                                }
-                            }
-                        }
-                        // 没有命中索引时必须 reject，否则 Promise 永不 settle（调用方挂起）
-                        reject(new Error("Element could not be found with given index."));
-                    } else {
-                        this.listeners.push((buffer: Array<Indexed<E>>): void => {
-                            if (this.buffer.length > 0) {
-                                for (let { element, index } of buffer) {
-                                    if (index === target) {
-                                        resolve(element);
-                                    }
-                                }
-                            }
-                        });
-                    }
-                } catch (error) {
-                    reject(error);
-                }
-            });
-        } else if (isNumber(target)) {
-            return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
-                try {
-                    if (this.complete === true) {
-                        if (this.buffer.length > 0) {
-                            for (let { element, index } of this.buffer) {
-                                if (Number(index) === target) {
-                                    resolve(element);
-                                }
-                            }
-                        }
-                        reject(new Error("Element could not be found with given index."));
-                    } else {
-                        this.listeners.push((buffer: Array<Indexed<E>>): void => {
-                            if (this.buffer.length > 0) {
-                                for (let { element, index } of buffer) {
-                                    if (Number(index) === target) {
-                                        resolve(element);
-                                    }
-                                }
-                            }
-                        });
-                    }
-                } catch (error) {
-                    reject(error);
-                }
-            });
+            return await useAsynchronousFindAt<E>(target).collect(this.source());
         }
-        throw new TypeError("Invalid arguments.");
+        if (isNumber(target)) {
+            return await useAsynchronousFindAt<E>(target).collect(this.source());
+        }
+        throw new TypeError("Index must be a bigint or a number.");
     }
-
     public override async findFirst(): Promise<E> {
         await this.settled();
         return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
@@ -1219,22 +1182,24 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                 if (this.complete === true) {
                     if (this.buffer.length > 0) {
                         resolve(this.buffer[0].element);
-                    } else {
+                    }
+                    else {
                         reject(new Error("No element found."));
                     }
-                } else {
+                }
+                else {
                     this.listeners.push((buffer: Array<Indexed<E>>): void => {
                         if (buffer.length > 0) {
                             resolve(buffer[0].element);
                         }
                     });
                 }
-            } catch (error) {
+            }
+            catch (error) {
                 reject(error);
             }
         });
     }
-
     public override async findLast(): Promise<E> {
         await this.settled();
         return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
@@ -1242,22 +1207,24 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                 if (this.complete === true) {
                     if (this.buffer.length > 0) {
                         resolve(this.buffer[this.buffer.length - 1].element);
-                    } else {
+                    }
+                    else {
                         reject(new Error("No element found."));
                     }
-                } else {
+                }
+                else {
                     this.listeners.push((buffer: Array<Indexed<E>>): void => {
                         if (buffer.length > 0) {
                             resolve(buffer[this.buffer.length - 1].element);
                         }
                     });
                 }
-            } catch (error) {
+            }
+            catch (error) {
                 reject(error);
             }
         });
     }
-
     public override async findMaximum(): Promise<E>;
     public override async findMaximum(comparator: Comparator<E>): Promise<E>;
     public override async findMaximum(argument1?: Comparator<E>): Promise<E> {
@@ -1270,19 +1237,21 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                         if (this.buffer.length > 0) {
                             resolve(this.buffer.map((indexed: Indexed<E>): E => indexed.element).sort(comparator)[this.buffer.length - 1]);
                         }
-                    } else {
+                    }
+                    else {
                         this.listeners.push((buffer: Array<Indexed<E>>): void => {
                             if (buffer.length > 0) {
                                 resolve(this.buffer.map((indexed: Indexed<E>): E => indexed.element).sort(comparator)[this.buffer.length - 1]);
                             }
                         });
                     }
-                } catch (error) {
+                }
+                catch (error) {
                     reject(error);
                 }
             });
-        } else {
-            // 无比较器时按元素值比较；原实现按索引比较，对 toOrdered 的索引序缓冲毫无意义
+        }
+        else {
             let comparator: Comparator<Indexed<E>> = (a: Indexed<E>, b: Indexed<E>): number => useCompare(a.element, b.element);
             return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
                 try {
@@ -1290,20 +1259,21 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                         if (this.buffer.length > 0) {
                             resolve(this.buffer.slice().sort(comparator).map((indexed: Indexed<E>): E => indexed.element)[this.buffer.length - 1]);
                         }
-                    } else {
+                    }
+                    else {
                         this.listeners.push((buffer: Array<Indexed<E>>): void => {
                             if (buffer.length > 0) {
                                 resolve(this.buffer.slice().sort(comparator).map((indexed: Indexed<E>): E => indexed.element)[this.buffer.length - 1]);
                             }
                         });
                     }
-                } catch (error) {
+                }
+                catch (error) {
                     reject(error);
                 }
             });
         }
     }
-
     public override async findMinimum(): Promise<E>;
     public override async findMinimum(comparator: Comparator<E>): Promise<E>;
     public override async findMinimum(argument1?: Comparator<E>): Promise<E> {
@@ -1316,19 +1286,21 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                         if (this.buffer.length > 0) {
                             resolve(this.buffer.map((indexed: Indexed<E>): E => indexed.element).sort(comparator)[0]);
                         }
-                    } else {
+                    }
+                    else {
                         this.listeners.push((buffer: Array<Indexed<E>>): void => {
                             if (buffer.length > 0) {
                                 resolve(this.buffer.map((indexed: Indexed<E>): E => indexed.element).sort(comparator)[0]);
                             }
                         });
                     }
-                } catch (error) {
+                }
+                catch (error) {
                     reject(error);
                 }
             });
-        } else {
-            // 无比较器时按元素值比较；原实现按索引比较，对 toOrdered 的索引序缓冲毫无意义
+        }
+        else {
             let comparator: Comparator<Indexed<E>> = (a: Indexed<E>, b: Indexed<E>): number => useCompare(a.element, b.element);
             return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
                 try {
@@ -1336,25 +1308,21 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                         if (this.buffer.length > 0) {
                             resolve(this.buffer.slice().sort(comparator).map((indexed: Indexed<E>): E => indexed.element)[0]);
                         }
-                    } else {
+                    }
+                    else {
                         this.listeners.push((buffer: Array<Indexed<E>>): void => {
                             if (buffer.length > 0) {
                                 resolve(this.buffer.slice().sort(comparator).map((indexed: Indexed<E>): E => indexed.element)[0]);
                             }
                         });
                     }
-                } catch (error) {
+                }
+                catch (error) {
                     reject(error);
                 }
             });
         }
     }
-
-    /**
-     * 等待收集完成。
-     * 原来 find* 系列在流尚未完成时只注册监听器、不保证 settle，
-     * 遇到空流会永久挂起；这里先等就绪再走统一的“已完成”分支。
-     */
     protected async settled(): Promise<void> {
         if (this.complete === false) {
             await new Promise<void>((resolve: Runnable): void => {
@@ -1362,7 +1330,6 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
             });
         }
     }
-
     public override source(): AsynchronousGenerator<E> {
         return async (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): Promise<void> => {
             return await new Promise<void>((resolve: Runnable, reject: Consumer<any>): void => {
@@ -1375,7 +1342,8 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                             accept(element, index);
                         }
                         resolve();
-                    } else {
+                    }
+                    else {
                         this.listeners.push((buffer: Array<Indexed<E>>): void => {
                             try {
                                 for (let { index, element } of buffer) {
@@ -1385,18 +1353,19 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                                     accept(element, index);
                                 }
                                 resolve();
-                            } catch (error) {
+                            }
+                            catch (error) {
                                 reject(error);
                             }
                         });
                     }
-                } catch (error) {
+                }
+                catch (error) {
                     reject(error);
                 }
             });
         };
     }
-
     public override async isEmpty(): Promise<boolean> {
         return new Promise<boolean>((resolve: Consumer<boolean>): void => {
             this.listeners.push((buffer: Array<Indexed<E>>): void => {
@@ -1404,7 +1373,6 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
             });
         });
     }
-
     public override async count(): Promise<bigint> {
         if (this.complete === true) {
             return BigInt(this.buffer.length);
@@ -1415,20 +1383,14 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
             });
         });
     }
-};
-
+}
+;
 export class AsynchronousUnorderedCollectable<E> extends AsynchronousCollectable<E> {
-
     protected readonly AsynchronousUnorderedCollectable: symbol = AsynchronousUnorderedCollectableSymbol;
-
     [Symbol.toStringTag]: string = "AsynchronousUnorderedCollectable";
-
     protected buffer: Map<bigint, E> = new Map<bigint, E>();
-
     protected complete: boolean = false;
-
     protected listeners: Array<Consumer<Map<bigint, E>>> = [];
-
     public constructor(generator: AsynchronousGenerator<E>);
     public constructor(argument1: AsynchronousGenerator<E>) {
         super();
@@ -1436,7 +1398,6 @@ export class AsynchronousUnorderedCollectable<E> extends AsynchronousCollectable
             let generator: AsynchronousGenerator<E> = argument1;
             let surrogate: bigint = 0n;
             generator((element: E, index: bigint): void => {
-                // 索引重复时改用兜底槽位，避免 Map 键冲突造成静默丢数据
                 let key: bigint = this.buffer.has(index) ? SURROGATE_BASE + (surrogate++) : index;
                 this.buffer.set(key, element);
             }, (): boolean => false).then((): void => {
@@ -1454,11 +1415,11 @@ export class AsynchronousUnorderedCollectable<E> extends AsynchronousCollectable
                     configurable: false
                 }
             });
-        } else {
+        }
+        else {
             throw new TypeError("Source must be an iterable or a generator function.");
         }
     }
-
     public override source(): AsynchronousGenerator<E> {
         return async (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): Promise<void> => {
             return await new Promise<void>((resolve: Runnable, reject: Consumer<any>): void => {
@@ -1471,7 +1432,8 @@ export class AsynchronousUnorderedCollectable<E> extends AsynchronousCollectable
                             accept(element, index);
                         }
                         resolve();
-                    } else {
+                    }
+                    else {
                         this.listeners.push((buffer: Map<bigint, E>): void => {
                             for (let [index, element] of buffer) {
                                 if (interrupt(element, index)) {
@@ -1481,20 +1443,20 @@ export class AsynchronousUnorderedCollectable<E> extends AsynchronousCollectable
                             }
                             resolve();
                         });
-
                     }
-                } catch (error) {
+                }
+                catch (error) {
                     reject(error);
                 }
             });
         };
     }
-
     public async *[Symbol.asyncIterator](): globalThis.AsyncGenerator<E, void, undefined> {
         let buffer: Map<bigint, E> = await new Promise<Map<bigint, E>>((resolve: Consumer<Map<bigint, E>>, reject: Consumer<any>): void => {
             if (this.complete === true) {
                 resolve(this.buffer);
-            } else {
+            }
+            else {
                 this.listeners.push((buffer: Map<bigint, E>): void => {
                     resolve(buffer);
                 }, reject);
@@ -1504,15 +1466,11 @@ export class AsynchronousUnorderedCollectable<E> extends AsynchronousCollectable
             yield element;
         }
     }
-
-};
-
+}
+;
 export abstract class AsynchronousStatistics<E, D extends number | bigint> extends AsynchronousOrderedCollectable<E> {
-
     protected readonly AsynchronousStatistics: symbol = AsynchronousStatisticsSymbol;
-
     [Symbol.toStringTag]: string = "AsynchronousStatistics";
-
     public constructor(generator: AsynchronousGenerator<E>);
     public constructor(generator: AsynchronousGenerator<E>, comparator: Comparator<E>);
     public constructor(parameter: AsynchronousGenerator<E>, comparator?: Comparator<E>) {
@@ -1526,60 +1484,43 @@ export abstract class AsynchronousStatistics<E, D extends number | bigint> exten
             }
         });
     }
-
     public async *[Symbol.asyncIterator](): globalThis.AsyncGenerator<E, void, undefined> {
         for await (let element of await this.toArray()) {
             yield element;
         }
     }
-
     public abstract average(): Promise<D>;
     public abstract average(mapper: Functional<E, D>): Promise<D>;
-
     public abstract range(): Promise<D>;
     public abstract range(mapper: Functional<E, D>): Promise<D>;
-
     public abstract variance(): Promise<D>;
     public abstract variance(mapper: Functional<E, D>): Promise<D>;
-
     public abstract standardDeviation(): Promise<D>;
     public abstract standardDeviation(mapper: Functional<E, D>): Promise<D>;
-
     public abstract mean(): Promise<D>;
     public abstract mean(mapper: Functional<E, D>): Promise<D>;
-
     public abstract median(): Promise<D>;
     public abstract median(mapper: Functional<E, D>): Promise<D>;
-
     public abstract mode(): Promise<D>;
     public abstract mode(mapper: Functional<E, D>): Promise<D>;
-
     public async frequency(): Promise<Map<E, bigint>> {
         return await useAsynchronousFrequency<E>().collect(this.source());
     }
-
     public abstract summate(): Promise<D>;
     public abstract summate(mapper: Functional<E, D>): Promise<D>;
-
     public abstract quantile(quantile: number): Promise<D>;
     public abstract quantile(quantile: number, mapper: Functional<E, D>): Promise<D>;
-
     public abstract interquartileRange(): Promise<D>;
     public abstract interquartileRange(mapper: Functional<E, D>): Promise<D>;
-
     public abstract skewness(): Promise<D>;
     public abstract skewness(mapper: Functional<E, D>): Promise<D>;
-
     public abstract kurtosis(): Promise<D>;
     public abstract kurtosis(mapper: Functional<E, D>): Promise<D>;
-};
-
+}
+;
 export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, bigint> {
-
     protected readonly BigIntStatistics: symbol = AsynchronousBigIntStatisticsSymbol;
-
     [Symbol.toStringTag]: string = "AsynchronousBigIntStatistics";
-
     public constructor(generator: AsynchronousGenerator<E>);
     public constructor(generator: AsynchronousGenerator<E>, comparator: Comparator<E>);
     public constructor(parameter: AsynchronousGenerator<E>, comparator?: Comparator<E>) {
@@ -1593,13 +1534,11 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             }
         });
     }
-
     public async *[Symbol.asyncIterator](): globalThis.AsyncGenerator<E, void, undefined> {
         for await (let element of await this.toArray()) {
             yield element;
         }
     }
-
     public async average(): Promise<bigint>;
     public async average(mapper: Functional<E, bigint>): Promise<bigint>;
     public async average(argument1?: Functional<E, bigint>): Promise<bigint> {
@@ -1609,11 +1548,11 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return await useAsynchronousBigIntAverage(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async range(): Promise<bigint>;
     public async range(mapper: Functional<E, bigint>): Promise<bigint>;
     public async range(argument1?: Functional<E, bigint>): Promise<bigint> {
@@ -1626,11 +1565,11 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let maximum: E = await this.findLast();
             let difference: bigint = mapper(maximum) - mapper(minimum);
             return difference < 0 ? -difference : difference;
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async variance(): Promise<bigint>;
     public async variance(mapper: Functional<E, bigint>): Promise<bigint>;
     public async variance(argument1?: Functional<E, bigint>): Promise<bigint> {
@@ -1641,15 +1580,14 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             let data: Array<bigint> = (await this.toArray()).map((element: E): bigint => mapper(element));
             let count: number = data.length;
-            // 直接用浮点计算总体方差：整数除法会把 [1,2,3,4] 的方差 1.25 截断成 3，结果再四舍五入回 bigint
             let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
             let variance: number = data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count;
             return BigInt(Math.round(variance));
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async standardDeviation(): Promise<bigint>;
     public async standardDeviation(mapper: Functional<E, bigint>): Promise<bigint>;
     public async standardDeviation(argument1?: Functional<E, bigint>): Promise<bigint> {
@@ -1663,11 +1601,11 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
             let variance: number = data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count;
             return BigInt(Math.round(Math.sqrt(variance)));
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async mean(): Promise<bigint>;
     public async mean(mapper: Functional<E, bigint>): Promise<bigint>;
     public async mean(argument1?: Functional<E, bigint>): Promise<bigint> {
@@ -1677,11 +1615,11 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return await useAsynchronousBigIntAverage(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async median(): Promise<bigint>;
     public async median(mapper: Functional<E, bigint>): Promise<bigint>;
     public async median(argument1?: Functional<E, bigint>): Promise<bigint> {
@@ -1691,11 +1629,11 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return useAsynchronousBigIntMedian(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async mode(): Promise<bigint>;
     public async mode(mapper: Functional<E, bigint>): Promise<bigint>;
     public async mode(argument1?: Functional<E, bigint>): Promise<bigint> {
@@ -1705,11 +1643,11 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return useAsynchronousBigIntMode(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async summate(): Promise<bigint>;
     public async summate(mapper: Functional<E, bigint>): Promise<bigint>;
     public async summate(argument1?: Functional<E, bigint>): Promise<bigint> {
@@ -1719,11 +1657,11 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             return await useAsynchronousBigIntSummate(mapper).collect(this.source() as AsynchronousGenerator<bigint>);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async quantile(quantile: number): Promise<bigint>;
     public async quantile(quantile: number, mapper: Functional<E, bigint>): Promise<bigint>;
     public async quantile(quantile: number, argument1?: Functional<E, bigint>): Promise<bigint> {
@@ -1742,11 +1680,11 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             }
             let value: bigint = mapper(await this.findAt(index));
             return value;
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async interquartileRange(): Promise<bigint>;
     public async interquartileRange(mapper: Functional<E, bigint>): Promise<bigint>;
     public async interquartileRange(argument1?: Functional<E, bigint>): Promise<bigint> {
@@ -1758,11 +1696,11 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let lower: bigint = await this.quantile(0.25, mapper);
             let upper: bigint = await this.quantile(0.75, mapper);
             return upper - lower;
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async skewness(): Promise<bigint>;
     public async skewness(mapper: Functional<E, bigint>): Promise<bigint>;
     public async skewness(argument1?: Functional<E, bigint>): Promise<bigint> {
@@ -1773,8 +1711,6 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             let data: Array<bigint> = (await this.toArray()).map((element: E): bigint => mapper(element));
             let count: number = data.length;
-            // 大整数的 variance / standardDeviation 会被整数化截断（例如 [1,2,3,4] 的方差是 3 而非 1.25），
-            // 这里直接用浮点计算均值与标准差，保证偏度/峰度与数值版语义一致，最后四舍五入回 bigint。
             let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
             let deviation: number = Math.sqrt(data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count);
             if (deviation === 0) {
@@ -1782,11 +1718,11 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             }
             let summate: number = data.reduce((total: number, value: bigint): number => total + Math.pow((Number(value) - mean) / deviation, 3), 0);
             return BigInt(Math.round(summate / count));
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async kurtosis(): Promise<bigint>;
     public async kurtosis(mapper: Functional<E, bigint>): Promise<bigint>;
     public async kurtosis(argument1?: Functional<E, bigint>): Promise<bigint> {
@@ -1797,8 +1733,6 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
             let data: Array<bigint> = (await this.toArray()).map((element: E): bigint => mapper(element));
             let count: number = data.length;
-            // 大整数的 variance / standardDeviation 会被整数化截断（例如 [1,2,3,4] 的方差是 3 而非 1.25），
-            // 这里直接用浮点计算均值与标准差，保证偏度/峰度与数值版语义一致，最后四舍五入回 bigint。
             let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
             let deviation: number = Math.sqrt(data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count);
             if (deviation === 0) {
@@ -1806,18 +1740,16 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
             }
             let summate: number = data.reduce((total: number, value: bigint): number => total + Math.pow((Number(value) - mean) / deviation, 4), 0);
             return BigInt(Math.round(summate / count - 3));
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-};
-
+}
+;
 export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, number> {
-
     protected readonly AsynchronousNumericStatistics: symbol = AsynchronousNumericStatisticsSymbol;
-
     [Symbol.toStringTag]: string = "AsynchronousNumericStatistics";
-
     public constructor(generator: AsynchronousGenerator<E>);
     public constructor(generator: AsynchronousGenerator<E>, comparator: Comparator<E>);
     public constructor(parameter: AsynchronousGenerator<E>, comparator?: Comparator<E>) {
@@ -1831,13 +1763,11 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             }
         });
     }
-
     public async *[Symbol.asyncIterator](): globalThis.AsyncGenerator<E, void, undefined> {
         for await (let element of await this.toArray()) {
             yield element;
         }
     }
-
     public async average(): Promise<number>;
     public async average(mapper: Functional<E, number>): Promise<number>;
     public async average(mapper?: Functional<E, number>): Promise<number> {
@@ -1849,11 +1779,11 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
                 return useAsynchronousNumericAverage(mapper).collect(this.source() as AsynchronousGenerator<number>);
             }
             return useAsynchronousNumericAverage().collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async range(): Promise<number>;
     public async range(mapper: Functional<E, number>): Promise<number>;
     public async range(argument1?: Functional<E, number>): Promise<number> {
@@ -1868,11 +1798,11 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             let minimum: E = await this.findFirst();
             let maximum: E = await this.findLast();
             return mapper(maximum) - mapper(minimum);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async variance(): Promise<number>;
     public async variance(mapper: Functional<E, number>): Promise<number>;
     public async variance(argument1?: Functional<E, number>): Promise<number> {
@@ -1882,22 +1812,22 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
         try {
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return await useAsynchronousNumericVariance(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async standardDeviation(): Promise<number>;
     public async standardDeviation(mapper: Functional<E, number>): Promise<number>;
     public async standardDeviation(argument1?: Functional<E, number>): Promise<number> {
         try {
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return await useAsynchronousNumericStandardDeviation(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async mean(): Promise<number>;
     public async mean(mapper: Functional<E, number>): Promise<number>;
     public async mean(argument1?: Functional<E, number>): Promise<number> {
@@ -1907,11 +1837,11 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
         try {
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return useAsynchronousNumericAverage(mapper).collect(this.source() as AsynchronousGenerator<number>);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async median(): Promise<number>;
     public async median(mapper: Functional<E, number>): Promise<number>;
     public async median(argument1?: Functional<E, number>): Promise<number> {
@@ -1921,11 +1851,11 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
         try {
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return await useAsynchronousNumericMedian(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async mode(): Promise<number>;
     public async mode(mapper: Functional<E, number>): Promise<number>;
     public async mode(argument1?: Functional<E, number>): Promise<number> {
@@ -1935,11 +1865,11 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
         try {
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return await useAsynchronousNumericMode(mapper).collect(this.source());
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async summate(): Promise<number>;
     public async summate(mapper: Functional<E, number>): Promise<number>;
     public async summate(argument1?: Functional<E, number>): Promise<number> {
@@ -1949,11 +1879,11 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
         try {
             let mapper: Functional<E, number> = isFunction(argument1) ? argument1 : useToNumber;
             return useAsynchronousNumericSummate(mapper).collect(this.source() as AsynchronousGenerator<number>);
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async quantile(quantile: number): Promise<number>;
     public async quantile(quantile: number, mapper: Functional<E, number>): Promise<number>;
     public async quantile(quantile: number, argument1?: Functional<E, number>): Promise<number> {
@@ -1972,11 +1902,11 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             }
             let value = mapper(await this.findAt(index));
             return value;
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async interquartileRange(): Promise<number>;
     public async interquartileRange(mapper: Functional<E, number>): Promise<number>;
     public async interquartileRange(argument1?: Functional<E, number>): Promise<number> {
@@ -1988,11 +1918,11 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
             let lower: number = await this.quantile(0.25, mapper);
             let upper: number = await this.quantile(0.75, mapper);
             return upper - lower;
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async skewness(): Promise<number>;
     public async skewness(mapper: Functional<E, number>): Promise<number>;
     public async skewness(argument1?: Functional<E, number>): Promise<number> {
@@ -2013,11 +1943,11 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
                 summate += Math.pow(z, 3);
             }
             return summate / data.length;
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-
     public async kurtosis(): Promise<number>;
     public async kurtosis(mapper: Functional<E, number>): Promise<number>;
     public async kurtosis(argument1?: Functional<E, number>): Promise<number> {
@@ -2038,18 +1968,16 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
                 summate += Math.pow(z, 4);
             }
             return summate / data.length - 3;
-        } catch (error) {
+        }
+        catch (error) {
             throw error;
         }
     }
-};
-
+}
+;
 export class AsynchronousWindowCollectable<E> extends AsynchronousOrderedCollectable<E> {
-
     protected readonly WindowCollectable: symbol = AsynchronousWindowCollectableSymbol;
-
     [Symbol.toStringTag]: string = "AsynchronousWindowCollectable";
-
     public constructor(generator: AsynchronousGenerator<E>);
     public constructor(generator: AsynchronousGenerator<E>, comparator: Comparator<E>);
     public constructor(parameter: AsynchronousGenerator<E>, comparator: Comparator<E> = useCompare) {
@@ -2063,17 +1991,14 @@ export class AsynchronousWindowCollectable<E> extends AsynchronousOrderedCollect
             }
         });
     }
-
     public async *[Symbol.asyncIterator](): globalThis.AsyncGenerator<E, void, undefined> {
         for await (let element of await this.toArray()) {
             yield element;
         }
     }
-
     public slide(size: bigint, step: bigint = 1n): AsynchronousSemantic<AsynchronousSemantic<E>> {
         if (size > 0n && step > 0n) {
             return new AsynchronousSemantic<AsynchronousSemantic<E>>(async (accept: Consumer<AsynchronousSemantic<E>> | BiConsumer<AsynchronousSemantic<E>, bigint>, interrupt: Predicate<AsynchronousSemantic<E>> | BiPredicate<AsynchronousSemantic<E>, bigint>): Promise<void> => {
-                // 切窗依赖已收集完成的缓冲区：异步源上必须等收集就绪，否则会切出 0 个窗口
                 await this.settled();
                 return await new Promise<void>((resolve: Runnable, reject: Consumer<any>): void => {
                     try {
@@ -2104,7 +2029,8 @@ export class AsynchronousWindowCollectable<E> extends AsynchronousOrderedCollect
                             index++;
                         }
                         resolve();
-                    } catch (error) {
+                    }
+                    catch (error) {
                         throw error;
                     }
                 });
@@ -2112,15 +2038,16 @@ export class AsynchronousWindowCollectable<E> extends AsynchronousOrderedCollect
         }
         throw new RangeError("Invalid arguments.");
     }
-
     public tumble(size: bigint): AsynchronousSemantic<AsynchronousSemantic<E>> {
         if (isBigInt(size) && size > 0n) {
             try {
                 return this.slide(size, size);
-            } catch (error) {
+            }
+            catch (error) {
                 throw error;
             }
         }
         throw new RangeError("Invalid arguments.");
     }
-};
+}
+;

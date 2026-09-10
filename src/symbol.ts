@@ -1,30 +1,20 @@
 export let OptionalSymbol: symbol = Symbol.for("Optional");
-
 export let AsynchronousSemanticSymbol: symbol = Symbol.for("AsynchronousSemantic");
 export let SynchronousSemanticSymbol: symbol = Symbol.for("SynchronousSemantic");
-
 export let AsynchronousCollectorSymbol: symbol = Symbol.for("AsynchronousCollector");
 export let SynchronousCollectorSymbol: symbol = Symbol.for("SynchronousCollector");
-
 export let DispatchCollectableSymbol: symbol = Symbol.for("DispatchCollectable");
 export let AsynchronousCollectableSymbol: symbol = Symbol.for("AsynchronousCollectable");
 export let SynchronousCollectableSymbol: symbol = Symbol.for("SynchronousCollectable");
-
 export let AsynchronousOrderedCollectableSymbol: symbol = Symbol.for("OrderedAsynchronousCollectable");
 export let SynchronousOrderedCollectableSymbol: symbol = Symbol.for("OrderedSynchronousCollectable");
-
 export let AsynchronousUnorderedCollectableSymbol: symbol = Symbol.for("AsynchronousUnorderedCollectable");
 export let SynchronousUnorderedCollectableSymbol: symbol = Symbol.for("SynchronousUnorderedCollectable");
-
 export let AsynchronousWindowCollectableSymbol: symbol = Symbol.for("AsynchronousWindowCollectable");
 export let SynchronousWindowCollectableSymbol: symbol = Symbol.for("SynchronousWindowCollectable");
-
 export let AsynchronousStatisticsSymbol: symbol = Symbol.for("AsynchronousStatistics");
 export let SynchronousStatisticsSymbol: symbol = Symbol.for("SynchronousStatistics");
-
 export let AsynchronousNumericStatisticsSymbol: symbol = Symbol.for("AsynchronousNumericStatistics");
 export let SynchronousNumericStatisticsSymbol: symbol = Symbol.for("SynchronousNumericStatistics");
-
-
 export let AsynchronousBigIntStatisticsSymbol: symbol = Symbol.for("AsynchronousBigIntStatistics");
 export let SynchronousBigIntStatisticsSymbol: symbol = Symbol.for("SynchronousBigIntStatistics");

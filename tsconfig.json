@@ -9,6 +9,7 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": false,
+    "removeComments": true,
     "declaration": true,
     "outDir": "./dist",
     "rootDir": "./src",
