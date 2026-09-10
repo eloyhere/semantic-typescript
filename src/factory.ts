@@ -1,9 +1,9 @@
-import { AsynchronousSemantic } from "./asynchronous/semantic";
-import { isBigInt, isFunction, isIterable, isNumber, isObject, isPromise, isAsyncIterable, isString } from "./guard";
-import { useCompare, useToBigInt, useToNumber, useTraverse } from "./hook";
-import { SynchronousSemantic } from "./synchronous/semantic";
-import { invalidate, validate } from "./utility";
-import type { BiPredicate, Predicate, Supplier, Consumer, BiConsumer, DeepPropertyKey, DeepPropertyValue, Runnable } from "./utility";
+import { AsynchronousSemantic } from "./asynchronous/semantic.js";
+import { isBigInt, isFunction, isIterable, isNumber, isObject, isPromise, isAsyncIterable, isString } from "./guard.js";
+import { useCompare, useToBigInt, useToNumber, useTraverse } from "./hook.js";
+import { SynchronousSemantic } from "./synchronous/semantic.js";
+import { invalidate, validate } from "./utility.js";
+import type { BiPredicate, Predicate, Supplier, Consumer, BiConsumer, DeepPropertyKey, DeepPropertyValue, Runnable } from "./utility.js";
 
 interface Attribute<T> {
     key: keyof T;
@@ -35,10 +35,10 @@ export let useAttribute: <T extends object>(target: T) => SynchronousSemantic<At
 };
 
 interface UseBlob {
-    (blob: Blob): SynchronousSemantic<Uint8Array>;
-    (blob: Blob, chunk: bigint): SynchronousSemantic<Uint8Array>;
+    (blob: Blob): AsynchronousSemantic<Uint8Array>;
+    (blob: Blob, chunk: bigint): AsynchronousSemantic<Uint8Array>;
 };
-export let useBlob: UseBlob = (blob: Blob, chunk: bigint = 64n * 1024n): SynchronousSemantic<Uint8Array> => {
+export let useBlob: UseBlob = (blob: Blob, chunk: bigint = 64n * 1024n): AsynchronousSemantic<Uint8Array> => {
     let size: number = Number(chunk);
     if (size <= 0 || !Number.isSafeInteger(size)) {
         throw new RangeError("Chunk size must be a safe positive integer.");
@@ -46,62 +46,56 @@ export let useBlob: UseBlob = (blob: Blob, chunk: bigint = 64n * 1024n): Synchro
     if (invalidate(blob)) {
         throw new TypeError("Blob is invalid.");
     }
-    return new SynchronousSemantic<Uint8Array>((accept: Consumer<Uint8Array> | BiConsumer<Uint8Array, bigint>, interrupt: Predicate<Uint8Array> | BiPredicate<Uint8Array, bigint>) => {
+    // 读取过程本身是异步的，必须返回异步语义，否则同步收集器会得到空结果
+    return new AsynchronousSemantic<Uint8Array>(async (accept: Consumer<Uint8Array> | BiConsumer<Uint8Array, bigint>, interrupt: Predicate<Uint8Array> | BiPredicate<Uint8Array, bigint>): Promise<void> => {
+        let index: bigint = 0n;
+        let stoppable: boolean = false;
+        let stream: ReadableStream<Uint8Array> = blob.stream();
+        let reader: ReadableStreamDefaultReader<Uint8Array> = stream.getReader();
+        let buffer: Uint8Array = new Uint8Array(size);
+        let offset: number = 0;
         try {
-            let index: bigint = 0n;
-            let stoppable: boolean = false;
-            let stream: ReadableStream<Uint8Array> = blob.stream();
-            let reader: ReadableStreamDefaultReader<Uint8Array> = stream.getReader();
-            let buffer: Uint8Array = new Uint8Array(size);
-            let offset: number = 0;
-
-            (async () => {
-                try {
-                    while (!stoppable) {
-                        let { done, value } = await reader.read();
-                        if (done) {
-                            if (offset > 0) {
-                                let element: Uint8Array = buffer.subarray(0, offset);
-                                if (interrupt(element, index)) {
-                                    stoppable = true;
-                                } else {
-                                    accept(element, index);
-                                    index++;
-                                }
-                            }
-                            break;
-                        }
-                        let chunkData: Uint8Array = value as Uint8Array;
-                        let position: number = 0;
-                        while (position < chunkData.length && !stoppable) {
-                            let space: number = size - offset;
-                            let toCopy: number = Math.min(space, chunkData.length - position);
-                            buffer.set(chunkData.subarray(position, position + toCopy), offset);
-                            offset += toCopy;
-                            position += toCopy;
-
-                            if (offset === size) {
-                                if (interrupt(buffer, index)) {
-                                    stoppable = true;
-                                } else {
-                                    accept(buffer, index);
-                                    index++;
-                                }
-                                offset = 0;
-                            }
+            while (!stoppable) {
+                let { done, value } = await reader.read();
+                if (done) {
+                    if (offset > 0) {
+                        // 必须拷贝，否则所有分块都会指向同一块被后续写入覆盖的内存
+                        let element: Uint8Array = buffer.slice(0, offset);
+                        if (interrupt(element, index)) {
+                            stoppable = true;
+                        } else {
+                            accept(element, index);
+                            index++;
                         }
                     }
-                } catch (error) {
-                    throw error;
-                } finally {
-                    if (stoppable) {
-                        await reader.cancel();
-                    }
-                    reader.releaseLock();
+                    break;
                 }
-            })();
-        } catch (error) {
-            throw error;
+                let chunkData: Uint8Array = value as Uint8Array;
+                let position: number = 0;
+                while (position < chunkData.length && !stoppable) {
+                    let space: number = size - offset;
+                    let toCopy: number = Math.min(space, chunkData.length - position);
+                    buffer.set(chunkData.subarray(position, position + toCopy), offset);
+                    offset += toCopy;
+                    position += toCopy;
+
+                    if (offset === size) {
+                        let element: Uint8Array = buffer.slice(0, size);
+                        if (interrupt(element, index)) {
+                            stoppable = true;
+                        } else {
+                            accept(element, index);
+                            index++;
+                        }
+                        offset = 0;
+                    }
+                }
+            }
+        } finally {
+            if (stoppable) {
+                await reader.cancel();
+            }
+            reader.releaseLock();
         }
     });
 };
@@ -135,9 +129,9 @@ export let useFill: UseFill = <E>(element: E | Supplier<E>, count: bigint): Sync
 
 export interface UseFrom {
     <E>(iterable: Iterable<E>): SynchronousSemantic<E>;
-    <E>(iterable: AsyncIterable<E>): SynchronousSemantic<E>;
+    <E>(iterable: AsyncIterable<E>): AsynchronousSemantic<E>;
 };
-export let useFrom: UseFrom = <E>(iterable: Iterable<E> | AsyncIterable<E>): SynchronousSemantic<E> => {
+export let useFrom: UseFrom = (<E>(iterable: Iterable<E> | AsyncIterable<E>): SynchronousSemantic<E> | AsynchronousSemantic<E> => {
     if (isIterable(iterable)) {
         return new SynchronousSemantic<E>((accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>) => {
             try {
@@ -154,7 +148,8 @@ export let useFrom: UseFrom = <E>(iterable: Iterable<E> | AsyncIterable<E>): Syn
             }
         });
     } else if (isAsyncIterable(iterable)) {
-        return new SynchronousSemantic<E>(async (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>) => {
+        // 异步可迭代对象必须交给异步语义，否则同步收集器会在数据到达前就结束，静默返回空结果
+        return new AsynchronousSemantic<E>(async (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): Promise<void> => {
             try {
                 let index: bigint = 0n;
                 for await (let element of iterable) {
@@ -170,20 +165,21 @@ export let useFrom: UseFrom = <E>(iterable: Iterable<E> | AsyncIterable<E>): Syn
         });
     }
     throw new TypeError("Invalid arguments");
-};
+}) as UseFrom;
 
 interface UseGenerate {
     <E>(supplier: Supplier<E>, interrupt: Predicate<E>): SynchronousSemantic<E>;
     <E>(supplier: Supplier<E>, interrupt: BiPredicate<E, bigint>): SynchronousSemantic<E>;
 };
-export let useGenerate: UseGenerate = <E>(supplier: Supplier<E>, interrupt: Predicate<E> | BiPredicate<E, bigint>): SynchronousSemantic<E> => {
-    if (isFunction(supplier) && isFunction(interrupt)) {
+export let useGenerate: UseGenerate = <E>(supplier: Supplier<E>, interrupter: Predicate<E> | BiPredicate<E, bigint>): SynchronousSemantic<E> => {
+    if (isFunction(supplier) && isFunction(interrupter)) {
         return new SynchronousSemantic<E>((accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): void => {
             try {
                 let index: bigint = 0n;
                 while (true) {
                     let element: E = supplier();
-                    if (interrupt(element, index)) {
+                    // 原实现中用户传入的第二个参数被生成器同名参数遮蔽，导致该判断条件完全失效
+                    if (interrupter(element, index) || interrupt(element, index)) {
                         break;
                     }
                     accept(element, index);
@@ -198,41 +194,39 @@ export let useGenerate: UseGenerate = <E>(supplier: Supplier<E>, interrupt: Pred
 };
 
 interface UseInterval {
-    (period: number): SynchronousSemantic<number>;
-    (period: number, delay: number): SynchronousSemantic<number>;
+    (period: number): AsynchronousSemantic<number>;
+    (period: number, delay: number): AsynchronousSemantic<number>;
 };
-export let useInterval: UseInterval = (period: number, delay: number = 0): SynchronousSemantic<number> => {
+export let useInterval: UseInterval = (period: number, delay: number = 0): AsynchronousSemantic<number> => {
     if (period > 0 && delay >= 0) {
-        return new SynchronousSemantic<number>((accept: Consumer<number> | BiConsumer<number, bigint>, interrupt: Predicate<number> | BiPredicate<number, bigint>): void => {
-            try {
-                if (delay > 0) {
-                    setTimeout((): void => {
-                        let count: number = 0;
-                        let index: bigint = 0n;
-                        let timer: number = setInterval((): void => {
+        // 数据由定时器异步产生，必须返回异步语义；否则同步收集器会在第一个 tick 之前就结束收集（恒为空）
+        return new AsynchronousSemantic<number>((accept: Consumer<number> | BiConsumer<number, bigint>, interrupt: Predicate<number> | BiPredicate<number, bigint>): Promise<void> => {
+            return new Promise<void>((resolve: Runnable, reject: Consumer<any>): void => {
+                try {
+                    let count: number = 0;
+                    let index: bigint = 0n;
+                    let start: Runnable = (): void => {
+                        let timer: ReturnType<typeof setInterval> = setInterval((): void => {
+                            // 中断判断必须先于 accept，原实现在 clearInterval 之后仍然 accept，会漏出越界元素
                             if (interrupt(count, index)) {
                                 clearInterval(timer);
+                                resolve();
+                                return;
                             }
-                            accept(count, BigInt(index));
+                            accept(count, index);
                             index++;
                             count += period;
                         }, period);
-                    }, delay);
-                } else {
-                    let count: number = 0;
-                    let index: bigint = 0n;
-                    let timer: number = setInterval((): void => {
-                        if (interrupt(count, index)) {
-                            clearInterval(timer);
-                        }
-                        accept(count, BigInt(index));
-                        index++;
-                        count += period;
-                    }, period);
+                    };
+                    if (delay > 0) {
+                        setTimeout(start, delay);
+                    } else {
+                        start();
+                    }
+                } catch (error) {
+                    reject(error);
                 }
-            } catch (error) {
-                throw error;
-            }
+            });
         });
     }
     throw new TypeError("Invalid arguments.");
@@ -269,7 +263,7 @@ export let useIterate: UseIterate = (<E>(iterable: Iterable<E> | AsyncIterable<E
                             break;
                         }
                         accept(element, index);
-                        break;
+                        index++;
                     }
                     resolve();
                 } catch (error) {
@@ -334,6 +328,8 @@ export let useSubscription: UseSubscription = <T, EventMap, K extends KeyOfEvent
                                         for (let [unsubscriptionKey, unsubscriptionValue] of unsubscriptions) {
                                             subscriber.unsubscribe(unsubscriptionKey, unsubscriptionValue);
                                         }
+                                        // 清空后若再收到事件，不会重复退订
+                                        unsubscriptions.clear();
                                         subscriber.unmount();
                                         resolve();
                                     } else {
@@ -371,6 +367,8 @@ export let useSubscription: UseSubscription = <T, EventMap, K extends KeyOfEvent
                                             for (let [unsubscriptionKey, unsubscriptionValue] of unsubscriptions) {
                                                 subscriber.unsubscribe(unsubscriptionKey, unsubscriptionValue);
                                             }
+                                            // 清空后若再收到事件，不会重复退订
+                                            unsubscriptions.clear();
                                             subscriber.unmount();
                                             resolve();
                                         } else {
@@ -482,6 +480,20 @@ interface UseText {
 export let useText: UseText = (argument1: string | bigint, argument2?: number | bigint | string, argument3?: number | bigint): SynchronousSemantic<string> => {
     if (isString(argument1)) {
         let text: string = argument1;
+        if (invalidate(argument2)) {
+            // useText(text)：按 Unicode 码点逐个产出，可正确处理 emoji 等多字节字符（原实现缺少该分支，直接抛错）
+            let characters: Array<string> = Array.from(text);
+            return new SynchronousSemantic<string>((accept: Consumer<string> | BiConsumer<string, bigint>, interrupt: Predicate<string> | BiPredicate<string, bigint>): void => {
+                let index: bigint = 0n;
+                for (let character of characters) {
+                    if (interrupt(character, index)) {
+                        break;
+                    }
+                    accept(character, index);
+                    index++;
+                }
+            });
+        }
         if (isString(argument2)) {
             let delimeter: string = argument2;
             return new SynchronousSemantic<string>((accept: Consumer<string> | BiConsumer<string, bigint>, interrupt: Predicate<string> | BiPredicate<string, bigint>): void => {
@@ -493,6 +505,8 @@ export let useText: UseText = (argument1: string | bigint, argument2?: number | 
                             break;
                         }
                         accept(split, index);
+                        // 必须自增，否则所有分片索引都是 0n，无序收集器（Map 按索引存储）会静默丢数据
+                        index++;
                     }
                 }
             });

@@ -267,4 +267,6 @@ Begin building today and experience the tangible difference that thoughtful inde
 
 **Build with clarity, proceed with confidence, and transform data with intent.**
 
+See [CHANGELOG.md](./CHANGELOG.md) for the full release history.
+
 MIT © Eloy Kim

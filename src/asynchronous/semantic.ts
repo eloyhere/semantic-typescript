@@ -3,19 +3,26 @@ import {
     useAsynchronousFindFirst, useAsynchronousFindLast, useAsynchronousFindMaximum, useAsynchronousFindMinimum, useAsynchronousForEach, useAsynchronousGroup,
     useAsynchronousGroupBy, useAsynchronousJoin, useAsynchronousLog, useAsynchronousNoneMatch, useAsynchronousPartition, useAsynchronousPartitionBy, useAsynchronousReduce,
     useAsynchronousToArray, useAsynchronousToMap, useAsynchronousToSet, useAsynchronousWrite, useAsynchronousFrequency, useAsynchronousBigIntAverage,
-    useAsynchronousBigIntMedian, useAsynchronousBigIntMode, useAsynchronousBigIntSummate, useAsynchronousBigIntVariance, useAsynchronousNumericAverage,
+    useAsynchronousBigIntMedian, useAsynchronousBigIntMode, useAsynchronousBigIntSummate, useAsynchronousNumericAverage,
     useAsynchronousNumericMedian, useAsynchronousNumericMode, useAsynchronousNumericStandardDeviation, useAsynchronousNumericSummate, useAsynchronousNumericVariance,
-    useAsynchronousFindNegativeAt
-} from "./collector";
-import { isFunction, isAsynchronousSemantic, isIterable, isNumber, isBigInt, isObject, isString, isAsynchronousCollectable, isAsyncIterable, isAsynchronousCollector } from "../guard";
-import { useHash } from "../hash";
-import { useCompare, useToBigInt, useToNumber } from "../hook";
+    useAsynchronousFindNegativeAt, useAsynchronousToIndexedArray
+} from "./collector.js";
+import { isFunction, isAsynchronousSemantic, isIterable, isNumber, isBigInt, isObject, isString, isAsynchronousCollectable, isAsyncIterable, isAsynchronousCollector } from "../guard.js";
+import { useCompare, useRandom, useToBigInt, useToNumber } from "../hook.js";
 import {
     AsynchronousOrderedCollectableSymbol, AsynchronousBigIntStatisticsSymbol, AsynchronousCollectableSymbol, AsynchronousNumericStatisticsSymbol, AsynchronousSemanticSymbol, AsynchronousWindowCollectableSymbol,
     AsynchronousUnorderedCollectableSymbol, AsynchronousStatisticsSymbol
-} from "../symbol";
-import { invalidate, validate, type BiConsumer, type BiFunctional, type BiPredicate, type Comparator, type Consumer, type Functional, type Indexed, type Predicate, type Supplier, type AsynchronousGenerator, type TriFunctional, type TriPredicate, type Runnable } from "../utility";
-import type { AsynchronousCollector } from "./collector";
+} from "../symbol.js";
+import { invalidate, validate, type BiConsumer, type BiFunctional, type BiPredicate, type Comparator, type Consumer, type Functional, type Indexed, type Predicate, type Supplier, type AsynchronousGenerator, type TriFunctional, type TriPredicate, type Runnable } from "../utility.js";
+import type { AsynchronousCollector } from "./collector.js";
+
+/**
+ * 无序收集器在遇到重复索引时使用的兜底键起点，避免 Map 键冲突造成静默丢数据。
+ */
+const SURROGATE_BASE: bigint = 1n << 96n;
+
+/** shuffle 使用的随机索引上界（62 位随机空间，碰撞概率可忽略）。 */
+const SHUFFLE_BOUND: bigint = 1n << 62n;
 
 export class AsynchronousSemantic<E> {
 
@@ -379,8 +386,9 @@ export class AsynchronousSemantic<E> {
         return new AsynchronousSemantic<E>(async (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): Promise<void> => {
             return new Promise<void>((resolve: Consumer<void>, reject: Consumer<any>): void => {
                 try {
-                    this.generator((element: E, index: bigint): void => {
-                        accept(element, useHash(element, index));
+                    this.generator((element: E, _index: bigint): void => {
+                        // 用每次调用都不同的随机索引实现真正的洗牌（原实现按元素哈希，结果恒定）
+                        accept(element, useRandom(0n, SHUFFLE_BOUND));
                     }, interrupt).then(resolve, reject);
                 } catch (error) {
                     reject(error);
@@ -451,10 +459,11 @@ export class AsynchronousSemantic<E> {
                         let minimum: bigint = resolvedStart < resolvedEnd ? resolvedStart : resolvedEnd;
                         let maximum: bigint = resolvedStart < resolvedEnd ? resolvedEnd : resolvedStart;
                         this.generator((element: E, index: bigint): void => {
+                            // count 统计上游第几个元素（不能只在 accept 分支自增，否则条件永远不成立）
                             if (minimum <= count && count < maximum) {
                                 accept(element, index);
-                                count++;
                             }
+                            count++;
                         }, (element: E, index: bigint): boolean => count >= maximum || interrupt(element, index)).then(resolve, reject);
                     } catch (error) {
                         reject(error);
@@ -522,8 +531,14 @@ export class AsynchronousSemantic<E> {
         }
     }
 
-    public toOrdered(): AsynchronousOrderedCollectable<E> {
+    public toOrdered(): AsynchronousOrderedCollectable<E>;
+    public toOrdered(comparator: Comparator<E>): AsynchronousOrderedCollectable<E>;
+    public toOrdered(comparator?: Comparator<E>): AsynchronousOrderedCollectable<E> {
         try {
+            // 传入比较器时按值排序并重排索引（统计类强依赖该语义）；否则按元素真实索引排序
+            if (isFunction(comparator)) {
+                return new AsynchronousOrderedCollectable(this.generator, comparator);
+            }
             return new AsynchronousOrderedCollectable(this.generator);
         } catch (error) {
             throw error;
@@ -550,24 +565,29 @@ export class AsynchronousSemantic<E> {
     public translate(offset: bigint): AsynchronousSemantic<E>;
     public translate(translator: BiFunctional<E, bigint, bigint>): AsynchronousSemantic<E>;
     public translate(argument1: number | bigint | BiFunctional<E, bigint, bigint>): AsynchronousSemantic<E> {
-        if (isNumber(argument1)) {
-            let offset: number = argument1;
+        if (isNumber(argument1) || isBigInt(argument1)) {
+            let offset: bigint = useToBigInt(argument1);
+            // README 示例 5 的语义是循环平移，而循环平移必须知道流长度，
+            // 因此数值重载会先物化整条流，再按 (position + offset) mod n 分配索引。
             return new AsynchronousSemantic<E>(async (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): Promise<void> => {
                 try {
-                    this.generator((element: E, index: bigint): void => {
-                        accept(element, index + BigInt(offset));
-                    }, interrupt);
-                } catch (error) {
-                    throw error;
-                }
-            });
-        } else if (isBigInt(argument1)) {
-            let offset: bigint = argument1;
-            return new AsynchronousSemantic<E>(async (accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): Promise<void> => {
-                try {
-                    this.generator((element: E, index: bigint): void => {
-                        accept(element, index + offset);
-                    }, interrupt);
+                    let elements: Array<E> = [];
+                    await this.generator((element: E): void => {
+                        elements.push(element);
+                    }, (): boolean => false);
+                    let count: bigint = BigInt(elements.length);
+                    if (count === 0n) {
+                        return;
+                    }
+                    let normalized: bigint = ((offset % count) + count) % count;
+                    for (let position: number = 0; position < elements.length; position++) {
+                        let element: E = elements[position];
+                        let index: bigint = (BigInt(position) + normalized) % count;
+                        if (interrupt(element, index)) {
+                            break;
+                        }
+                        accept(element, index);
+                    }
                 } catch (error) {
                     throw error;
                 }
@@ -1049,57 +1069,41 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
     public constructor(argument1: AsynchronousGenerator<E>, argument2?: Comparator<E>) {
         super();
         if (isFunction(argument1)) {
-            try {
-                if (isFunction(argument2)) {
-                    let collector: AsynchronousCollector<E, Array<E>, Array<E>> = useAsynchronousToArray();
-                    collector.collect(argument1).then((elements: Array<E>) => {
-                        this.buffer = elements.sort(argument2).map((element: E, index: number): Indexed<E> => {
-                            return {
-                                element: element,
-                                index: BigInt(index)
-                            };
-                        });
-                        for (let listener of this.listeners) {
-                            listener(this.buffer);
-                        }
-                        this.complete = true;
-                        Object.freeze(this.complete);
-                        Object.freeze(this.buffer);
+            let collector: AsynchronousCollector<E, Array<Indexed<E>>, Array<Indexed<E>>> = useAsynchronousToIndexedArray();
+            let hasComparator: boolean = isFunction(argument2);
+            let comparator: Comparator<E> = isFunction(argument2) ? argument2 : useCompare<E>;
+            // 注意：不能在构造期把 buffer 定义成只读属性，否则 then 回调里的赋值会抛 TypeError，
+            // 导致 toOrdered / 统计类在异步路径上永远拿到空结果。
+            collector.collect(argument1).then((indexed: Array<Indexed<E>>) => {
+                if (hasComparator) {
+                    // 显式比较器：按值排序，索引重建为顺序位（统计类依赖该语义）
+                    this.buffer = indexed.slice().sort((a: Indexed<E>, b: Indexed<E>): number => {
+                        return comparator(a.element, b.element);
+                    }).map((entry: Indexed<E>, index: number): Indexed<E> => {
+                        return {
+                            element: entry.element,
+                            index: BigInt(index)
+                        };
                     });
                 } else {
-                    let collector: AsynchronousCollector<E, Array<E>, Array<E>> = useAsynchronousToArray();
-                    collector.collect(argument1).then((elements: Array<E>) => {
-                        this.buffer = elements.sort(useCompare).map((element: E, index: number, array: Array<E>): Indexed<E> => {
-                            return {
-                                element: element,
-                                index: BigInt(((index % array.length) + array.length) % array.length)
-                            };
-                        });
-                        for (let listener of this.listeners) {
-                            listener(this.buffer);
-                        }
-                        this.complete = true;
-                        Object.freeze(this.complete);
-                        Object.freeze(this.buffer);
+                    // 默认：按元素携带的真实索引排序（保留 redirect / reverse / translate 的效果）
+                    this.buffer = indexed.sort((a: Indexed<E>, b: Indexed<E>): number => {
+                        return Number(a.index - b.index);
                     });
                 }
-                Object.defineProperties(this, {
-                    "AsynchronousOrderedCollectable": {
-                        value: AsynchronousOrderedCollectableSymbol,
-                        writable: false,
-                        enumerable: false,
-                        configurable: false
-                    },
-                    "buffer": {
-                        value: this.buffer,
-                        writable: false,
-                        enumerable: false,
-                        configurable: false
-                    }
-                });
-            } catch (error) {
-                throw error;
-            }
+                this.complete = true;
+                for (let listener of this.listeners) {
+                    listener(this.buffer);
+                }
+            });
+            Object.defineProperties(this, {
+                "AsynchronousOrderedCollectable": {
+                    value: AsynchronousOrderedCollectableSymbol,
+                    writable: false,
+                    enumerable: false,
+                    configurable: false
+                }
+            });
         } else {
             throw new TypeError("Source must be an iterable or a generator function.");
         }
@@ -1112,15 +1116,15 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
     }
 
     public override async findAny(): Promise<E> {
+        await this.settled();
         if (this.complete === true) {
             return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
                 try {
                     if (this.buffer.length > 0) {
-                        for (let { element } of this.buffer) {
-                            if (Math.random() < 0.5) {
-                                resolve(element);
-                            }
-                        }
+                        // 随机取任意一个元素，必须保证 settle（原实现可能一个都没选中导致挂起）
+                        resolve(this.buffer[Math.floor(Math.random() * this.buffer.length)].element);
+                    } else {
+                        reject(new Error("No element found."));
                     }
                 } catch (error) {
                     reject(error);
@@ -1148,6 +1152,7 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
     public override async findAt(index: number): Promise<E>;
     public override async findAt(index: bigint): Promise<E>;
     public override async findAt(target: number | bigint): Promise<E> {
+        await this.settled();
         if (isBigInt(target)) {
             return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
                 try {
@@ -1159,6 +1164,8 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                                 }
                             }
                         }
+                        // 没有命中索引时必须 reject，否则 Promise 永不 settle（调用方挂起）
+                        reject(new Error("Element could not be found with given index."));
                     } else {
                         this.listeners.push((buffer: Array<Indexed<E>>): void => {
                             if (this.buffer.length > 0) {
@@ -1185,6 +1192,7 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                                 }
                             }
                         }
+                        reject(new Error("Element could not be found with given index."));
                     } else {
                         this.listeners.push((buffer: Array<Indexed<E>>): void => {
                             if (this.buffer.length > 0) {
@@ -1205,11 +1213,14 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
     }
 
     public override async findFirst(): Promise<E> {
+        await this.settled();
         return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
             try {
                 if (this.complete === true) {
                     if (this.buffer.length > 0) {
                         resolve(this.buffer[0].element);
+                    } else {
+                        reject(new Error("No element found."));
                     }
                 } else {
                     this.listeners.push((buffer: Array<Indexed<E>>): void => {
@@ -1225,11 +1236,14 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
     }
 
     public override async findLast(): Promise<E> {
+        await this.settled();
         return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
             try {
                 if (this.complete === true) {
                     if (this.buffer.length > 0) {
                         resolve(this.buffer[this.buffer.length - 1].element);
+                    } else {
+                        reject(new Error("No element found."));
                     }
                 } else {
                     this.listeners.push((buffer: Array<Indexed<E>>): void => {
@@ -1247,6 +1261,7 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
     public override async findMaximum(): Promise<E>;
     public override async findMaximum(comparator: Comparator<E>): Promise<E>;
     public override async findMaximum(argument1?: Comparator<E>): Promise<E> {
+        await this.settled();
         if (isFunction(argument1)) {
             let comparator: Comparator<E> = argument1;
             return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
@@ -1267,17 +1282,18 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                 }
             });
         } else {
-            let comparator: Comparator<Indexed<E>> = (a: Indexed<E>, b: Indexed<E>): number => Number(a.index - b.index);
+            // 无比较器时按元素值比较；原实现按索引比较，对 toOrdered 的索引序缓冲毫无意义
+            let comparator: Comparator<Indexed<E>> = (a: Indexed<E>, b: Indexed<E>): number => useCompare(a.element, b.element);
             return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
                 try {
                     if (this.complete === true) {
                         if (this.buffer.length > 0) {
-                            resolve(this.buffer.sort(comparator).map((indexed: Indexed<E>): E => indexed.element)[this.buffer.length - 1]);
+                            resolve(this.buffer.slice().sort(comparator).map((indexed: Indexed<E>): E => indexed.element)[this.buffer.length - 1]);
                         }
                     } else {
                         this.listeners.push((buffer: Array<Indexed<E>>): void => {
                             if (buffer.length > 0) {
-                                resolve(this.buffer.sort(comparator).map((indexed: Indexed<E>): E => indexed.element)[this.buffer.length - 1]);
+                                resolve(this.buffer.slice().sort(comparator).map((indexed: Indexed<E>): E => indexed.element)[this.buffer.length - 1]);
                             }
                         });
                     }
@@ -1291,6 +1307,7 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
     public override async findMinimum(): Promise<E>;
     public override async findMinimum(comparator: Comparator<E>): Promise<E>;
     public override async findMinimum(argument1?: Comparator<E>): Promise<E> {
+        await this.settled();
         if (isFunction(argument1)) {
             let comparator: Comparator<E> = argument1;
             return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
@@ -1311,23 +1328,37 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                 }
             });
         } else {
-            let comparator: Comparator<Indexed<E>> = (a: Indexed<E>, b: Indexed<E>): number => Number(a.index - b.index);
+            // 无比较器时按元素值比较；原实现按索引比较，对 toOrdered 的索引序缓冲毫无意义
+            let comparator: Comparator<Indexed<E>> = (a: Indexed<E>, b: Indexed<E>): number => useCompare(a.element, b.element);
             return await new Promise<E>((resolve: Consumer<E>, reject: Consumer<any>): void => {
                 try {
                     if (this.complete === true) {
                         if (this.buffer.length > 0) {
-                            resolve(this.buffer.sort(comparator).map((indexed: Indexed<E>): E => indexed.element)[0]);
+                            resolve(this.buffer.slice().sort(comparator).map((indexed: Indexed<E>): E => indexed.element)[0]);
                         }
                     } else {
                         this.listeners.push((buffer: Array<Indexed<E>>): void => {
                             if (buffer.length > 0) {
-                                resolve(this.buffer.sort(comparator).map((indexed: Indexed<E>): E => indexed.element)[0]);
+                                resolve(this.buffer.slice().sort(comparator).map((indexed: Indexed<E>): E => indexed.element)[0]);
                             }
                         });
                     }
                 } catch (error) {
                     reject(error);
                 }
+            });
+        }
+    }
+
+    /**
+     * 等待收集完成。
+     * 原来 find* 系列在流尚未完成时只注册监听器、不保证 settle，
+     * 遇到空流会永久挂起；这里先等就绪再走统一的“已完成”分支。
+     */
+    protected async settled(): Promise<void> {
+        if (this.complete === false) {
+            await new Promise<void>((resolve: Runnable): void => {
+                this.listeners.push((): void => resolve());
             });
         }
     }
@@ -1346,14 +1377,18 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
                         resolve();
                     } else {
                         this.listeners.push((buffer: Array<Indexed<E>>): void => {
-                            for (let { index, element } of buffer) {
-                                if (interrupt(element, index)) {
-                                    break;
+                            try {
+                                for (let { index, element } of buffer) {
+                                    if (interrupt(element, index)) {
+                                        break;
+                                    }
+                                    accept(element, index);
                                 }
-                                accept(element, index);
+                                resolve();
+                            } catch (error) {
+                                reject(error);
                             }
                         });
-                        resolve();
                     }
                 } catch (error) {
                     reject(error);
@@ -1399,14 +1434,16 @@ export class AsynchronousUnorderedCollectable<E> extends AsynchronousCollectable
         super();
         if (isFunction(argument1)) {
             let generator: AsynchronousGenerator<E> = argument1;
+            let surrogate: bigint = 0n;
             generator((element: E, index: bigint): void => {
-                this.buffer.set(index, element);
+                // 索引重复时改用兜底槽位，避免 Map 键冲突造成静默丢数据
+                let key: bigint = this.buffer.has(index) ? SURROGATE_BASE + (surrogate++) : index;
+                this.buffer.set(key, element);
             }, (): boolean => false).then((): void => {
+                this.complete = true;
                 for (let listener of this.listeners) {
                     listener(this.buffer);
                 }
-                this.complete = true;
-                Object.freeze(this.complete);
                 Object.freeze(this.buffer);
             });
             Object.defineProperties(this, {
@@ -1602,7 +1639,12 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
         }
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
-            return await useAsynchronousBigIntVariance(mapper).collect(this.source());
+            let data: Array<bigint> = (await this.toArray()).map((element: E): bigint => mapper(element));
+            let count: number = data.length;
+            // 直接用浮点计算总体方差：整数除法会把 [1,2,3,4] 的方差 1.25 截断成 3，结果再四舍五入回 bigint
+            let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
+            let variance: number = data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count;
+            return BigInt(Math.round(variance));
         } catch (error) {
             throw error;
         }
@@ -1613,8 +1655,14 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
     public async standardDeviation(argument1?: Functional<E, bigint>): Promise<bigint> {
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
-            let variance: bigint = await this.variance(mapper);
-            return BigInt(Math.sqrt(Number(variance)));
+            let data: Array<bigint> = (await this.toArray()).map((element: E): bigint => mapper(element));
+            let count: number = data.length;
+            if (count === 0) {
+                return 0n;
+            }
+            let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
+            let variance: number = data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count;
+            return BigInt(Math.round(Math.sqrt(variance)));
         } catch (error) {
             throw error;
         }
@@ -1723,18 +1771,17 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
         }
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
-            let mean: bigint = await this.mean(mapper);
-            let standardDeviation: bigint = await this.standardDeviation(mapper);
-            if (standardDeviation === 0n) {
+            let data: Array<bigint> = (await this.toArray()).map((element: E): bigint => mapper(element));
+            let count: number = data.length;
+            // 大整数的 variance / standardDeviation 会被整数化截断（例如 [1,2,3,4] 的方差是 3 而非 1.25），
+            // 这里直接用浮点计算均值与标准差，保证偏度/峰度与数值版语义一致，最后四舍五入回 bigint。
+            let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
+            let deviation: number = Math.sqrt(data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count);
+            if (deviation === 0) {
                 return 0n;
             }
-            let data: Array<bigint> = (await this.toArray()).map((element: E): bigint => mapper(element));
-            let summate: bigint = 0n;
-            for (let value of data) {
-                let z: bigint = value - mean;
-                summate += z * z * z;
-            }
-            return summate / BigInt(data.length);
+            let summate: number = data.reduce((total: number, value: bigint): number => total + Math.pow((Number(value) - mean) / deviation, 3), 0);
+            return BigInt(Math.round(summate / count));
         } catch (error) {
             throw error;
         }
@@ -1748,19 +1795,17 @@ export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, b
         }
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
-            let mean: bigint = await this.mean(mapper);
-            let standardDeviation: bigint = await this.standardDeviation(mapper);
-            if (standardDeviation === 0n) {
+            let data: Array<bigint> = (await this.toArray()).map((element: E): bigint => mapper(element));
+            let count: number = data.length;
+            // 大整数的 variance / standardDeviation 会被整数化截断（例如 [1,2,3,4] 的方差是 3 而非 1.25），
+            // 这里直接用浮点计算均值与标准差，保证偏度/峰度与数值版语义一致，最后四舍五入回 bigint。
+            let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
+            let deviation: number = Math.sqrt(data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count);
+            if (deviation === 0) {
                 return 0n;
             }
-            let data: Array<bigint> = (await this.toArray()).map((element: E): bigint => mapper(element));
-            let summate: bigint = 0n;
-            let count: number = data.length;
-            for (let value of data) {
-                let z: bigint = value - mean;
-                summate += z * z * z * z;
-            }
-            return summate / BigInt(count * count) - 3n;
+            let summate: number = data.reduce((total: number, value: bigint): number => total + Math.pow((Number(value) - mean) / deviation, 4), 0);
+            return BigInt(Math.round(summate / count - 3));
         } catch (error) {
             throw error;
         }
@@ -1992,7 +2037,7 @@ export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, 
                 let z: number = (value - mean) / standardDeviation;
                 summate += Math.pow(z, 4);
             }
-            return summate / (data.length * data.length) - 3;
+            return summate / data.length - 3;
         } catch (error) {
             throw error;
         }
@@ -2027,7 +2072,9 @@ export class AsynchronousWindowCollectable<E> extends AsynchronousOrderedCollect
 
     public slide(size: bigint, step: bigint = 1n): AsynchronousSemantic<AsynchronousSemantic<E>> {
         if (size > 0n && step > 0n) {
-            return new AsynchronousSemantic<AsynchronousSemantic<E>>(async (accepet: Consumer<AsynchronousSemantic<E>> | BiConsumer<AsynchronousSemantic<E>, bigint>, interrupt: Predicate<AsynchronousSemantic<E>> | BiPredicate<AsynchronousSemantic<E>, bigint>): Promise<void> => {
+            return new AsynchronousSemantic<AsynchronousSemantic<E>>(async (accept: Consumer<AsynchronousSemantic<E>> | BiConsumer<AsynchronousSemantic<E>, bigint>, interrupt: Predicate<AsynchronousSemantic<E>> | BiPredicate<AsynchronousSemantic<E>, bigint>): Promise<void> => {
+                // 切窗依赖已收集完成的缓冲区：异步源上必须等收集就绪，否则会切出 0 个窗口
+                await this.settled();
                 return await new Promise<void>((resolve: Runnable, reject: Consumer<any>): void => {
                     try {
                         let index: bigint = 0n;
@@ -2053,7 +2100,7 @@ export class AsynchronousWindowCollectable<E> extends AsynchronousOrderedCollect
                                 reject(new Error("Interrupted."));
                                 break;
                             }
-                            accepet(inner, index);
+                            accept(inner, index);
                             index++;
                         }
                         resolve();

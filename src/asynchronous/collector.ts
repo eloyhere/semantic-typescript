@@ -1,13 +1,13 @@
-import { isFunction, isNumber, isBigInt, isBoolean, isString, isObject, isAsyncIterable, isAsyncFunction } from "../guard";
-import { useCompare, useToBigInt, useToNumber } from "../hook";
-import { Optional } from "../optional";
-import { AsynchronousCollectorSymbol } from "../symbol";
+import { isFunction, isNumber, isBigInt, isBoolean, isString, isObject, isAsyncIterable, isAsyncFunction } from "../guard.js";
+import { useCompare, useToBigInt, useToNumber } from "../hook.js";
+import { Optional } from "../optional.js";
+import { AsynchronousCollectorSymbol } from "../symbol.js";
 import type {
     BiFunctional, BiPredicate, Functional, Predicate, Supplier, TriFunctional, TriPredicate, Consumer, BiConsumer,
     Comparator, AsynchronousGenerator,
-    MaybeInvalid
-} from "../utility";
-import { invalidate, validate } from "../utility";
+    MaybeInvalid, Indexed
+} from "../utility.js";
+import { invalidate, validate } from "../utility.js";
 
 export class AsynchronousCollector<E, A, R> {
 
@@ -489,7 +489,8 @@ export let useAsynchronousNoneMatch: UseAsynchronousNonMatch = <E>(predicate: Pr
             (): boolean => true,
             (_element: E, _index: bigint, accumulator: boolean): boolean => !accumulator,
             (accumulator: boolean, element: E, index: bigint): boolean => accumulator && !predicate(element, index),
-            (accumulator: boolean): boolean => !accumulator
+            // 累加器本身就是 "是否全部不匹配"，不能再取反（原实现导致 nonMatch 结果完全颠倒）
+            (accumulator: boolean): boolean => accumulator
         );
     }
     throw new TypeError("Predicate must be a function.");
@@ -643,12 +644,14 @@ export let useAsynchronousPartition: <E>(count: bigint) => AsynchronousCollector
         return AsynchronousCollector.full(
             (): Array<Array<E>> => {
                 return [];
-            }, (array: Array<Array<E>>, element: E): Array<Array<E>> => {
-                let index: bigint = limited % BigInt(array.length);
-                if (index === 0n) {
+            }, (array: Array<Array<E>>, element: E, index: bigint): Array<Array<E>> => {
+                // 按元素索引轮转分配：等价于 partitionBy((_element, index) => index % count)
+                let resolved: bigint = ((index % limited) + limited) % limited;
+                let bucket: number = Number(resolved);
+                while (array.length <= bucket) {
                     array.push([]);
                 }
-                array[Number(index)].push(element);
+                array[bucket].push(element);
                 return array;
             }, (result: Array<Array<E>>,): Array<Array<E>> => {
                 return result;
@@ -668,10 +671,11 @@ export let useAsynchronousPartitionBy: UseAsynchronousPartitionBy = <E>(classifi
                 return [];
             }, (array: Array<Array<E>>, element: E, index: bigint): Array<Array<E>> => {
                 let resolved: bigint = classifier(element, index);
-                while (resolved > BigInt(array.length) - 1n) {
+                let bucket: number = resolved < 0n ? 0 : Number(resolved);
+                while (array.length <= bucket) {
                     array.push([]);
                 }
-                array[Number(index)].push(element);
+                array[bucket].push(element);
                 return array;
             }, (result: Array<Array<E>>,): Array<Array<E>> => {
                 return result;
@@ -695,12 +699,16 @@ export let useAsynchronousReduce: UseAsynchronousReduce = <E, R>(argument1?: R |
         return AsynchronousCollector.full<E, Promise<E>, Promise<E>>(
             (): Promise<E> => Promise.reject<E>(),
             async (result: Promise<E>, element: E, index: bigint): Promise<E> => {
-                if (validate(result)) {
-                    return result.then((result: E) => {
-                        return accumulator(result, element, index);
-                    });
+                // 初值为 rejected Promise，第一个元素必须成为初值，否则整个 reduce 永远失败
+                let initialized: boolean = false;
+                let previous: E = await result.catch((): E => {
+                    initialized = true;
+                    return element;
+                });
+                if (initialized) {
+                    return element;
                 }
-                return Promise.reject<E>();
+                return accumulator(previous, element, index);
             },
             (result: Promise<E>): Promise<E> => result
         );
@@ -726,6 +734,24 @@ export let useAsynchronousToArray: <E>() => AsynchronousCollector<E, E[], E[]> =
             return array;
         },
         (array: E[]): E[] => array
+    );
+};
+
+/**
+ * 保留元素真实索引的数组收集器，供 toOrdered / toUnordered 使用，
+ * 避免用数组下标伪造索引（原实现会丢失 redirect / reverse / translate 的效果）。
+ */
+export let useAsynchronousToIndexedArray: <E>() => AsynchronousCollector<E, Array<Indexed<E>>, Array<Indexed<E>>> = <E>(): AsynchronousCollector<E, Array<Indexed<E>>, Array<Indexed<E>>> => {
+    return AsynchronousCollector.full<E, Array<Indexed<E>>, Array<Indexed<E>>>(
+        (): Array<Indexed<E>> => [],
+        (array: Array<Indexed<E>>, element: E, index: bigint): Array<Indexed<E>> => {
+            array.push({
+                element: element,
+                index: index
+            });
+            return array;
+        },
+        (array: Array<Indexed<E>>): Array<Indexed<E>> => array
     );
 };
 
@@ -1113,7 +1139,8 @@ export let useAsynchronousBigIntStandardDeviation: UseAsynchronousBigIntStandard
             }
             let mean: bigint = result.summate / result.count;
             let variance: bigint = (result.summateOfSquares / result.count) - (mean * mean);
-            let standardDeviation: bigint = BigInt(Math.sqrt(Number(variance)));
+            // 标准差通常不是整数，必须取整后再转 BigInt，否则会抛 RangeError
+            let standardDeviation: bigint = BigInt(Math.round(Math.sqrt(Number(variance))));
             return standardDeviation;
         }
     ) as AsynchronousCollector<bigint, BigIntStandardDeviationAccumulator, bigint> | AsynchronousCollector<E, BigIntStandardDeviationAccumulator, bigint>;

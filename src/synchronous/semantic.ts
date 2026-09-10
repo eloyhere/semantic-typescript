@@ -3,21 +3,20 @@ import {
     useSynchronousFindFirst, useSynchronousFindLast, useSynchronousFindMaximum, useSynchronousFindMinimum, useSynchronousForEach, useSynchronousGroup, useSynchronousGroupBy,
     useSynchronousJoin, useSynchronousLog, useSynchronousNoneMatch, useSynchronousPartition, useSynchronousPartitionBy, useSynchronousReduce, useSynchronousToArray,
     useSynchronousToMap, useSynchronousToSet, useSynchronousWrite, useSynchronousFrequency, useSynchronousBigIntAverage, useSynchronousBigIntMedian, useSynchronousBigIntMode,
-    useSynchronousBigIntSummate, useSynchronousBigIntVariance, useSynchronousNumericAverage, useSynchronousNumericMedian, useSynchronousNumericMode,
+    useSynchronousBigIntSummate, useSynchronousNumericAverage, useSynchronousNumericMedian, useSynchronousNumericMode,
     useSynchronousNumericStandardDeviation, useSynchronousNumericSummate, useSynchronousNumericVariance,
-    useSynchronousFindNegativeAt
-} from "./collector";
-import { isFunction, isSynchronousSemantic, isIterable, isNumber, isBigInt, isObject, isString, isSynchronousCollectable, isSynchronousCollector } from "../guard";
-import { useHash } from "../hash";
-import { useCompare, useToBigInt, useToNumber } from "../hook";
+    useSynchronousFindNegativeAt, useSynchronousToIndexedArray
+} from "./collector.js";
+import { isFunction, isSynchronousSemantic, isIterable, isNumber, isBigInt, isObject, isString, isSynchronousCollectable, isSynchronousCollector } from "../guard.js";
+import { useCompare, useRandom, useToBigInt, useToNumber } from "../hook.js";
 import {
     SynchronousOrderedCollectableSymbol, SynchronousBigIntStatisticsSymbol, SynchronousCollectableSymbol, SynchronousNumericStatisticsSymbol, SynchronousSemanticSymbol,
     SynchronousWindowCollectableSymbol, SynchronousUnorderedCollectableSymbol, SynchronousStatisticsSymbol
-} from "../symbol";
+} from "../symbol.js";
 import { invalidate, validate, type BiConsumer, type BiFunctional, type BiPredicate, type Comparator, type Consumer, type Functional, type Indexed, type Predicate, 
-    type Supplier, type SynchronousGenerator, type TriFunctional, type TriPredicate } from "../utility";
-import { SynchronousCollector } from "./collector";
-import type { Optional } from "../optional";
+    type Supplier, type SynchronousGenerator, type TriFunctional, type TriPredicate } from "../utility.js";
+import { SynchronousCollector } from "./collector.js";
+import type { Optional } from "../optional.js";
 
 export class SynchronousSemantic<E> {
 
@@ -346,8 +345,9 @@ export class SynchronousSemantic<E> {
         }
         return new SynchronousSemantic<E>((accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): void => {
             try {
-                this.generator((element: E, index: bigint): void => {
-                    accept(element, useHash(element, index));
+                this.generator((element: E, _index: bigint): void => {
+                    // 用每次调用都不同的随机索引实现真正的洗牌（原实现按元素哈希，结果恒定）
+                    accept(element, useRandom(0n, SHUFFLE_BOUND));
                 }, interrupt);
             } catch (error) {
                 throw error;
@@ -412,10 +412,11 @@ export class SynchronousSemantic<E> {
                     let minimum: bigint = resolvedStart < resolvedEnd ? resolvedStart : resolvedEnd;
                     let maximum: bigint = resolvedStart < resolvedEnd ? resolvedEnd : resolvedStart;
                     this.generator((element: E, index: bigint): void => {
+                        // count 统计上游第几个元素（不能只在 accept 分支自增，否则条件永远不成立）
                         if (minimum <= count && count < maximum) {
                             accept(element, index);
-                            count++;
                         }
+                        count++;
                     }, (element: E, index: bigint): boolean => count >= maximum || interrupt(element, index));
                 } catch (error) {
                     throw error;
@@ -480,8 +481,14 @@ export class SynchronousSemantic<E> {
         }
     }
 
-    public toOrdered(): SynchronousOrderedCollectable<E> {
+    public toOrdered(): SynchronousOrderedCollectable<E>;
+    public toOrdered(comparator: Comparator<E>): SynchronousOrderedCollectable<E>;
+    public toOrdered(comparator?: Comparator<E>): SynchronousOrderedCollectable<E> {
         try {
+            // 传入比较器时按值排序并重排索引（统计类强依赖该语义）；否则按元素真实索引排序
+            if (isFunction(comparator)) {
+                return new SynchronousOrderedCollectable(this.generator, comparator);
+            }
             return new SynchronousOrderedCollectable(this.generator);
         } catch (error) {
             throw error;
@@ -508,24 +515,30 @@ export class SynchronousSemantic<E> {
     public translate(offset: bigint): SynchronousSemantic<E>;
     public translate(translator: BiFunctional<E, bigint, bigint>): SynchronousSemantic<E>;
     public translate(argument1: number | bigint | BiFunctional<E, bigint, bigint>): SynchronousSemantic<E> {
-        if (isNumber(argument1)) {
-            let offset: number = argument1;
+        if (isNumber(argument1) || isBigInt(argument1)) {
+            let offset: bigint = useToBigInt(argument1);
+            // README 示例 5 的语义是循环平移（正数右旋、负数左旋），而循环平移必须知道流长度，
+            // 因此数值重载会先物化整条流，再按 (position + offset) mod n 分配索引；
+            // 函数式重载保持逐元素映射，仍是惰性的。
             return new SynchronousSemantic<E>((accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): void => {
                 try {
-                    this.generator((element: E, index: bigint): void => {
-                        accept(element, index + BigInt(offset));
-                    }, interrupt);
-                } catch (error) {
-                    throw error;
-                }
-            });
-        } else if (isBigInt(argument1)) {
-            let offset: bigint = argument1;
-            return new SynchronousSemantic<E>((accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): void => {
-                try {
-                    this.generator((element: E, index: bigint): void => {
-                        accept(element, index + offset);
-                    }, interrupt);
+                    let elements: Array<E> = [];
+                    this.generator((element: E): void => {
+                        elements.push(element);
+                    }, (): boolean => false);
+                    let count: bigint = BigInt(elements.length);
+                    if (count === 0n) {
+                        return;
+                    }
+                    let normalized: bigint = ((offset % count) + count) % count;
+                    for (let position: number = 0; position < elements.length; position++) {
+                        let element: E = elements[position];
+                        let index: bigint = (BigInt(position) + normalized) % count;
+                        if (interrupt(element, index)) {
+                            break;
+                        }
+                        accept(element, index);
+                    }
                 } catch (error) {
                     throw error;
                 }
@@ -1000,6 +1013,15 @@ export abstract class SynchronousCollectable<E> implements Iterable<E> {
     }
 };
 
+/**
+ * 无序收集器在遇到重复索引时使用的兜底键起点。
+ * 取一个远离常规索引（0、负数、哈希值通常远小于 2^96）的高位区间，保证不会与真实索引相撞。
+ */
+const SURROGATE_BASE: bigint = 1n << 96n;
+
+/** shuffle 使用的随机索引上界（62 位随机空间，碰撞概率可忽略）。 */
+const SHUFFLE_BOUND: bigint = 1n << 62n;
+
 export class SynchronousOrderedCollectable<E> extends SynchronousCollectable<E> {
 
     protected readonly OrderedCollectable: symbol = SynchronousOrderedCollectableSymbol;
@@ -1014,29 +1036,24 @@ export class SynchronousOrderedCollectable<E> extends SynchronousCollectable<E> 
         super();
         if (isFunction(argument1)) {
             try {
+                let collector: SynchronousCollector<E, Array<Indexed<E>>, Array<Indexed<E>>> = useSynchronousToIndexedArray();
+                let indexed: Array<Indexed<E>> = collector.collect(argument1);
                 if (isFunction(argument2)) {
-                    let collector: SynchronousCollector<E, Array<E>, Array<E>> = useSynchronousToArray();
-                    let generator: SynchronousGenerator<E> = argument1;
+                    // 显式比较器：按值排序，索引重建为顺序位（统计类依赖该语义）
                     let comparator: Comparator<E> = argument2;
-                    this.buffer = collector.collect(generator).sort(comparator).map((element: E, index: number): Indexed<E> => {
+                    this.buffer = indexed.slice().sort((a: Indexed<E>, b: Indexed<E>): number => {
+                        return comparator(a.element, b.element);
+                    }).map((entry: Indexed<E>, index: number): Indexed<E> => {
                         return {
-                            element: element,
+                            element: entry.element,
                             index: BigInt(index)
                         };
                     });
-                    Object.freeze(this.buffer);
                 } else {
-                    let collector: SynchronousCollector<E, Array<E>, Array<E>> = useSynchronousToArray();
-                    let generator: SynchronousGenerator<E> = argument1;
-                    this.buffer = collector.collect(generator).map((element: E, index: number, array: Array<E>): Indexed<E> => {
-                        return {
-                            element: element,
-                            index: BigInt(((index % array.length) + array.length) % array.length)
-                        };
-                    }).sort((a: Indexed<E>, b: Indexed<E>): number => {
+                    // 默认：按元素携带的真实索引排序，保留 redirect / reverse / translate 的效果
+                    this.buffer = indexed.sort((a: Indexed<E>, b: Indexed<E>): number => {
                         return Number(a.index - b.index);
                     });
-                    Object.freeze(this.buffer);
                 }
                 Object.defineProperties(this, {
                     "SynchronousOrderedCollectable": {
@@ -1053,7 +1070,7 @@ export class SynchronousOrderedCollectable<E> extends SynchronousCollectable<E> 
                     }
                 });
             } catch (error) {
-                throw new Error("Uncaught error on creating buffer.");
+                throw new Error(`Uncaught error on creating buffer: ${String(error)}`);
             }
         } else {
             throw new TypeError("Source must be an iterable or a generator function.");
@@ -1111,8 +1128,11 @@ export class SynchronousUnorderedCollectable<E> extends SynchronousCollectable<E
         super();
         if (isFunction(argument1)) {
             let generator: SynchronousGenerator<E> = argument1;
+            let surrogate: bigint = 0n;
             generator((element: E, index: bigint): void => {
-                this.buffer.set(index, element);
+                // 索引重复时改用兜底槽位，避免 Map 键冲突造成静默丢数据
+                let key: bigint = this.buffer.has(index) ? SURROGATE_BASE + (surrogate++) : index;
+                this.buffer.set(key, element);
             }, (): boolean => false);
             Object.freeze(this.buffer);
             Object.defineProperties(this, {
@@ -1283,7 +1303,12 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
         }
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
-            return useSynchronousBigIntVariance(mapper).collect(this.source());
+            let data: Array<bigint> = (this.toArray()).map((element: E): bigint => mapper(element));
+            let count: number = data.length;
+            // 直接用浮点计算总体方差：整数除法会把 [1,2,3,4] 的方差 1.25 截断成 3，结果再四舍五入回 bigint
+            let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
+            let variance: number = data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count;
+            return BigInt(Math.round(variance));
         } catch (error) {
             throw new Error("Uncaught error on variance.");
         }
@@ -1294,8 +1319,15 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
     public standardDeviation(argument1?: Functional<E, bigint>): bigint {
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
-            let variance: bigint = this.variance(mapper);
-            return BigInt(Math.sqrt(Number(variance)));
+            let data: Array<bigint> = (this.toArray()).map((element: E): bigint => mapper(element));
+            let count: number = data.length;
+            if (count === 0) {
+                return 0n;
+            }
+            let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
+            let variance: number = data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count;
+            // 标准差通常不是整数，取整后转 BigInt（同时避免 sqrt 结果非整数导致 RangeError）
+            return BigInt(Math.round(Math.sqrt(variance)));
         } catch (error) {
             throw new Error("Uncaught error on standardDeviation.");
         }
@@ -1403,18 +1435,17 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
         }
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
-            let mean: bigint = this.mean(mapper);
-            let standardDeviation: bigint = this.standardDeviation(mapper);
-            if (standardDeviation === 0n) {
+            let data: Array<bigint> = (this.toArray()).map((element: E): bigint => mapper(element));
+            let count: number = data.length;
+            // 大整数的 variance / standardDeviation 会被整数化截断（例如 [1,2,3,4] 的方差是 3 而非 1.25），
+            // 这里直接用浮点计算均值与标准差，保证偏度/峰度与数值版语义一致，最后四舍五入回 bigint。
+            let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
+            let deviation: number = Math.sqrt(data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count);
+            if (deviation === 0) {
                 return 0n;
             }
-            let data: Array<bigint> = (this.toArray()).map((element: E): bigint => mapper(element));
-            let summate: bigint = 0n;
-            for (let value of data) {
-                let z: bigint = value - mean;
-                summate += z * z * z;
-            }
-            return summate / BigInt(data.length);
+            let summate: number = data.reduce((total: number, value: bigint): number => total + Math.pow((Number(value) - mean) / deviation, 3), 0);
+            return BigInt(Math.round(summate / count));
         } catch (error) {
             throw new Error("Uncaught error on skewness.");
         }
@@ -1428,19 +1459,17 @@ export class SynchronousBigIntStatistics<E> extends SynchronousStatistics<E, big
         }
         try {
             let mapper: Functional<E, bigint> = isFunction(argument1) ? argument1 : useToBigInt;
-            let mean: bigint = this.mean(mapper);
-            let standardDeviation: bigint = this.standardDeviation(mapper);
-            if (standardDeviation === 0n) {
+            let data: Array<bigint> = (this.toArray()).map((element: E): bigint => mapper(element));
+            let count: number = data.length;
+            // 大整数的 variance / standardDeviation 会被整数化截断（例如 [1,2,3,4] 的方差是 3 而非 1.25），
+            // 这里直接用浮点计算均值与标准差，保证偏度/峰度与数值版语义一致，最后四舍五入回 bigint。
+            let mean: number = data.reduce((total: number, value: bigint): number => total + Number(value), 0) / count;
+            let deviation: number = Math.sqrt(data.reduce((total: number, value: bigint): number => total + Math.pow(Number(value) - mean, 2), 0) / count);
+            if (deviation === 0) {
                 return 0n;
             }
-            let data: Array<bigint> = (this.toArray()).map((element: E): bigint => mapper(element));
-            let summate: bigint = 0n;
-            let count: number = data.length;
-            for (let value of data) {
-                let z: bigint = value - mean;
-                summate += z * z * z * z;
-            }
-            return summate / BigInt(count * count) - 3n;
+            let summate: number = data.reduce((total: number, value: bigint): number => total + Math.pow((Number(value) - mean) / deviation, 4), 0);
+            return BigInt(Math.round(summate / count - 3));
         } catch (error) {
             throw new Error("Uncaught error on kurtosis.");
         }
@@ -1676,7 +1705,7 @@ export class SynchronousNumericStatistics<E> extends SynchronousStatistics<E, nu
                 let z: number = (value - mean) / standardDeviation;
                 summate += Math.pow(z, 4);
             }
-            return summate / (data.length * data.length) - 3;
+            return summate / data.length - 3;
         } catch (error) {
             throw new Error("Uncaught error on kurtosis.");
         }

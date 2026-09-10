@@ -20,11 +20,11 @@ export let AsynchronousWindowCollectableSymbol: symbol = Symbol.for("Asynchronou
 export let SynchronousWindowCollectableSymbol: symbol = Symbol.for("SynchronousWindowCollectable");
 
 export let AsynchronousStatisticsSymbol: symbol = Symbol.for("AsynchronousStatistics");
-export let SynchronousStatisticsSymbol: symbol = Symbol.for("AsynchronousStatistics");
+export let SynchronousStatisticsSymbol: symbol = Symbol.for("SynchronousStatistics");
 
 export let AsynchronousNumericStatisticsSymbol: symbol = Symbol.for("AsynchronousNumericStatistics");
-export let SynchronousNumericStatisticsSymbol: symbol = Symbol.for("SynchronousNumericStatisticsSymbol");
+export let SynchronousNumericStatisticsSymbol: symbol = Symbol.for("SynchronousNumericStatistics");
 
 
 export let AsynchronousBigIntStatisticsSymbol: symbol = Symbol.for("AsynchronousBigIntStatistics");
-export let SynchronousBigIntStatisticsSymbol: symbol = Symbol.for("SynchronousBigIntStatisticsSymbol");
+export let SynchronousBigIntStatisticsSymbol: symbol = Symbol.for("SynchronousBigIntStatistics");

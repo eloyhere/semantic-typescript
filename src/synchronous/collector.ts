@@ -1,10 +1,10 @@
 
-import { isFunction, isNumber, isBigInt, isBoolean, isString, isObject, isAsyncFunction, isIterable } from "../guard";
-import { useCompare, useToBigInt, useToNumber } from "../hook";
-import { Optional } from "../optional";
-import { SynchronousCollectorSymbol } from "../symbol";
-import type { BiFunctional, BiPredicate, Functional, Predicate, Supplier, TriFunctional, TriPredicate, Consumer, BiConsumer, Comparator, SynchronousGenerator, MaybeInvalid } from "../utility";
-import { invalidate, validate } from "../utility";
+import { isFunction, isNumber, isBigInt, isBoolean, isString, isObject, isAsyncFunction, isIterable } from "../guard.js";
+import { useCompare, useToBigInt, useToNumber } from "../hook.js";
+import { Optional } from "../optional.js";
+import { SynchronousCollectorSymbol } from "../symbol.js";
+import type { BiFunctional, BiPredicate, Functional, Predicate, Supplier, TriFunctional, TriPredicate, Consumer, BiConsumer, Comparator, SynchronousGenerator, MaybeInvalid, Indexed } from "../utility.js";
+import { invalidate, validate } from "../utility.js";
 
 export class SynchronousCollector<E, A, R> {
 
@@ -344,12 +344,12 @@ export let useSynchronousFindNegativeAt: UseSynchronousFindNegativeAt = <E>(inde
 export let useSynchronousFindFirst: <E>() => SynchronousCollector<E, Optional<E>, Optional<E>> = <E>(): SynchronousCollector<E, Optional<E>, Optional<E>> => {
     return SynchronousCollector.shortable(
         (): Optional<E> => Optional.empty<E>(),
-        (_element: E, _index: bigint, accumulator: Optional<E>): boolean => validate(accumulator) && accumulator.isPresent(),
+        (_element: E, _index: bigint, accumulator: Optional<E>): boolean => accumulator.isPresent(),
         (accumulator: Optional<E>, element: E): Optional<E> => {
-            if (validate(accumulator) && accumulator.isPresent() && validate(element)) {
-                return Optional.of(element);
+            if (accumulator.isPresent() || invalidate(element)) {
+                return accumulator;
             }
-            return accumulator;
+            return Optional.of(element);
         },
         (result: Optional<E>): Optional<E> => result);
 };
@@ -357,12 +357,12 @@ export let useSynchronousFindFirst: <E>() => SynchronousCollector<E, Optional<E>
 export let useSynchronousFindAny: <E>() => SynchronousCollector<E, Optional<E>, Optional<E>> = <E>(): SynchronousCollector<E, Optional<E>, Optional<E>> => {
     return SynchronousCollector.shortable(
         (): Optional<E> => Optional.empty<E>(),
-        (_element: E, _index: bigint, accumulator: Optional<E>): boolean => validate(accumulator) && accumulator.isPresent(),
+        (_element: E, _index: bigint, accumulator: Optional<E>): boolean => accumulator.isPresent(),
         (accumulator: Optional<E>, element: E): Optional<E> => {
-            if (validate(accumulator) && accumulator.isPresent() && validate(element) && Math.random() < 0.5) {
-                return Optional.of(element);
+            if (accumulator.isPresent() || invalidate(element)) {
+                return accumulator;
             }
-            return accumulator;
+            return Optional.of(element);
         },
         (result: Optional<E>): Optional<E> => result);
 };
@@ -371,10 +371,10 @@ export let useSynchronousFindLast: <E>() => SynchronousCollector<E, Optional<E>,
     return SynchronousCollector.full(
         (): Optional<E> => Optional.empty<E>(),
         (accumulator: Optional<E>, element: E): Optional<E> => {
-            if (validate(accumulator) && accumulator.isPresent() && validate(element)) {
-                return Optional.of(element);
+            if (invalidate(element)) {
+                return accumulator;
             }
-            return accumulator;
+            return Optional.of(element);
         },
         (result: Optional<E>): Optional<E> => result);
 };
@@ -388,12 +388,15 @@ export let useSynchronousFindMaximum: UseSynchronousFindMaximum = <E>(comparator
         return SynchronousCollector.full(
             (): Optional<E> => Optional.empty<E>(),
             (accumulator: Optional<E>, element: E): Optional<E> => {
-                if (validate(accumulator) && accumulator.isPresent()) {
-                    return accumulator.map((previous: E): E => {
-                        return comparator(previous, element) > 0 ? previous : element;
-                    });
+                if (invalidate(element)) {
+                    return accumulator;
                 }
-                return accumulator;
+                if (!accumulator.isPresent()) {
+                    return Optional.of(element);
+                }
+                return accumulator.map((previous: E): E => {
+                    return comparator(previous, element) >= 0 ? previous : element;
+                });
             },
             (result: Optional<E>): Optional<E> => result);
     }
@@ -409,12 +412,15 @@ export let useSynchronousFindMinimum: UseSynchronousFindMinimum = <E>(comparator
         return SynchronousCollector.full(
             (): Optional<E> => Optional.empty<E>(),
             (accumulator: Optional<E>, element: E): Optional<E> => {
-                if (validate(accumulator) && accumulator.isPresent()) {
-                    return accumulator.map((previous: E): E => {
-                        return comparator(previous, element) < 0 ? previous : element;
-                    });
+                if (invalidate(element)) {
+                    return accumulator;
                 }
-                return accumulator;
+                if (!accumulator.isPresent()) {
+                    return Optional.of(element);
+                }
+                return accumulator.map((previous: E): E => {
+                    return comparator(previous, element) <= 0 ? previous : element;
+                });
             },
             (result: Optional<E>): Optional<E> => result);
     }
@@ -449,7 +455,8 @@ export let useSynchronousNoneMatch: UseSynchronousNonMatch = <E>(predicate: Pred
             (): boolean => true,
             (_element: E, _index: bigint, accumulator: boolean): boolean => !accumulator,
             (accumulator: boolean, element: E, index: bigint): boolean => accumulator && !predicate(element, index),
-            (accumulator: boolean): boolean => !accumulator
+            // 累加器本身就是 "是否全部不匹配"，不能再取反（原实现导致 nonMatch 结果完全颠倒）
+            (accumulator: boolean): boolean => accumulator
         );
     }
     throw new TypeError("Predicate must be a function.");
@@ -599,16 +606,18 @@ export let useSynchronousLog: UseSynchronousLog = <E = unknown>(argument1?: stri
 
 export let useSynchronousPartition: <E>(count: bigint) => SynchronousCollector<E, Array<Array<E>>, Array<Array<E>>> = <E>(count: bigint): SynchronousCollector<E, Array<Array<E>>, Array<Array<E>>> => {
     if (isBigInt(count)) {
-        let limited = count > 1n ? count : 1n;
+        let limited: bigint = count > 0n ? count : 1n;
         return SynchronousCollector.full(
             (): Array<Array<E>> => {
                 return [];
-            }, (array: Array<Array<E>>, element: E): Array<Array<E>> => {
-                let index: bigint = limited % BigInt(array.length);
-                if (index === 0n) {
+            }, (array: Array<Array<E>>, element: E, index: bigint): Array<Array<E>> => {
+                // 按元素索引轮转分配：等价于 partitionBy((_element, index) => index % count)
+                let resolved: bigint = ((index % limited) + limited) % limited;
+                let bucket: number = Number(resolved);
+                while (array.length <= bucket) {
                     array.push([]);
                 }
-                array[Number(index)].push(element);
+                array[bucket].push(element);
                 return array;
             }, (result: Array<Array<E>>,): Array<Array<E>> => {
                 return result;
@@ -628,10 +637,11 @@ export let useSynchronousPartitionBy: UseSynchronousPartitionBy = <E>(classifier
                 return [];
             }, (array: Array<Array<E>>, element: E, index: bigint): Array<Array<E>> => {
                 let resolved: bigint = classifier(element, index);
-                while (resolved > BigInt(array.length) - 1n) {
+                let bucket: number = resolved < 0n ? 0 : Number(resolved);
+                while (array.length <= bucket) {
                     array.push([]);
                 }
-                array[Number(index)].push(element);
+                array[bucket].push(element);
                 return array;
             }, (result: Array<Array<E>>,): Array<Array<E>> => {
                 return result;
@@ -655,10 +665,13 @@ export let useSynchronousReduce: UseSynchronousReduce = <E, R>(argument1?: R | E
         return SynchronousCollector.full<E, Optional<E>, Optional<E>>(
             (): Optional<E> => Optional.empty<E>(),
             (result: Optional<E>, element: E, index: bigint): Optional<E> => {
-                if (validate(result) && result.isPresent()) {
+                if (result.isPresent()) {
                     return result.map((previous: E): E => accumulator(previous, element, index));
                 }
-                return result;
+                if (invalidate(element)) {
+                    return result;
+                }
+                return Optional.of(element);
             },
             (result: Optional<E>): Optional<E> => result
         );
@@ -684,6 +697,24 @@ export let useSynchronousToArray: <E>() => SynchronousCollector<E, E[], E[]> = <
             return array;
         },
         (array: E[]): E[] => array
+    );
+};
+
+/**
+ * 保留元素真实索引的数组收集器。
+ * toOrdered / toUnordered 依赖它，避免用数组下标伪造索引（原实现丢失 redirect/reverse/translate 的效果）。
+ */
+export let useSynchronousToIndexedArray: <E>() => SynchronousCollector<E, Array<Indexed<E>>, Array<Indexed<E>>> = <E>(): SynchronousCollector<E, Array<Indexed<E>>, Array<Indexed<E>>> => {
+    return SynchronousCollector.full<E, Array<Indexed<E>>, Array<Indexed<E>>>(
+        (): Array<Indexed<E>> => [],
+        (array: Array<Indexed<E>>, element: E, index: bigint): Array<Indexed<E>> => {
+            array.push({
+                element: element,
+                index: index
+            });
+            return array;
+        },
+        (array: Array<Indexed<E>>): Array<Indexed<E>> => array
     );
 };
 
@@ -1071,7 +1102,8 @@ export let useSynchronousBigIntStandardDeviation: UseSynchronousBigIntStandardDe
             }
             let mean: bigint = result.summate / result.count;
             let variance: bigint = (result.summateOfSquares / result.count) - (mean * mean);
-            let standardDeviation: bigint = BigInt(Math.sqrt(Number(variance)));
+            // 整数开方需要取整，否则 BigInt() 会因小数抛 RangeError
+            let standardDeviation: bigint = BigInt(Math.round(Math.sqrt(Number(variance))));
             return standardDeviation;
         }
     ) as SynchronousCollector<bigint, BigIntStandardDeviationAccumulator, bigint> | SynchronousCollector<E, BigIntStandardDeviationAccumulator, bigint>;

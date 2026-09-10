@@ -1,8 +1,8 @@
-import { useEmpty, useOf } from "./factory";
-import { isFunction, isOptional } from "./guard";
-import { OptionalSymbol } from "./symbol";
-import type { SynchronousSemantic } from "./synchronous/semantic";
-import { invalidate, validate, type Consumer, type Functional, type MaybeInvalid, type Predicate, type Runnable, type Valid } from "./utility";
+import { useEmpty, useOf } from "./factory.js";
+import { isFunction, isOptional } from "./guard.js";
+import { OptionalSymbol } from "./symbol.js";
+import type { SynchronousSemantic } from "./synchronous/semantic.js";
+import { invalidate, validate, type Consumer, type Functional, type MaybeInvalid, type Predicate, type Runnable, type Valid } from "./utility.js";
 
 export class Optional<T> {
 

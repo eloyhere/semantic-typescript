@@ -1,6 +1,6 @@
-import { isBigInt, isBoolean, isFunction, isNumber, isObject, isString, isSymbol } from "./guard";
-import { useTraverse, type UseTraverseKey, type UseTraversePath, type UseTraverseValue } from "./hook";
-import { typeOf, type DeepPropertyKey, type DeepPropertyValue, type Primitive, type Type } from "./utility";
+import { isBigInt, isBoolean, isFunction, isNumber, isObject, isString, isSymbol } from "./guard.js";
+import { useTraverse, type UseTraverseKey, type UseTraversePath, type UseTraverseValue } from "./hook.js";
+import { typeOf, type DeepPropertyKey, type DeepPropertyValue, type Primitive, type Type } from "./utility.js";
 
 const masks: Map<Type, bigint> = new Map<Type, bigint>();
 masks.set("undefined", BigInt(masks.size));
@@ -19,6 +19,9 @@ export let maskOf: (type: Type) => bigint = (type: Type): bigint => {
 
 let primitive: Map<Primitive, bigint> = new Map<Primitive, bigint>();
 let complex: WeakMap<object, bigint> = new WeakMap<object, bigint>();
+
+/** 原始值缓存是无上限的模块级 Map，长跑进程会持续增长，达到阈值后整体清空。 */
+const PRIMITIVE_CACHE_LIMIT: number = 100_000;
 
 interface Handler<T> {
     (value: T): bigint;
@@ -178,14 +181,10 @@ register("object", (value: object): bigint => {
                 let valueHashHandler: Handler<DeepPropertyValue<object>> = handlers.get(typeOf(value)) as Handler<DeepPropertyValue<object>>;
                 let valueHash: bigint = valueHashHandler ? valueHashHandler(value) : 0n;
                 let pathHash: bigint = 0n;
-                if (complex.has(path)) {
-                    pathHash = complex.get(path) || 0n;
-                } else {
-                    for (let p of path) {
-                        let pathHashHandler: Handler<unknown> = handlers.get(typeOf(p)) as Handler<unknown>;
-                        pathHash = (((pathHash << 5n) - pathHash) ^ (pathHashHandler ? pathHashHandler(p) : 0n)) & bit;
-                    }
-                    complex.set(path, pathHash);
+                // path 数组会被 useTraverse 复用（push/pop），不能按引用缓存，必须每次重算
+                for (let p of path) {
+                    let pathHashHandler: Handler<unknown> = handlers.get(typeOf(p)) as Handler<unknown>;
+                    pathHash = (((pathHash << 5n) - pathHash) ^ (pathHashHandler ? pathHashHandler(p) : 0n)) & bit;
                 }
                 result = (((result << 13n) | (result >> 51n)) ^ (keyHash * 0x243F6A8885A308D3n) ^ (valueHash * 0x517CC1B727220A95n) ^ (pathHash * 0x9E3779B97F4A7C15n)) & bit;
                 return true;
@@ -206,6 +205,9 @@ interface UseHash {
     (...value: Array<unknown>): bigint;
 };
 export let useHash: UseHash = <T = unknown>(...value: Array<T>): bigint => {
+    if (primitive.size >= PRIMITIVE_CACHE_LIMIT) {
+        primitive.clear();
+    }
     let target: unknown = value.length === 1 ? value[0] : value;
     let type: Type = typeOf(target);
     let handler: Handler<unknown> | undefined = handlers.get(type);

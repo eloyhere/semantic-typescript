@@ -1,20 +1,20 @@
-import type { AsynchronousCollector } from "./asynchronous/collector";
+import type { AsynchronousCollector } from "./asynchronous/collector.js";
 import type {
     AsynchronousBigIntStatistics, AsynchronousNumericStatistics, AsynchronousOrderedCollectable, AsynchronousSemantic,
     AsynchronousStatistics, AsynchronousUnorderedCollectable, AsynchronousWindowCollectable
-} from "./asynchronous/semantic";
-import type { Optional } from "./optional";
+} from "./asynchronous/semantic.js";
+import type { Optional } from "./optional.js";
 import {
     AsynchronousBigIntStatisticsSymbol, AsynchronousCollectorSymbol, AsynchronousNumericStatisticsSymbol, AsynchronousOrderedCollectableSymbol, AsynchronousSemanticSymbol, AsynchronousStatisticsSymbol,
     AsynchronousUnorderedCollectableSymbol, AsynchronousWindowCollectableSymbol, OptionalSymbol, SynchronousBigIntStatisticsSymbol, SynchronousCollectorSymbol, SynchronousNumericStatisticsSymbol,
     SynchronousOrderedCollectableSymbol, SynchronousSemanticSymbol, SynchronousStatisticsSymbol, SynchronousUnorderedCollectableSymbol, SynchronousWindowCollectableSymbol
-} from "./symbol";
-import type { SynchronousCollector } from "./synchronous/collector";
+} from "./symbol.js";
+import type { SynchronousCollector } from "./synchronous/collector.js";
 import type {
     SynchronousBigIntStatistics, SynchronousNumericStatistics, SynchronousOrderedCollectable, SynchronousSemantic, SynchronousStatistics, SynchronousUnorderedCollectable,
     SynchronousWindowCollectable
-} from "./synchronous/semantic";
-import type { AsyncFunction, MaybePrimitive, Primitive } from "./utility";
+} from "./synchronous/semantic.js";
+import type { AsyncFunction, MaybePrimitive, Primitive } from "./utility.js";
 
 export let isBoolean: (target: unknown) => target is boolean = (target: unknown): target is boolean => {
     return typeof target === "boolean";
@@ -135,13 +135,13 @@ export let isSynchronousBigIntStatistics: (target: unknown) => target is Synchro
 
 export let isAsynchronousNumericStatistics: (target: unknown) => target is AsynchronousNumericStatistics<unknown> = (target: unknown): target is AsynchronousNumericStatistics<unknown> => {
     if (isObject(target)) {
-        return Reflect.get(target, "AsynchronousBigIntStatistics") === AsynchronousNumericStatisticsSymbol;
+        return Reflect.get(target, "AsynchronousNumericStatistics") === AsynchronousNumericStatisticsSymbol;
     }
     return false;
 };
 export let isSynchronousNumericStatistics: (target: unknown) => target is SynchronousNumericStatistics<unknown> = (target: unknown): target is SynchronousNumericStatistics<unknown> => {
     if (isObject(target)) {
-        return Reflect.get(target, "AsynchronousNumericStatistics") === SynchronousNumericStatisticsSymbol;
+        return Reflect.get(target, "SynchronousNumericStatistics") === SynchronousNumericStatisticsSymbol;
     }
     return false;
 };

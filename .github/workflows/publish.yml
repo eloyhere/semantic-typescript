@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   build-and-publish:
@@ -11,18 +12,28 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
-        node-version: 18
+        node-version: 20
         registry-url: 'https://registry.npmjs.org'
+        cache: npm
 
     - name: Install dependencies
-      run: npm install
+      run: npm ci
 
-    - name: Publish to npm
-      run: npm publish
+    - name: Build and run tests
+      run: npm test
+
+    - name: Publish to npm (skip if the version already exists)
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      run: |
+        VERSION=$(node -p "require('./package.json').version")
+        if npm view "semantic-typescript@${VERSION}" version >/dev/null 2>&1; then
+          echo "semantic-typescript@${VERSION} already exists on npm, skipping publish."
+          exit 0
+        fi
+        npm publish
