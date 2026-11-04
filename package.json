@@ -19,6 +19,12 @@
     "./package.json": "./package.json"
   },
   "types": "dist/index.d.ts",
+  "imports": {
+    "#semantic/*": {
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
   "files": [
     "dist",
     "CHANGELOG.md"
@@ -59,6 +65,6 @@
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
-    "typescript": "~5.9.3"
+    "typescript": "~7.0.2"
   }
 }

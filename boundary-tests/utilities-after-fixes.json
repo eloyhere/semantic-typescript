@@ -1,0 +1,204 @@
+{
+  "summary": {
+    "total": 39,
+    "passed": 39,
+    "failed": 0
+  },
+  "results": [
+    {
+      "id": "U01",
+      "name": "number descending range matches documented half-open interval",
+      "status": "pass"
+    },
+    {
+      "id": "U02",
+      "name": "bigint descending range matches README example",
+      "status": "pass"
+    },
+    {
+      "id": "U03",
+      "name": "ascending bounds with negative step does not emit runaway negative values",
+      "status": "pass"
+    },
+    {
+      "id": "U04",
+      "name": "zero step is rejected",
+      "status": "pass"
+    },
+    {
+      "id": "U05",
+      "name": "equal range bounds are empty",
+      "status": "pass"
+    },
+    {
+      "id": "U06",
+      "name": "string accepted as Iterable by useFrom",
+      "status": "pass"
+    },
+    {
+      "id": "U07",
+      "name": "isIterable recognizes strings",
+      "status": "pass"
+    },
+    {
+      "id": "U08",
+      "name": "Unicode slice uses code-point bounds",
+      "status": "pass"
+    },
+    {
+      "id": "U09",
+      "name": "Unicode text without bounds remains intact",
+      "status": "pass"
+    },
+    {
+      "id": "U10",
+      "name": "generator helper advances bigint indices",
+      "status": "pass"
+    },
+    {
+      "id": "U11",
+      "name": "maskOf returns undefined type mask 0",
+      "status": "pass"
+    },
+    {
+      "id": "U12",
+      "name": "undefined and null hashes are distinct",
+      "status": "pass"
+    },
+    {
+      "id": "U13",
+      "name": "hash collisions do not remove distinct numeric values",
+      "status": "pass"
+    },
+    {
+      "id": "U14",
+      "name": "nearest-rank quantile median matches README [1,2,3,4] -> 2",
+      "status": "pass"
+    },
+    {
+      "id": "U15",
+      "name": "bigint nearest-rank quantile matches numeric result",
+      "status": "pass"
+    },
+    {
+      "id": "U16",
+      "name": "async numeric nearest-rank quantile",
+      "status": "pass"
+    },
+    {
+      "id": "U17",
+      "name": "numeric quantile NaN is rejected as RangeError",
+      "status": "pass"
+    },
+    {
+      "id": "U18",
+      "name": "projected range finds extrema after nonmonotonic mapper",
+      "status": "pass"
+    },
+    {
+      "id": "U19",
+      "name": "projected bigint range finds extrema after mapper",
+      "status": "pass"
+    },
+    {
+      "id": "U20",
+      "name": "async projected numeric range",
+      "status": "pass"
+    },
+    {
+      "id": "U21",
+      "name": "bigint variance survives large translation of equal spread",
+      "status": "pass"
+    },
+    {
+      "id": "U22",
+      "name": "bigint stddev survives large translation of equal spread",
+      "status": "pass"
+    },
+    {
+      "id": "U23",
+      "name": "async bigint variance survives large translation",
+      "status": "pass"
+    },
+    {
+      "id": "U24",
+      "name": "all numeric empty statistical aggregates return zero",
+      "status": "pass"
+    },
+    {
+      "id": "U25",
+      "name": "constant numeric sample has zero variance, deviation and skewness",
+      "status": "pass"
+    },
+    {
+      "id": "U26",
+      "name": "Optional preserves zero false empty string and NaN",
+      "status": "pass"
+    },
+    {
+      "id": "U27",
+      "name": "Optional empty mapper is not evaluated",
+      "status": "pass"
+    },
+    {
+      "id": "U28",
+      "name": "cyclic attribute traversal terminates and preserves leaves",
+      "status": "pass"
+    },
+    {
+      "id": "U29",
+      "name": "nested traversal false stops the entire walk",
+      "status": "pass"
+    },
+    {
+      "id": "U30",
+      "name": "number random single upper bound respects half-open range",
+      "status": "pass"
+    },
+    {
+      "id": "U31",
+      "name": "two-argument number and bigint random respect bounds",
+      "status": "pass"
+    },
+    {
+      "id": "U32",
+      "name": "safe small numeric population variance and bigint rounding",
+      "status": "pass"
+    },
+    {
+      "id": "U33",
+      "name": "numeric sum mapper is honored for numeric inputs",
+      "status": "pass"
+    },
+    {
+      "id": "U34",
+      "name": "numeric mean mapper is honored for numeric inputs",
+      "status": "pass"
+    },
+    {
+      "id": "U35",
+      "name": "numeric median mapper is honored for numeric inputs",
+      "status": "pass"
+    },
+    {
+      "id": "U36",
+      "name": "numeric variance mapper is honored for numeric inputs",
+      "status": "pass"
+    },
+    {
+      "id": "U37",
+      "name": "bigint sum mapper is honored for bigint inputs",
+      "status": "pass"
+    },
+    {
+      "id": "U38",
+      "name": "async numeric sum mapper is honored",
+      "status": "pass"
+    },
+    {
+      "id": "U39",
+      "name": "async bigint sum mapper is honored",
+      "status": "pass"
+    }
+  ]
+}

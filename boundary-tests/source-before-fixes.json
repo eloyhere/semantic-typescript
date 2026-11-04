@@ -1,0 +1,70 @@
+﻿[
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\factory.ts",
+        "Hash":  "30FD84BFB150FAD8201466434D3AC7BC5788F43F8E31B3647227744468B1F634"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\guard.ts",
+        "Hash":  "7284FB15AC04BEA83B74586F50B10EF6A1A333AEE6F62AA0D4F8B45A37B5C854"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\hash.ts",
+        "Hash":  "203DBE1FF85197913F45EFBB9636897DC7274931474569FEC6BB485AC2EEC7CF"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\hook.ts",
+        "Hash":  "FF7F0DB6E5F0452A967F9434753645750C6338F91C42644A8B4CA4F6EACB7ACD"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\index.ts",
+        "Hash":  "1A35D86453D057841E1F4D2577C8AA79020FEDE20D1F6195F8FCE83BB6D38ED2"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\optional.ts",
+        "Hash":  "326A485A5B5CD6997A242111B1C95DC896C12D07C63DD7A593238CBA680A4127"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\symbol.ts",
+        "Hash":  "0AD118F09BE8E6EA8A6457D801B9664ED43EDED05D6FDFE8F965856854B2E5A2"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\utility.ts",
+        "Hash":  "8121CF55D123FC36AF493B658CC2BA472CDBDDA090E9E5E5D558949786119D29"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\asynchronous\\collector.ts",
+        "Hash":  "1C09B2FC24F2D67E11F6E9D37D186C7F18133C14B3B6064F4E16B55642B90B79"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\asynchronous\\semantic.ts",
+        "Hash":  "97168F1380E37DAFDF44F66835DE93F6337EA2C0A6E2B444692D0CEBE806BEAA"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\structure\\collection.ts",
+        "Hash":  "34DF917B0A23983FCF26039B4B1B96A65EFDE9B94C8BDFAD67660A452DDE875F"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\structure\\list.ts",
+        "Hash":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\structure\\lru.ts",
+        "Hash":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\structure\\map.ts",
+        "Hash":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\structure\\set.ts",
+        "Hash":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\synchronous\\collector.ts",
+        "Hash":  "68CC135833DB670DC434D441E72C3A9DD7861ACB069D9D4257BEA750DF59F8DD"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\src\\synchronous\\semantic.ts",
+        "Hash":  "CC7BB54AB62F69F70AF954E420A02FC9D7B0F566B7D92FB7745BE8437D5A020C"
+    }
+]

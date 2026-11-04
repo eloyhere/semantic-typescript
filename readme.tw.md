@@ -11,7 +11,7 @@ npm install semantic-typescript
 ```
 
 - 零執行期依賴，純 ESM，自帶型別定義。
-- 55 個迴歸測試：`npm install && npm test`。
+- 496 個迴歸測試：`npm test`。
 - 完整變更歷程：[CHANGELOG.md](./CHANGELOG.md)。
 
 ---
@@ -20,571 +20,361 @@ npm install semantic-typescript
 
 1. [設計哲學](#1-design-philosophy)
 2. [架構](#2-architecture)
-3. [資料流：從來源到結果](#3-data-flow-from-source-to-result)
-4. [快速上手](#4-quick-start)
-5. [工廠函式](#5-factory-functions)
-6. [轉換算子](#6-transformation-operators)
-7. [可收集器與終端操作](#7-collectables-and-terminal-operations)
-8. [統計](#8-statistics)
-9. [視窗](#9-windows)
-10. [索引模型](#10-the-index-model)
-11. [非同步模型](#11-the-asynchronous-model)
-12. [輔助工具](#12-utility-helpers)
-13. [與其他函式庫的比較](#13-comparison-with-other-libraries)
-14. [效能特性](#14-performance-characteristics)
-15. [陷阱與常見問答](#15-pitfalls-and-faq)
-16. [授權](#16-license)
+3. [快速上手](#3-quick-start)
+4. [工廠函式](#4-factory-functions)
+5. [轉換算子](#5-transformation-operators)
+6. [可收集器與終端操作](#6-collectables-and-terminal-operations)
+7. [統計與視窗](#7-statistics-and-windows)
+8. [索引模型](#8-the-index-model)
+9. [非同步模型](#9-the-asynchronous-model)
+10. [週期性分析：環、場與分數](#10-periodic-analysis-rings-fields-and-scores)
+11. [輔助工具](#11-utility-helpers)
+12. [效能與陷阱](#12-performance-and-pitfalls)
+13. [授權](#13-license)
 
 ---
 
 <a id="1-design-philosophy"></a>
 ## 1. 設計哲學
 
-**1. 索引優先。** 在大多數串流函式庫中，位置是你需要*重建*的東西——在 `scan` 中攜帶的計數器，或是你手動貫穿傳遞的索引引數。在這裡，位置是*內在的*：生成器協定為每個元素賦予一個 `bigint` 索引，因此 `distinct`、`skip`、`sub`、`reverse`、`translate` 與 `shuffle` 全都表達為索引算術，而非臨時狀態。改變元素的索引*就是*重新排序；重新索引*就是*過濾。
+三個想法，一條管線：
 
-**2. 透過明確的停止訊號推送。** 來源是一個函式 `(accept, interrupt) => void | Promise<void>`。它透過 `accept(element, index)` 推送元素，並以 `interrupt(element, index)` 詢問是否應該停止。沒有隱藏的排程器、沒有訂閱物件、也沒有需要記住的拆解階段——背壓與終止都是協定的一部分，無限串流因而成為尋常（而非特殊）的情況。
+**索引即資料。** 每個元素都以一個 `bigint` 定址。反轉、輪轉、洗牌與分割都是索引算術，而非緩衝區操作。在可收集器要求它之前，不會有任何東西被具體化。
 
-**3. 惰性為預設；具體化成為一項選擇。** 算子只包裝生成器。在**可收集器**消費管線之前，什麼都不會執行，而你選擇的收集器決定了成本：`toUnordered()` 為 O(n) 且絕不觸及你的索引，`toOrdered()` 為 O(n log n) 並對其進行正規化。因為這項選擇明確反映在你取得的型別中，你始終清楚是否為順序與記憶體付出代價。
+**惰性是預設。** 工廠函式包裝生成器；算子再包裝另一個生成器。直到終端操作執行之前，都不會要求任何元素，因此只要下游有東西讓它停下來，無限來源便完全合法。
 
-**4. Redirect 是唯一的重新排序機制。** `reverse()`、`translate()` 與 `shuffle()` 不過是預先封裝好的 `redirect()` 策略——各自僅重寫元素的索引，別無其他。這正是它們全都**需要 `toOrdered()`** 才會生效的原因：管線只重寫索引，而決定這些索引意義的，是有序收集器。
+**終端是明確的。** `map` 回傳的是 `Semantic`，而不是陣列。唯有你指名可收集器時，值才會出現——`toUnordered()`、`toOrdered()`、`toNumericStatistics()`、`toWindow()`——而每一個都說明了它的成本，以及它產生的順序。
 
-**5. 同步與非同步共用同一套 API。** 相同的算子既適用於有限的記憶體內資料，也適用於 promise、非同步可迭代物件、計時器、blob 與事件訂閱。無法同步的來源會在其回傳型別（`AsynchronousSemantic`）中表明，因此「我有 await 它嗎？」不再成為執行期的意外。
+同樣的紀律也適用於函式庫的數學部分。`Complex`、`Angle` 或 `Frequency` 是不可變的值，其不變量在建構時即受檢查；`Optional` 取代 `null`；而相位環則確切說明它持有多少元素、具有什麼週期，以及平衡程度如何。
 
 ---
 
 <a id="2-architecture"></a>
 ## 2. 架構
 
-三個層級，單一方向。資料向下流動；你持有的型別會告知下一步能做的操作。
-
 ```
-            SOURCES                     PIPELINE                      SINKS
- ┌──────────────────────────┐   ┌────────────────────────┐   ┌───────────────────────────┐
- │  useOf  useFrom  useRange│   │  map  filter  flatMap  │   │  toUnordered()  → Map     │
- │  useFill useEmpty useText│   │  distinct  limit  skip │   │  toOrdered()    → sorted  │
- │  useAttribute useGenerate│ → │  sub  takeWhile drop   │ → │  toNumericStatistics()    │
- │  usePromise useBlob      │   │  concat  peek  redirect│   │  toBigintStatistics()     │
- │  useIterate useInterval  │   │  reverse  translate    │   │  toWindow()               │
- │  useSubscription         │   │  shuffle  pipe         │   │  toCollectable(custom)    │
- └──────────────────────────┘   └────────────────────────┘   └───────────────────────────┘
-        Semantic<E>                    Semantic<E>                 Collectable<E>
-
-                                     terminal operations on the Collectable:
-                        toArray  toMap  toSet  count  forEach  join  group  reduce
-                        findFirst  findLast  findAt  findMaximum  …  anyMatch  …
+factory  ──▶  Semantic  ──▶  Semantic  ──▶  Collectable  ──▶  result
+ (source)      (map)         (filter)        (terminal)
+                    ▲
+                    └── every operator returns a new Semantic wrapping a generator
 ```
 
-| 層級 | 型別 | 職責 | 取得方式 |
-| :--- | :--- | :--- | :--- |
-| Source / pipeline | `SynchronousSemantic<E>`<br>`AsynchronousSemantic<E>` | 建構惰性管線：轉換、重新索引、分割、合併。尚未觸及任何元素。 | 工廠函式，以及語意物件上的每個算子 |
-| Storage / view | `SynchronousUnorderedCollectable<E>`<br>`SynchronousOrderedCollectable<E>`<br>`SynchronousNumericStatistics<E>`<br>`SynchronousBigIntStatistics<E>`<br>`SynchronousWindowCollectable<E>`<br>(+ `Asynchronous*` counterparts) | 將管線具體化為以索引定址的緩衝區，並暴露終端 API。**ordered** 系列負責索引簿記；**unordered** 系列則為吞吐量而捨棄它。 | `toUnordered()` `toOrdered()` `toNumericStatistics()` `toBigintStatistics()` `toWindow()` `toCollectable()` |
-| Collector | `SynchronousCollector<E, A, R>`<br>`AsynchronousCollector<E, A, R>` | 可重用的摺疊：`identity → accumulator → finisher`，可選搭配 `interruptor`。驅動每個終端操作，且可由使用者自行撰寫。 | `useSynchronous*` / `useAsynchronous*` 收集器工廠，或 `Collectable.collect(...)` |
+| 層級 | 模組 | 職責 |
+| :--- | :--- | :--- |
+| 來源 | `synchronous/collectors`, `asynchronous/collectors` | 包裝一個可迭代物件、生成器、promise、blob、事件目標 |
+| 管線 | `synchronous/semantic`, `asynchronous/semantic` | 惰性算子與索引重寫 |
+| 可收集器 | `synchronous/semantic`, `asynchronous/semantic` | 有序、無序、統計、視窗與自訂終端 |
+| 收集器 | `synchronous/collector`, `asynchronous/collector` | 每個終端據以建構的摺疊基元 |
+| 數學 | `mathematics/*` | 角、複數、頻率、頻譜、視窗、本輪、相位環 |
+| 結構 | `structure/*` | 串列、集合、映射、樹、環、場 |
 
-中間層存在的原因：將「管線是什麼」與「如何儲存」分離，正是讓同一個 `toOrdered()` 能服務反轉、輪轉與洗牌的關鍵——管線只重寫索引，而收集器決定這些索引的意義。
+同步與非同步家族共用同一套詞彙：相同的算子名稱、相同的索引語意、相同的可收集器。非同步變體只是回傳 promise，並且會將寫入排入佇列，因此寫入之後發出的讀取必定能觀察到它。
 
 ---
 
-<a id="3-data-flow-from-source-to-result"></a>
-## 3. 資料流：從來源到結果
-
-```typescript
-const result = useRange(0n, 100n)      // (1) source: reserve indices 0n,1n,2n,…
-  .filter(n => n % 2n === 0n)          // (2) operator: index is forwarded unchanged
-  .translate(2)                        // (3) operator: index becomes i + 2 (a lazy shift)
-  .limit(5n);                          // (4) operator: interrupt() returns true after 5 elements
-
-const ordered = result.toOrdered();    // (5) collectable: materialise; indices normalised mod n, sorted
-const array = ordered.toArray();       // (6) terminal: drain the buffer
-```
-
-1. **建構。** 步驟 1–4 只建構出閉包，什麼都不會產生。即使是一百個元素也不會被生成。
-2. **推送。** 當可收集器最終執行生成器時，元素在無排程器的情況下流動：由來源驅動，`accept` 寫入收集器，`interrupt` 決定何時停止——這正是為什麼在百萬級元素的區間中段呼叫 `limit(5n)` 只需五次迭代，而非一百萬次。
-3. **索引。** 算子永不遺失索引。`filter` 轉發原始索引（因此「第 3 個*保留*的元素」仍是「索引 3」），而 `skip` / `sub` / `limit` / `distinct` 則刻意重新索引。
-4. **具體化。** 可收集器會在建構時，將生成器確切執行一次。
-5. **終端。** 可收集器上的方法讀取緩衝區；它們成本低廉、可重複執行，且不會重新執行管線。
-
-**值得牢記的唯一規則：** 轉換是惰性的，可收集器是急切的，終端操作是免費的。
-
----
-
-<a id="4-quick-start"></a>
-## 4. 快速上手
+<a id="3-quick-start"></a>
+## 3. 快速上手
 
 ```typescript
 import {
   useOf, useFrom, useRange, useText, useStringify, usePromise
 } from "semantic-typescript";
 
-// Numeric aggregation
+// 數值聚合
 const sum: number = useOf(10, 20, 30, 40)
   .map(n => n * 2)
   .toNumericStatistics()
   .summate();                                   // 200
 
-// BigInt aggregation
+// BigInt 聚合
 const bigSum: bigint = useOf(10n, 20n, 30n, 40n)
   .map(n => n * 2n)
   .toBigintStatistics()
   .summate();                                   // 200n
 
-// Reordering is index arithmetic — collect with toOrdered() for it to take effect
+// 重新排序是索引算術——以 toOrdered() 收集才會生效
 const reversed: number[] = useFrom([1, 2, 3, 4, 5]).reverse().toOrdered().toArray();      // [5,4,3,2,1]
 const rotated: number[]  = useFrom([1, 2, 3, 4, 5]).translate(2).toOrdered().toArray();   // [4,5,1,2,3]
 
-// Lazy evaluation over a large range
+// 對大型區間進行惰性求值
 const multiples: bigint[] = useRange(0n, 1_000_000n)
   .filter(n => n % 17n === 0n)
   .limit(10n)
   .toUnordered()
   .toArray();                                   // [0n,17n,…,153n]
 
-// Unicode-safe string processing (code points, not UTF-16 units)
+// Unicode 安全的字串處理（以碼點為單位，而非 UTF-16 單元）
 useText("semantic 👍").toUnordered().forEach(character => console.log(character));
 
-// Circular-safe serialisation
+// 循環安全的序列化
 const cyclic: any = { a: 1 }; cyclic.self = cyclic;
 useStringify(cyclic);                           // '{"a":1}'
 
-// Async sources
+// 非同步來源
 const total = await usePromise(Promise.resolve(7)).toNumericStatistics().summate();       // 7
 ```
 
 ---
 
-<a id="5-factory-functions"></a>
-## 5. 工廠函式
+<a id="4-factory-functions"></a>
+## 4. 工廠函式
 
-### 5.1 概覽
-
-建構恆為 O(1)——工廠函式只包裝生成器。下表說明從各來源*消費* `n` 個元素的成本，以及該來源本身在已收集元素之外所需的額外空間。
+建構恆為 O(1)——工廠函式只包裝生成器。下表說明*消費* `n` 個元素的成本，再加上來源本身所需的額外空間。
 
 | 工廠函式 | 簽章（結果） | 時間（消費 n） | 空間（來源） | 備註 |
 | :--- | :--- | :--- | :--- | :--- |
-| `useOf` | `useOf<E>(...elements) → SynchronousSemantic<E>` | O(n) | O(n) | 索引為 0..n−1；其展開引數已具體化 |
-| `useFrom` | `useFrom<E>(Iterable<E>) → SynchronousSemantic<E>`<br>`useFrom<E>(AsyncIterable<E>) → AsynchronousSemantic<E>` | O(n) | O(1) | 包裝任何 `Iterable` / `AsyncIterable`；於收集時迭代一次 |
-| `useRange` | `useRange<N>(start, end, step?) → SynchronousSemantic<N>` | O(n) | O(1) | `end` 為開區間（不含）；`step` 必須非零；`number` 與 `bigint` 皆可使用 |
-| `useFill` | `useFill<E>(element \| supplier, count) → SynchronousSemantic<E>` | O(n) | O(1) | 每個元素呼叫一次 supplier |
+| `useOf` | `useOf<E>(...elements) → SynchronousSemantic<E>` | O(n) | O(n) | 索引為 0..n−1；展開引數已具體化 |
+| `useFrom` | `useFrom<E>(Iterable<E>) → SynchronousSemantic<E>`<br>`useFrom<E>(AsyncIterable<E>) → AsynchronousSemantic<E>` | O(n) | O(1) | 包裝任何可迭代物件；收集時迭代一次 |
+| `useRange` | `useRange<N>(start, end, step?) → SynchronousSemantic<N>` | O(n) | O(1) | `end` 為開區間（不含）；`step` 必須非零；`number` 與 `bigint` 皆可運作 |
+| `useFill` | `useFill<E>(element \| supplier, count) → SynchronousSemantic<E>` | O(n) | O(1) | supplier 會為每個元素呼叫一次 |
 | `useEmpty` | `useEmpty<E>() → SynchronousSemantic<E>` | O(1) | O(1) | `concat` 的單位元素 |
-| `useText` | `useText(text)`<br>`useText(text, delimiter)`<br>`useText(text, start)` / `(text, start, end)` | O(n) | O(n) for the text | 迭代**碼點**，因此 emoji 與 CJK 字元皆保持為單一元素 |
-| `useAttribute` | `useAttribute<T>(object) → SynchronousSemantic<{key, value}>` | O(v + e) over v values and e edges | O(d + v) for the visited set at depth d | 以循環保護遞迴走訪巢狀物件/陣列 |
-| `useGenerate` | `useGenerate<E>(supplier, interrupt) → SynchronousSemantic<E>` | O(n) × supplier cost | O(1) | **必須**具備停止用的 `interrupt`（或下游的 `limit` / `takeWhile`） |
-| `useIterate` | `useIterate<E>(Iterable<E>) → SynchronousSemantic<E>`<br>`useIterate<E>(AsyncIterable<E>) → AsynchronousSemantic<E>` | O(n) per collection | O(1) | 每次收集時重播迭代器 |
-| `useInterval` | `useInterval(period, delay?) → AsynchronousSemantic<number>` | n × period (real time) | O(1) | 發出經過的時間；消耗真實時間 |
+| `useText` | `useText(text, delimiter?)` | O(n) | 文字本身為 O(n) | 迭代**碼點**，因此 emoji 與 CJK 皆保持為單一元素 |
+| `useAttribute` | `useAttribute<T>(object)` | O(v + e) | O(d + v) | 以循環保護遞迴走訪巢狀物件 |
+| `useGenerate` | `useGenerate<E>(supplier, interrupt)` | O(n) × supplier 成本 | O(1) | **必須**具備停止用的 `interrupt`，或下游的 `limit` |
+| `useIterate` | `useIterate<E>(Iterable<E>)` / `(AsyncIterable<E>)` | 每次收集 O(n) | O(1) | 每次收集時重播迭代器 |
+| `useInterval` | `useInterval(period, delay?) → AsynchronousSemantic<number>` | n × period（真實時間） | O(1) | 發出經過的時間 |
 | `usePromise` | `usePromise<T>(promise) → AsynchronousSemantic<T>` | O(1) | O(1) | 位於索引 `0n` 的單一元素 |
-| `useBlob` | `useBlob(blob, chunk?) → AsynchronousSemantic<Uint8Array>` | O(blob size) | O(chunk) per emitted copy | 預設區塊為 64 KiB；每個區塊皆為獨立副本 |
-| `useSubscription` | `useSubscription(target, subscriber, event \| events) → AsynchronousSemantic<Event>` | one element per event | O(1) | `limit()` / `sub()` / `takeWhile()` 定義取消訂閱的邊界 |
-
-### 5.2 範例
+| `useBlob` | `useBlob(blob, chunk?) → AsynchronousSemantic<Uint8Array>` | O(blob 大小) | 每次複製 O(chunk) | 預設區塊為 64 KiB |
+| `useSubscription` | `useSubscription(target, subscriber, event) → AsynchronousSemantic<Event>` | 每個事件一個元素 | O(1) | `limit()` / `takeWhile()` 定義取消訂閱的邊界 |
 
 ```typescript
-// useOf / useFrom
 useOf(1, 2, 3).toUnordered().toArray();                       // [1,2,3]
 useFrom(new Set([1, 2, 2])).toUnordered().toArray();          // [1,2]
-useFrom(new Map([["a", 1]])).toUnordered().toArray();         // [["a",1]]
-
-// useRange — half-open interval, number or bigint
 useRange(0, 5).toUnordered().toArray();                       // [0,1,2,3,4]
 useRange(10n, 0n, -5n).toUnordered().toArray();               // [10n,5n]
-
-// useFill
 useFill("x", 3n).toUnordered().toArray();                     // ["x","x","x"]
-useFill(() => Math.random(), 2n).toUnordered().toArray();     // two fresh randoms
-
-// useText — code-point aware
 useText("A😊B").toUnordered().toArray();                      // ["A","😊","B"]
-useText("a,b,c", ",").toUnordered().toArray();                // ["a","b","c"]
-useText("abcdef", 1, 3).toUnordered().toArray();              // ["b","c"]
-
-// useGenerate — infinite supplier with a stop predicate
-useGenerate(() => 7, (_element, index) => index >= 3n).toUnordered().toArray();   // [7,7,7]
-
-// useIterate — async generator
-async function* tick() { yield 1n; yield 2n; }
-await useIterate(tick()).toUnordered().toArray();             // [1n,2n]
-
-// useBlob — chunked binary read
-const blob = new Blob([new Uint8Array([1, 2, 3, 4, 5])]);
-await useBlob(blob, 2n).toUnordered().toArray();              // [Uint8Array[1,2], Uint8Array[3,4], Uint8Array[5]]
-
-// useSubscription — the boundary defines the unsubscribe point
-const subscriber = {
-  mount: () => { },
-  unmount: () => { },
-  subscribe: (event, handler) => window.addEventListener(event, handler),
-  unsubscribe: (event, handler) => window.removeEventListener(event, handler)
-};
-useSubscription(window, () => subscriber, "resize")
-  .limit(5n)
-  .toUnordered()
-  .forEach((event, index) => console.log(index, event));      // auto-unsubscribes after 5 events
+useGenerate(() => 7, (_e, index) => index >= 3n).toUnordered().toArray();   // [7,7,7]
 ```
 
 ---
 
-<a id="6-transformation-operators"></a>
-## 6. 轉換算子
+<a id="5-transformation-operators"></a>
+## 5. 轉換算子
 
-### 6.1 概覽
+每個算子都回傳一個新的 `Semantic`；在可收集器執行之前，沒有任何算子會觸及元素。時間是**每個元素**的額外成本；空間則是管線執行期間算子保留的記憶體。
 
-每個算子都回傳一個新的 `Semantic`；在可收集器執行之前，沒有任何算子會觸及元素。時間是**每個元素**的額外成本（不含上游自身的成本）；空間則是管線執行期間算子保留的額外記憶體。
-
-| 算子 | 用途 | 索引效果 | 時間（每元素） | 空間 |
+| 算子 | 用途 | 索引效果 | 時間 | 空間 |
 | :--- | :--- | :--- | :--- | :--- |
 | `map(mapper)` | 1:1 轉換 | 轉發 | O(1) | O(1) |
 | `filter(predicate)` | 保留符合的元素 | 轉發 | O(1) | O(1) |
-| `flat(mapper)` | 1:N 扁平化（可迭代物件或語意物件） | 自 0 重新索引 | O(1) per emitted element | O(1) |
-| `flatMap(mapper)` | 1:N 扁平化，可能改變元素型別 | 自 0 重新索引 | O(1) per emitted element | O(1) |
-| `distinct(keyExtractor?)` | 捨棄重複的鍵，保留第一個 | 轉發 | O(1) average | O(n) for the key set |
+| `flat(mapper)` / `flatMap(mapper)` | 1:N 扁平化 | 自 0 重新索引 | 每次發出 O(1) | O(1) |
+| `distinct(keyExtractor?)` | 捨棄重複的鍵，保留第一個 | 轉發 | 平均 O(1) | O(n) |
 | `peek(consumer)` | 副作用，元素直接通過 | 轉發 | O(1) | O(1) |
-| `limit(count)` | 取前 *n* 個 | 自 0 重新索引 | O(1), stops upstream after n | O(1) |
-| `skip(count)` | 捨棄前 *n* 個 | 轉發 | O(1) per skipped element | O(1) |
+| `limit(count)` | 取前 *n* 個 | 自 0 重新索引 | O(1) | O(1) |
+| `skip(count)` | 捨棄前 *n* 個 | 轉發 | O(1) | O(1) |
 | `sub(start, end)` | 依位置的切片 `[start, end)` | 轉發 | O(1) | O(1) |
-| `takeWhile(predicate)` | 當述詞成立時取用 | 轉發 | O(1), stops upstream on first miss | O(1) |
-| `dropWhile(predicate)` | 當述詞成立時捨棄 | 自 0 重新索引 | O(1) | O(1) |
-| `concat(other)` | 串接一個語意物件或可迭代物件 | 延續索引 | O(1) | O(1) |
+| `takeWhile(predicate)` | 述詞成立時持續取用 | 轉發 | O(1) | O(1) |
+| `dropWhile(predicate)` | 述詞成立時持續捨棄 | 自 0 重新索引 | O(1) | O(1) |
+| `concat(other)` | 附加一個語意物件或可迭代物件 | 延續索引 | O(1) | O(1) |
 | `redirect(redirector)` | 隨你計算新索引 | **由你決定** | O(1) | O(1) |
 | `reverse()` | `redirect((_e, i) => -i - 1n)` | 取負並位移 | O(1) | O(1) |
-| `translate(offset)` | 將每個索引惰性位移 *offset* | `i + offset` | O(1) | O(1) |
-| `translate(mapper)` | 逐元素的索引位移 | `i + mapper(element, i)` | O(1) | O(1) |
-| `shuffle(mapper?)` | 將索引隨機化（或使用你自己的 mapper） | 隨機 | O(1) | O(1) |
-| `pipe(conversion)` | 將生成器交給自訂函式 | 由你決定 | yours | yours |
+| `translate(offset \| mapper)` | 位移每個索引 | `i + offset` | O(1) | O(1) |
+| `shuffle(mapper?)` | 隨機化索引 | 隨機 | O(1) | O(1) |
+| `pipe(conversion)` | 將生成器交給自訂函式 | 由你決定 | 由你決定 | 由你決定 |
 | `semantic()` | 將可收集器提升回語意物件 | 不變 | O(1) | O(1) |
 
-### 6.2 值得留意的說明
-
-**`reverse`、`translate` 與 `shuffle` 都是 `redirect` 策略，且需要有序收集器。** 它們只重寫索引——不會緩衝任何內容，也尚未進行任何旋轉。`toOrdered()` 才會以元素數量為模數對索引進行正規化，並將其轉化為順序：
+**`reverse`、`translate` 與 `shuffle` 只重寫索引。** 在 `toOrdered()` 以元素數量為模數正規化索引之前，不會有任何東西被緩衝或輪轉：
 
 ```typescript
 useFrom([1, 2, 3, 4, 5]).reverse().toOrdered().toArray();            // [5,4,3,2,1]
-useFrom([1, 2, 3, 4, 5]).translate(2).toOrdered().toArray();         // [4,5,1,2,3]  (rotation)
-useFrom([1, 2, 3, 4, 5]).translate(-2).toOrdered().toArray();        // [3,4,5,1,2]
+useFrom([1, 2, 3, 4, 5]).translate(2).toOrdered().toArray();         // [4,5,1,2,3]  (輪轉)
 useFrom([1, 2, 3, 4, 5]).translate(7).toOrdered().toArray();         // [4,5,1,2,3]  (7 ≡ 2 mod 5)
-useFrom([1, 2, 3, 4, 5]).shuffle().toOrdered().toArray();            // a fresh permutation per call
 useFrom([1, 2, 3]).shuffle((_e, i) => -i - 1n).toOrdered().toArray();   // [3,2,1]
 ```
 
-若改以 `toUnordered()` 收集，相同的管線會依到達順序、連同原始索引一併回傳元素——請見 [索引模型](#10-the-index-model)。
-
-**`translate` 是純粹、惰性的索引位移。** 兩個多載都會對索引加上某值（`i + offset` 或 `i + mapper(element, i)`），且永不緩衝串流。旋轉只有在*有序收集器*以元素數量為模數對索引正規化時才會具體化——因此即便在無限區間後接 `limit`，`translate(2)` 依然成本低廉。
-
-**`redirect` 是通用工具。** 任何索引策略都能用它表達——反轉、交錯、雜湊分區皆可：
-
-```typescript
-useFrom([1, 2, 3, 4, 5]).redirect((_e, i) => -i - 1n).toOrdered().toArray();   // [5,4,3,2,1]
-useFrom([1, 2, 3, 4]).redirect((_e, i) => i % 2n === 0n ? i + 1n : i - 1n)
-  .toOrdered().toArray();                                                       // [2,1,4,3]
-```
-
-**以索引驅動的切片仍是一等公民：**
-
-```typescript
-useOf(1, 2, 3, 4, 5).sub(1, 3).toUnordered().toArray();               // [2,3]
-useOf(1, 2, 3, 4, 5).skip(2n).toUnordered().toArray();                // [3,4,5]
-useOf(1, 2, 3, 4, 5).takeWhile(n => n < 3).toUnordered().toArray();   // [1,2]
-useOf(1, 2, 3, 4, 1).dropWhile(n => n < 3).toUnordered().toArray();   // [3,4,1]
-```
-
 ---
 
-<a id="7-collectables-and-terminal-operations"></a>
-## 7. 可收集器與終端操作
-
-### 7.1 選擇可收集器
+<a id="6-collectables-and-terminal-operations"></a>
+## 6. 可收集器與終端操作
 
 可收集器同時擁有**順序**與**索引簿記**。`n` 為元素數量。
 
-| 可收集器 | 結構 | 時間 | 空間 | 順序 | 適用時機 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `toUnordered()` | `Map<bigint, E>` 以索引為鍵 | O(n) | O(n) | 插入順序 | 最大吞吐量，順序無關緊要；原始索引原封不動地保留 |
-| `toOrdered()` | 依元素索引排序的陣列 | O(n log n) | O(n) | 依正規化索引 | 反轉/輪轉/洗牌必須生效，或你需要位置存取 |
-| `toOrdered(comparator)` | 依你的比較子排序，索引重建為位置 | O(n log n) | O(n) | 依你的比較子 | 已排序視圖、min/max 風格的讀取 |
-| `toNumericStatistics()` | 依值排序的緩衝區 | O(n log n) | O(n) | 依值 | 針對 `number` 的統計 |
-| `toBigintStatistics()` | 依值排序的緩衝區 | O(n log n) | O(n) | 依值 | 針對 `bigint` 的統計 |
-| `toWindow()` | 依值排序的緩衝區 | O(n log n) | O(n) | 依值 | `slide` / `tumble` |
-| `toCollectable(mapper)` | 由 mapper 回傳的內容決定 | — | — | — | 自訂可收集器 |
-
-### 7.2 終端操作
-
-成本以具體化之後為準；`k` 為目標位置，`n` 為元素數量。
-
-| 終端 | 回傳 | 時間 | 空間 | 備註 |
+| 可收集器 | 結構 | 時間 | 順序 | 適用時機 |
 | :--- | :--- | :--- | :--- | :--- |
-| `toArray()` | `Array<E>` | O(n) | O(n) | 排清緩衝區 |
-| `toSet()` | `Set<E>` | O(n) average | O(n) | 依同一性去重複 |
-| `toMap(keyExtractor, valueExtractor?)` | `Map<K, V>` | O(n) average | O(n) | 後寫入者勝出 |
-| `count()` / `isEmpty()` | `bigint` / `boolean` | O(1) | O(1) | 緩衝區已經知道 |
-| `forEach(action)` | `void` | O(n) | O(1) | `action(element, index)` |
-| `join(…)` | `string` | O(n) | O(n) | `join()`, `join(delimiter)`, `join(prefix, delimiter, suffix)` |
-| `log()` / `error()` | `void` | O(n) | O(n) | 以 `[prefix … suffix]` 包裹的控制台輸出 |
-| `write(stream, accumulator?)` | `WritableStream<S>` | O(n) | O(1) | 類 IO 的終端 |
-| `collect(collector)`<br>`collect(identity, accumulator, finisher)` | `R` | O(n) | accumulator | 上述每個終端的通用摺疊 |
-| `reduce(accumulator)` | `Optional<E>` | O(n) | O(1) | 空串流 → 空 Optional |
-| `reduce(identity, accumulator)` | `E` | O(n) | O(1) | — |
-| `reduce(identity, accumulator, finisher)` | `R` | O(n) | O(1) | — |
-| `group(classifier)` | `Map<K, E[]>` | O(n) average | O(n) | — |
-| `groupBy(keyExtractor, valueExtractor)` | `Map<K, V[]>` | O(n) average | O(n) | — |
-| `partition(count)` | `Array<Array<E>>` | O(n) | O(n) | 依索引以輪詢方式分配到 `count` 個桶中 |
-| `partitionBy(classifier)` | `Array<Array<E>>` | O(n) | O(n) | 桶編號來自分類器 |
-| `anyMatch` / `allMatch` / `nonMatch` | `boolean` | O(n) worst, short-circuits | O(1) | — |
-| `findAny` / `findFirst` / `findLast` | `Optional<E>` | O(1)–O(n) | O(1) | 位於具體化順序中的位置存取 |
-| `findAt(k)` | `Optional<E>` | O(k), stops early | O(1) | 具體化順序中的第 (k+1) 個元素 |
-| `findNegativeAt(k)` | `Optional<E>` | O(n−k), stops early | O(1) | 從具體化順序的末端倒數 |
-| `findMaximum(comparator?)` / `findMinimum(comparator?)` | `Optional<E>` | O(n) (O(1) on statistics) | O(1) | 預設為結構化比較 |
-| `frequency()` | `Map<E, bigint>` | O(n) average | O(n) | 僅限統計可收集器 |
-| `[Symbol.iterator]()` / `[Symbol.asyncIterator]()` | iterator | O(n) | O(1) | 對可收集器進行 `for…of` |
+| `toUnordered()` | `Map<bigint, E>` 以索引為鍵 | O(n) | 插入順序 | 最大吞吐量；原始索引原封不動地保留 |
+| `toOrdered()` | 依元素索引排序的陣列 | O(n log n) | 依正規化索引 | 反轉／輪轉必須生效 |
+| `toOrdered(comparator)` | 依你的比較子排序 | O(n log n) | 依你的比較子 | 已排序的視圖 |
+| `toNumericStatistics()` | 依值排序的緩衝區 | O(n log n) | 依值 | 針對 `number` 的統計 |
+| `toBigintStatistics()` | 依值排序的緩衝區 | O(n log n) | 依值 | 針對 `bigint` 的統計 |
+| `toWindow()` | 依值排序的緩衝區 | O(n log n) | 依值 | `slide` / `tumble` |
+| `toCollectable(mapper)` | 由 mapper 回傳的內容決定 | — | — | 自訂可收集器 |
 
-### 7.3 範例
-
-```typescript
-const stream = () => useOf(1, 2, 3, 4, 5).toUnordered();
-
-stream().count();                                    // 5n
-stream().anyMatch(n => n > 4);                       // true
-stream().allMatch(n => n > 0);                       // true
-stream().nonMatch(n => n > 9);                       // true
-stream().findFirst().orElse(-1);                     // 1
-stream().findLast().orElse(-1);                      // 5
-stream().findMaximum().orElse(-1);                   // 5
-stream().findAt(2n).orElse(-1);                      // 3 (materialised position 2)
-stream().findNegativeAt(-1n).orElse(-1);             // 5 (last materialised element)
-stream().join("|");                                  // "[1|2|3|4|5]"
-stream().reduce((a, b) => a + b).orElse(0);          // 15
-stream().reduce(100, (a, b) => a + b);               // 115
-stream().group(n => (n % 2 === 0 ? "even" : "odd"));  // Map { odd: [1,3,5], even: [2,4] }
-
-useRange(0n, 9n).toUnordered().partition(3n);
-// [[0n,3n,6n], [1n,4n,7n], [2n,5n,8n]] — round-robin by index
-
-useRange(0n, 6n).toUnordered().partitionBy((_element, index) => index % 2n);
-// [[0n,2n,4n], [1n,3n,5n]]
-
-// The fold is public: write your own collector inline
-useOf(1, 2, 3).toUnordered().collect(
-  () => 0,                          // identity
-  (sum, element) => sum + element,  // accumulator
-  sum => `total=${sum}`             // finisher
-);                                                 // "total=6"
-```
-
----
-
-<a id="8-statistics"></a>
-## 8. 統計
-
-`toNumericStatistics()` 與 `toBigintStatistics()` 提供一個依值排序的緩衝區，外加一套統計 API。兩者皆接受 mapper，因此你可針對投影後的值進行計算：`.average(element => element.price)`。
-
-| 方法 | 意義 | `number` | `bigint` |
+| 終端 | 回傳 | 時間 | 備註 |
 | :--- | :--- | :--- | :--- |
-| `summate()` | Σx | 精確 | 精確 |
-| `average()` / `mean()` | Σx / n | 精確 | 整數除法 |
-| `median()` | 中位數（偶數個時取中間兩值的平均） | 精確 | 四捨五入 |
-| `mode()` | 出現最頻繁的值 | 精確 | 精確 |
-| `variance()` | 母體變異數 σ² | 精確 | 四捨五入 |
-| `standardDeviation()` | √σ² | 精確 | 四捨五入 |
-| `range()` | 最大值 − 最小值 | 精確 | 精確 |
-| `quantile(q)` | 最接近秩的分位數，`0 ≤ q ≤ 1` | 精確 | 精確 |
-| `interquartileRange()` | 四等分距（q(0.75) − q(0.25)） | 精確 | 精確 |
-| `skewness()` | 偏度 Σ((x−μ)/σ)³ / n | 精確 | 四捨五入 |
-| `kurtosis()` | 峰度 Σ((x−μ)/σ)⁴ / n − 3（超額） | 精確 | 四捨五入 |
-| `frequency()` | 值 → 計數 | `Map<E, bigint>` | `Map<E, bigint>` |
-
-在已排序的緩衝區上，所有方法皆為 O(1)（排序成本在具體化時一次性支付完畢），唯獨 `frequency()` 為 O(n) 平均、O(n) 空間。
-
-`bigint` 結果以浮點數計算後四捨五入回 `bigint`，因為整數除法會扭曲結果（[1n,2n,3n,4n] 的變異數為 `1.25`，而非 `3`）。若你需要精確的分數統計，請映射至 `number` 並使用數值收集器。
-
-```typescript
-const stats = useOf(1, 2, 3, 4).toNumericStatistics();
-stats.summate();              // 10
-stats.average();              // 2.5
-stats.median();               // 2.5
-stats.variance();             // 1.25
-stats.standardDeviation();    // 1.118…
-stats.skewness();             // 0
-stats.kurtosis();             // -1.36 (excess kurtosis)
-stats.range();                // 3
-stats.quantile(0.5);          // 2 (nearest rank)
-stats.frequency();            // Map { 1 => 1n, 2 => 1n, 3 => 1n, 4 => 1n }
-
-// Projected statistics
-useOf({ price: 10 }, { price: 30 }).toNumericStatistics().average(item => item.price);   // 20
-```
+| `toArray()` / `toSet()` | `Array<E>` / `Set<E>` | O(n) | 排清緩衝區；`toSet` 依同一性去重複 |
+| `toMap(key, value?)` | `Map<K, V>` | 平均 O(n) | 後寫入者勝出 |
+| `count()` / `isEmpty()` | `bigint` / `boolean` | O(1) | 緩衝區已經知道 |
+| `forEach(action)` | `void` | O(n) | `action(element, index)` |
+| `join(…)` | `string` | O(n) | `join()`, `join(delimiter)`, `join(prefix, delimiter, suffix)` |
+| `reduce(…)` | `Optional<E>` / `E` / `R` | O(n) | 空串流 → 空 `Optional` |
+| `group(classifier)` / `groupBy(key, value)` | `Map<K, E[]>` | 平均 O(n) | — |
+| `partition(count)` | `Array<Array<E>>` | O(n) | 依索引輪詢分配 |
+| `partitionBy(classifier)` | `Array<Array<E>>` | O(n) | 桶號來自分類器 |
+| `anyMatch` / `allMatch` / `nonMatch` | `boolean` | 最差 O(n)，會短路 | — |
+| `findAny` / `findFirst` / `findLast` | `Optional<E>` | O(1)–O(n) | 依具體化順序定位 |
+| `findAt(k)` / `findNegativeAt(k)` | `Optional<E>` | O(k) / O(n−k) | 從前端／末端起算 |
+| `findMaximum(cmp?)` / `findMinimum(cmp?)` | `Optional<E>` | O(n) | 預設為結構化比較 |
+| `frequency()` | `Map<E, bigint>` | 平均 O(n) | 僅限統計可收集器 |
+| `write(stream, accumulator?)` | `WritableStream<S>` | O(n) | 類 IO 的終端 |
+| `collect(collector)` | `R` | O(n) | 上述每個終端背後的通用摺疊 |
 
 ---
 
-<a id="9-windows"></a>
-## 9. 視窗
-
-`toWindow()` 回傳一個可收集器，其 `slide` / `tumble` 會產出*語意物件之語意物件*。
+<a id="7-statistics-and-windows"></a>
+## 7. 統計與視窗
 
 ```typescript
-const windows = useOf(1, 2, 3, 4, 5).toWindow();
-
-windows.tumble(2n).toUnordered().toArray()
-  .map(window => window.toUnordered().toArray());
-// [[1,2], [3,4], [5]]
-
-windows.slide(3n, 1n).toUnordered().toArray()
-  .map(window => window.toUnordered().toArray());
-// [[1,2,3], [2,3,4], [3,4,5], [4,5], [5]]   — trailing partial windows are included
+useOf(3, 1, 4, 1, 5).toNumericStatistics().summate();              // 14
+useOf(3, 1, 4, 1, 5).toNumericStatistics().average();              // 2.8
+useOf(3, 1, 4, 1, 5).toNumericStatistics().median();               // 3
+useOf(3, 1, 4, 1, 5).toNumericStatistics().mode();                 // 1
+useOf(3, 1, 4, 1, 5).toNumericStatistics().variance();             // 2.56
+useOf(3, 1, 4, 1, 5).toNumericStatistics().standardDeviation();    // 1.6
+useFrom([1, 2, 3, 4]).toWindow().slide(2n, 1n);                    // [[1,2],[2,3],[3,4]]
 ```
 
-`tumble(size)` 整體為 O(n)；`slide(size, step)` 為 O(n × size)，因為視窗彼此重疊。
-
-非同步來源運作方式相同；`slide` / `tumble` 會等待底層緩衝區準備就緒：
-
-```typescript
-const asyncWindows = await useFrom(tick()).toWindow().tumble(2n).toUnordered().toArray();
-for (const window of asyncWindows) {
-  console.log(await window.toUnordered().toArray());
-}
-```
+兩個統計家族提供相同的介面——`summate`、`average`、`median`、`mode`、`variance`、`standardDeviation`、`frequency`、`findMaximum`、`findMinimum`——而 `toBigintStatistics()` 使用 `bigint` 算術。視窗支援 `slide(size, hop)` 與 `tumble(size)`。
 
 ---
 
-<a id="10-the-index-model"></a>
-## 10. 索引模型
+<a id="8-the-index-model"></a>
+## 8. 索引模型
 
-索引模型分為兩半：**管線**以低成本、惰性地重寫索引；**可收集器**則決定這些索引的意義。此劃分是刻意的，排序成本也由此而來。
+索引是附加在每個元素上的 `bigint`。算子不是**轉發**它、從零**重新索引**，就是讓你**自行計算**它。
 
-| 概念 | 行為 |
-| :--- | :--- |
-| 索引型別 | `bigint`，永遠可作為每個回呼的第二個引數使用 |
-| 管線算術 | `reverse()` = `redirect(-i - 1n)`、`translate(o)` = `redirect(i + o)`、`shuffle()` = `redirect(random)`——皆為每元素 O(1)、皆為惰性、皆不緩衝任何內容 |
-| `toUnordered()`——不進行簿記 | 在 `Map` 中保留每個原始索引原封不動。以無序方式收集的 `translate(2)` 仍會產出索引 `2n,3n,4n,…`。這就是效能契約：不排序、不正規化、O(n) |
-| `toOrdered()`——正規化 | 將每個索引重寫為 `((i mod n) + n) mod n`（n = 元素數量），再進行排序。負數或過大的索引會摺疊進 `0..n−1`，因此 `reverse`、`translate(7)` 與 `shuffle` 都能落到有效位置 |
-| `toOrdered(comparator)` | 依值排序並將索引重建為位置——這正是統計所使用的方式 |
-| 輪轉 | 源自正規化：`translate(2)` 給出索引 `2,3,4,0,1`，排序後即為輪轉 `[4,5,1,2,3]`。算子內不會發生任何緩衝 |
-| 重複索引 | 由 `toUnordered()` 偵測並給予代理鍵，因此**不會有任何元素被靜默捨棄**；`toOrdered()` 會保留相等索引的相對順序 |
-| `findAt(k)` / `findNegativeAt(k)` | 定址**具體化順序**——`findAt(1n)` 永遠是可收集器所產出元素中的第二個，`findNegativeAt(-1n)` 永遠是最後一個——無論 `redirect` / `reverse` / `translate` 對原始索引做了什麼 |
-| `distinct` | 保留首次出現者**及其原始索引** |
-| `sub` / `skip` / `limit` | 計算元素個數，而非索引值 |
+有序收集會將每個索引以元素數量為模數正規化，再依結果排序。這就是為何在五個元素上，`translate(7)` 等同於 `translate(2)`：`7 ≡ 2 (mod 5)`。
 
-簡言之：**`OrderedCollectable` 及其子類擁有索引簿記**（以 n 為模數正規化、排序、位置定址），而**`UnorderedCollectable` 透過永不觸及索引來保證效能**。請依查詢而非依管線來選擇。
+無序收集則保留管線所產生的任何索引，並依到達順序回傳元素。負索引是合法的，且一旦正規化之後，就只是排在非負索引之前。
 
 ---
 
-<a id="11-the-asynchronous-model"></a>
-## 11. 非同步模型
+<a id="9-the-asynchronous-model"></a>
+## 9. 非同步模型
 
-資料尚不存在的來源會回傳 `AsynchronousSemantic<E>`：
-
-| 非同步來源 | 原因 |
-| :--- | :--- |
-| `usePromise` | 值稍後才抵達 |
-| `useBlob` | `Blob.stream()` 為非同步 |
-| `useInterval` | 由 `setInterval` 驅動 |
-| `useSubscription` | 由外部事件驅動 |
-| `useFrom` / `useIterate` with an `AsyncIterable` | 由 `for await` 產生 |
-
-消費方式一致——`AsynchronousCollectable` 的每個終端都回傳 `Promise`，且其語意（索引模型、正規化、位置式 `findAt`）與同步端完全相同：
+`AsynchronousSemantic` 映照同步端的介面，但回傳 promise。寫入會被排入佇列，因此寫入之後發出的讀取必定能觀察到它。
 
 ```typescript
-const stats = await useFrom(asyncGenerator()).map(n => n * 2n).limit(10n).toBigintStatistics();
-await stats.summate();
-
-for await (const element of usePromise(Promise.resolve(1)).toUnordered()) {
-  console.log(element);
-}
+const cycle = new AsynchronousCycle([1, 2]);
+const added   = cycle.add(3);          // 已排入佇列
+const sampled = cycle.elementAt(2n);   // 可觀察到上述的寫入
+await added;
+(await sampled).get().element;         // 3
 ```
 
-型別系統無法替你省去的三件事：
-
-1. **結束串流。** 事件或計時器來源永遠不會自行完成。請定義邊界——`limit(n)`、`sub(start, end)` 或 `takeWhile(predicate)`——否則訂閱會持續存在。
-2. **等待可收集器。** `toOrdered()`、統計與 `toWindow()` 會等待來源完成後才回應；而永遠不會完成的純 promise 來源會使它們持續擱置。
-3. **混用層級。** 同步可收集器無法消費非同步來源。一旦涉及非同步工廠，請讓整條管線停留在非同步端，並對終端操作 `await`。
+本質上即為非同步的工廠函式——`usePromise`、`useBlob`、`useInterval`、`useSubscription`——會直接回傳 `AsynchronousSemantic`，而 `useFrom` / `useIterate` 在收到 `AsyncIterable` 時會自行升級。
 
 ---
 
-<a id="12-utility-helpers"></a>
-## 12. 輔助工具
+<a id="10-periodic-analysis-rings-fields-and-scores"></a>
+## 10. 週期性分析：環、場與分數
 
-| 輔助工具 | 用途 | 時間 |
+函式庫的數學部分將循環視為一等物件，而非查詢表。三種建構協同運作。
+
+### 10.1 一個環就是一個整數
+
+`Cycle` 是一個 **n 重環**：元素數量、位置週期與相異相位的數目都是同一個整數 `n`。位置的相位由其精確餘數計算而得，因此環具有位元級的週期性：
+
+```typescript
+import { SynchronousCycle } from "semantic-typescript";
+
+const ring = new SynchronousCycle(["a", "b", "c", "d", "e", "f"]);
+ring.phaseAt(0n).get().toDegreeValue();   // 0
+ring.phaseAt(1n).get().toDegreeValue();   // 60
+ring.phaseAt(6n).get().getValue() === ring.phaseAt(0n).get().getValue();   // true，精確相等
+ring.purity();                             // 1
+ring.isBalanced();                         // true
+ring.sequences().map(z => z.magnitude());  // [0, 6, 0, 0, 0, 0]
+```
+
+`frequency` 是**環境**旋轉速率，而不是位置之間的相位步進：環境會讓每個相量移動相同的角度，因此它永遠無法破壞內在樣式。`span` 則固定環所佔據的圈數。
+
+`purity()` 是基頻模態所攜帶的能量佔比，`max(|c₁|², |c_{n−1}|²) / (n · Σ|z|²)`。當環在容許旋轉的意義下等同於 `n` 次單位根時，它恰好為 `1`，而其成本為 `O(n)`，因為只需要兩個頻段。兩個方向都會納入測試，因為環可能以任一方向繞行圓周。
+
+### 10.2 場是一個有界分數
+
+`PhaseField` 會將相對相位映射為 `[-1, 1]` 區間內的分數：
+
+```typescript
+import { useField } from "semantic-typescript";
+
+const cosine = useField([1]);              // cos(2πΔ)：+1 同相，−1 反相
+const mixed  = useField([0.4, 0.3, 0.3]);  // 前三項諧波
+
+cosine.sample(useRadian(0));               //  1
+cosine.sample(useRadian(Math.PI));         // -1
+```
+
+分數是一個截斷的餘弦級數，`a₀ + Σ wₘ·cos(2πmΔ)`，而建構函式會強制 `|a₀| + Σ|wₘ| ≤ 1`。由三角不等式可知，分數永遠不會離開 `[-1, 1]`——這個界限是**建構的必然結果**，而不是事後施加的夾限。
+
+場之所以是級數而非表格，原因在於：`n` 點表格能精確重現自身的取樣值，但其三角內插在取樣點之間會過衝。一張評分為 `[+1, +0.5, −1, −0.5, 0]` 的五點表格，內插結果落在 `[−1.0428, 1.0041]`，這已經違背了承諾。有界的級數則不會。
+
+### 10.3 分析以每個元素為基準衡量資料
+
+每個環元素都是一個參考相位。`analyse` 會將每個觀測值定位回環上，並以每個參考相位來衡量它：
+
+```typescript
+const ring = new SynchronousCycle(["a", "b", "c", "d", "e"]);
+const report = ring.analyse(["a", "c", "c", "a", "zz", "e"]);
+
+report.matched;                              // 5
+report.missed;                               // 1  （'zz' 不在環上）
+report.references.map(r => r.count);         // [2, 0, 2, 0, 1]
+```
+
+每個參考列都會回報 `count`（計數）、平均相對相位 `mean`，以及平均合力長度 `resultant`。有一個恆等式值得記住：**每個參考的 `resultant` 都相同**，因為改變基準只會讓所有相對相位旋轉一個常數。每個參考不同的是計數與平均值。
+
+```typescript
+const cycle = new SynchronousCycle(["a", "b", "c"]);
+cycle.scoresAt(0, cosine);                   // 每個位置一個分數，落在 [-1, 1] 中
+```
+
+### 10.4 相關工具
+
+| 呼叫 | 回答的問題 | 成本 |
 | :--- | :--- | :--- |
-| `useCompare(a, b)` | 每個預設排序/最小/最大所使用的結構化比較（`number`、`bigint`、`string`、`boolean`、`symbol`、透過 `Symbol.toPrimitive` 的物件） | O(1) primitives |
-| `useRandom(start, end?)` | 隨機的 `number` / `bigint`，在半開區間上均勻分佈 | O(1) |
-| `useHash(value, …)` | 適用於任何值的穩定、約 64 位元 `bigint` 雜湊（基本型別、物件、環狀參照） | O(v) over visited values |
-| `register(type, handler)` / `unregister(type)` / `maskOf(type)` | 為自訂型別擴充雜湊 | O(1) |
-| `useTraverse(object, callback)` | 具循環保護的深度走訪；回呼接收 `(key, value, path)` | O(v + e) |
-| `useStringify(object, callback?)` | 能倖存於循環參照的 JSON 序列化 | O(v + e) |
-| `useToNumber(value)` / `useToBigInt(value)` | 全函數式轉換（永不拋出；對無法使用的輸入回傳 `0` / `0n`） | O(1) |
-| `useGenerator(iterable)` / `useArrange(source, comparator?)` | 原始的 `(accept, interrupt)` 生成器，以及一個排序用生成器 | O(n) / O(n log n) |
-| `Optional<T>` | `of`, `ofNullable`, `ofNonNull`, `empty`; `map`, `flat`, `flatMap`, `filter`, `get`, `get(default)`, `ifPresent(action, elseAction)`, `orElse`, `isPresent`, `isEmpty`, `semantic()` | O(1) per method |
-| Type guards | `isNumber` (excludes `NaN` and `Infinity`), `isBigInt`, `isString`, `isBoolean`, `isSymbol`, `isFunction`, `isObject`, `isPrimitive`, `isIterable`, `isAsyncIterable`, `isPromise`, `isAsyncFunction`, `isGeneratorFunction`, `isAsyncGeneratorFunction`, `isOptional`, `isSynchronousSemantic` / `isAsynchronousSemantic`, `isSynchronousCollectable` (+ async), `isSynchronousOrderedCollectable`, `isSynchronousUnorderedCollectable`, `isSynchronousStatistics`, `isSynchronousNumericStatistics`, `isSynchronousBigIntStatistics`, `isSynchronousWindowCollectable`, `isSynchronousCollector` | O(1) |
+| `purity()` | 環是否仍為 `n` 次單位根？ | O(n) |
+| `resultant(t?)` | 相量此刻有多集中？ | O(n) |
+| `analyse(data)` | 這筆資料相對於每個元素的關係如何？ | O(n · m) |
+| `toSpectrum()` | 將環視為頻譜，波數位於頻率軸 | O(n²) |
+| `useAngularSpectrum(cycle, instants, plan)` | 隨時間變化的 `(ω, n)` 平面 | O(n² · frames) |
 
-```typescript
-useCompare(1, 2);                        // negative
-useRandom(1n, 10n);                      // 1n … 9n
-useHash({ a: 1 }) === useHash({ a: 1 }); // true — stable and structural
-useTraverse({ a: { b: 1 } }, (key, value) => console.log(key, value));
-useToBigInt("42");                       // 42n
-Optional.ofNullable(null).orElse(5);     // 5
-```
+另有兩個基元補全了這個模型：`combineCycles(a, b)` 以最小公倍數聯結兩個環（這是拉回，而非乘積——無法共享同一時刻的配對直接不存在），而 `rate()` 讓每個元素擁有自己的內在頻率，使環得以相對於環境漂移。`jetAt`、`windingAt` 與 `errorIntegralAt` 則揭露該漂移的微分狀態。
 
 ---
 
-<a id="13-comparison-with-other-libraries"></a>
-## 13. 與其他函式庫的比較
+<a id="11-utility-helpers"></a>
+## 11. 輔助工具
 
-| 面向 | Semantic-TypeScript | RxJS | 原生迭代器 |
-| :--- | :--- | :--- | :--- |
-| 模型 | 帶有明確 `interrupt` 訊號的推送 | 推送、訂閱物件 | 拉取 |
-| 位置 | 每個元素上內在的 `bigint` 索引 | 你組合的算子（`scan`、`withLatestFrom`） | 手動計數器 |
-| 惰性 | 算子惰性、可收集器明確 | 算子惰性、`subscribe` 急切 | 惰性 |
-| 同步＋非同步 | 單一 API，非同步工廠在型別中標記 | 非同步優先 | 手動以 `for await` 橋接 |
-| 終端 API | 豐富的可收集器（`toArray`、`toMap`、`group`、`reduce`、`find*`、統計） | 僅算子 | 無 |
-| 統計 | 內建，適用於 `number` 與 `bigint` | 外部 | 無 |
-| 生命週期安全 | 邊界算子自動取消訂閱 | 手動 `unsubscribe` / `takeUntil` | 手動 |
-| 生態系／體積 | 小巧、零依賴 | 龐大的算子生態系 | 零 |
-
-當你需要以索引驅動、具備明確成本模型且無排程器的資料處理時，請選擇 Semantic-TypeScript。當你需要其算子生態系、多觀察者語意與排程器控制時，請選擇 RxJS。
+| 輔助工具 | 用途 |
+| :--- | :--- |
+| `useCompare(a, b)` | 跨混合基元型別的全序 |
+| `useToNumber` / `useToBigInt` | 無損、具範圍檢查的數值轉換 |
+| `useRandom` | 具種子或不具種子的隨機輔助工具 |
+| `useTraverse` | 巢狀物件與陣列的結構化走訪 |
+| `useStringify` | 循環安全的 JSON 序列化 |
+| `useHash` / `maskOf` / `register` / `unregister` | 結構化雜湊與雜湊策略註冊表 |
+| `invalidate` / `validate` | 會拋出一致錯誤形狀的防護子句 |
+| `Optional<T>` | 函式庫的 `null` 替代品：`Optional.of(x)` / `Optional.empty()` |
 
 ---
 
-<a id="14-performance-characteristics"></a>
-## 14. 效能特性
+<a id="12-performance-and-pitfalls"></a>
+## 12. 效能與陷阱
 
-一次查詢的成本是三個可見部分之和：來源（§5）、算子（§6）、可收集器（§7）。隱藏的部分永遠不會執行兩次。
+**惰性在每個階段都有代價。** 每個算子都會增加一層生成器跳躍。對於記憶體陣列上的緊密數值迴圈，樸素的 `for` 迴圈會勝過任何管線；當來源是惰性的、無限的，或管線長到足以讓索引紀律回本時，管線才會勝出。
 
-| 操作 | 時間 | 空間 | 備註 |
-| :--- | :--- | :--- | :--- |
-| `map` / `filter` / `peek` | O(1) per element | O(1) | 純轉換 |
-| `limit` / `takeWhile` | O(1) per element | O(1) | 立即停止上游 |
-| `reverse` / `translate` / `shuffle` | O(1) per element | O(1) | 僅索引算術——不緩衝 |
-| `distinct` | O(1) average per element | O(n) | 鍵的 `Set` |
-| `toUnordered()` | O(n) | O(n) | 每個元素一次 `Map` 插入；索引不變 |
-| `toOrdered()` | O(n log n) | O(n) | 正規化 O(n) + 排序 O(n log n) |
-| Statistics | O(n log n) once, then O(1) per method | O(n) | 保留已排序/已聚合的緩衝區 |
-| `findAt(k)` / `findNegativeAt(k)` | O(k) / O(n−k) | O(1) | 一旦通過該位置便提前中斷 |
-| `findMaximum` / `findMinimum` | O(n) generic, O(1) statistics | O(1) | 單次遍歷並維持當前最佳值 |
+**`toOrdered()` 會排序；`toUnordered()` 不會。** 如果反轉似乎「沒有生效」，那是因為收集器是無序的——索引重寫唯有在索引被正規化之後，才會成為順序。
 
-經驗法則：在真正需要結果之前，讓管線保持惰性；除非順序重要，否則優先使用 `toUnordered()`；在語意允許的情況下，盡早放置 `limit` / `takeWhile`；讓*可收集器*而非算子來決定排序的成本。
+**沒有 `interrupt` 的 `useGenerate` 永遠不會結束。** 請務必提供停止述詞，或下游的 `limit` / `takeWhile`。
+
+**`Cycle` 是插入有序的集合。** 元素彼此唯一，並保留首次加入的順序。重複的 `add` 會回傳 `false`，而會引入重複項的 `set` 則會拋出例外。這正是相位得以成為*元素*的函式、而非取決於它恰好佔據哪個位置的原因。
+
+**`Spectrum` 的單側輔助方法假設輸入為實數訊號。** `oneSided()`、`getNyquist()` 與 `centroid()` 假設共軛對稱。相位環的空間頻譜是複數，且一般而言並不對稱——一個反向繞行的環會把全部能量放進頻段 `n − 1`，也就是超出 Nyquist 的位置。請直接讀取頻段。
 
 ---
 
-<a id="15-pitfalls-and-faq"></a>
-## 15. 陷阱與常見問答
-
-**「我的管線什麼都沒回傳／卡住了。」** 來源從未結束。`useInterval`、`useSubscription`、`usePromise` 與 `useGenerate` 需要一個邊界（`limit`、`sub`、`takeWhile`）或一個會完成的來源。
-
-**「`reverse()` 什麼都沒做。」** 你用 `toUnordered()` 來消費它，而該收集器保證不進行索引簿記。請改用 `toOrdered()`。
-
-**「`translate(2)` 回傳的元素未輪轉。」** 原因相同：`translate` 只位移索引；輪轉是由 `toOrdered()` 的模數正規化實現的。以無序方式收集時，該位移在原始索引中仍清晰可見。
-
-**「為什麼少了某個元素？」** 上游產出了重複索引，而你正透過 `toUnordered()` 消費。代理鍵能防止資料遺失，但如果你需要依序*看見*這兩個元素，請改用 `toOrdered()`。
-
-**「`findAt(1n)` 回傳了出乎預期的結果。」** `findAt` 定址的是**具體化順序**，而非原始索引。在 `.reverse().toOrdered()` 之後，位置 1 是反轉序列中的第二個元素。若你想要的是攜帶原始索引 `1n` 的元素，請明確地依索引過濾。
-
-**「`bigint` 統計看起來被四捨五入了。」** 確實如此——`bigint` 結果依設計為整數四捨五入（見 [統計](#8-statistics)）。請映射至 `number` 以取得精確分數。
-
-**「我必須在 `toArray()` 之前先呼叫 `toXxx()` 嗎？」** 是的。終端操作存在於可收集器上，而非語意物件上。這是刻意的：它讓儲存與排序成本在型別中顯現。
-
-**「它支援 tree-shake 嗎？」** 已宣告 `sideEffects: false`，因此請只匯入你所使用的部分。請注意 `useHash` 會在模組載入時註冊其預設處理器。
-
----
-
-<a id="16-license"></a>
-## 16. 授權
+<a id="13-license"></a>
+## 13. 授權
 
 MIT © Eloy Kim
-
-完整發行歷程請見 [CHANGELOG.md](./CHANGELOG.md)。

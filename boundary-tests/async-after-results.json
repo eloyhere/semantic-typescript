@@ -1,0 +1,529 @@
+{
+  "node": "v24.21.0",
+  "total": 65,
+  "passed": 65,
+  "failed": 0,
+  "results": [
+    {
+      "id": "promise.single-index",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "promise.null-undefined",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "promise.rejection-propagates",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "promise.callback-throw-propagates",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "promise.limit-zero-completes",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "promise.repeated-concurrent-source",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "blob.empty",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "blob.chunk-boundary-and-copy",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "blob.invalid-chunks",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "blob.read-error-releases-lock",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "blob.limit-cancels-and-releases",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "blob.consumer-error-cancels",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "blob.cancel-error-still-releases-lock",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "blob.concurrent-consumption",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "iterate.empty",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "iterate.rejection-propagates",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "iterate.callback-throw-closes-generator",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "iterate.limit-closes-generator",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "iterate.repeatable-concurrent",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collectable.materializes-once-concurrent-terminals",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collectable.toUnordered.source-rejection",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collectable.toOrdered.source-rejection",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collectable.toWindow.source-rejection",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collectable.toNumericStatistics.source-rejection",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collectable.ordered-concurrent-terminals",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collectable.ordered-isEmpty-after-complete-0",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collectable.ordered-isEmpty-after-complete-1",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collectable.ordered-isEmpty-before-complete",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collectable.ordered-empty-findMaximum-settles",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collectable.ordered-empty-findMinimum-settles",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "concat.semantic-awaits-second-source",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "concat.async-iterable-respects-limit",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "concat.semantic-second-rejection-propagates",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "flatMap.iterable-respects-limit",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "flatMap.async-respects-global-limit",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "flatMap.async-rejection-propagates",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collect.four-arguments-honors-interrupt",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collector.maximum-nonempty",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collector.minimum-nonempty",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collector.join-empty",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collector.join-custom-delimiters",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collector.reduce-error-not-recovered-as-empty",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "interval.limit-cleans-timer",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "interval.callback-exception-rejects",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "interval.interrupt-exception-rejects",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "interval.invalid-nonfinite",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "subscription.limit-boundary-cleans-without-extra-event",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "subscription.next-event-cleanup-control",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "subscription.callback-exception-rejects-and-cleans",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "subscription.synchronous-subscribe-emission-cleans",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "subscription.duplicate-event-keys-clean-all-handlers",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "subscription.supplier-is-lazy-and-per-consumption",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "subscription.concurrent-consumers-get-independent-subscribers",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "subscription.subscribe-error-rejects-and-unmounts",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "subscription.empty-keys-completes",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "subscription.unmount-error-rejects",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "window.empty",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "window.trailing-partials",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "window.step-greater-than-size",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "window.invalid-size-step",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "window.outer-limit-completes",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "window.inner-limit-completes",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "promise.rejection-keeps-consumer-pending-observation",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "collectable.rejection-keeps-terminal-pending-observation",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    },
+    {
+      "id": "subscription.limit-boundary-pending-observation",
+      "status": "passed",
+      "observation": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false
+    }
+  ],
+  "note": "All cases assert repaired behavior, including the former fault-observation regressions. Historical async-results.json remains unchanged."
+}

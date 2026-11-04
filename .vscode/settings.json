@@ -1,0 +1,14 @@
+{
+    // Prefer the '#semantic/*' path alias over relative specifiers.
+    // Under module: NodeNext a relative import must carry its '.js' extension,
+    // which is why auto-import used to append one. Preferring the alias keeps
+    // generated imports extension-free and stable when files move.
+    "typescript.preferences.importModuleSpecifier": "non-relative",
+    "javascript.preferences.importModuleSpecifier": "non-relative",
+    "typescript.preferences.importModuleSpecifierEnding": "minimal",
+    "javascript.preferences.importModuleSpecifierEnding": "minimal",
+    // verbatimModuleSyntax is on, so a symbol used only as a type must be
+    // imported with 'import type'.
+    "typescript.preferences.preferTypeOnlyAutoImports": true,
+    "javascript.preferences.preferTypeOnlyAutoImports": true
+}

@@ -4,6 +4,9 @@
     "useDefineForClassFields": true,
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "paths": {
+      "#semantic/*": ["./src/*.ts"]
+    },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,

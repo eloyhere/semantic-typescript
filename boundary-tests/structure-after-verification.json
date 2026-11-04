@@ -1,0 +1,42 @@
+﻿[
+    {
+        "Path":  "R:\\project\\semantic-typescript\\dist\\structure\\collection.d.ts",
+        "Hash":  "8E609BB71C20B858C77F0E9F90BB1319DB8477B13F9F965F1A1E18524BF50881"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\dist\\structure\\collection.js",
+        "Hash":  "8E609BB71C20B858C77F0E9F90BB1319DB8477B13F9F965F1A1E18524BF50881"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\dist\\structure\\list.d.ts",
+        "Hash":  "8E609BB71C20B858C77F0E9F90BB1319DB8477B13F9F965F1A1E18524BF50881"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\dist\\structure\\list.js",
+        "Hash":  "8E609BB71C20B858C77F0E9F90BB1319DB8477B13F9F965F1A1E18524BF50881"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\dist\\structure\\lru.d.ts",
+        "Hash":  "8E609BB71C20B858C77F0E9F90BB1319DB8477B13F9F965F1A1E18524BF50881"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\dist\\structure\\lru.js",
+        "Hash":  "8E609BB71C20B858C77F0E9F90BB1319DB8477B13F9F965F1A1E18524BF50881"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\dist\\structure\\map.d.ts",
+        "Hash":  "8E609BB71C20B858C77F0E9F90BB1319DB8477B13F9F965F1A1E18524BF50881"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\dist\\structure\\map.js",
+        "Hash":  "8E609BB71C20B858C77F0E9F90BB1319DB8477B13F9F965F1A1E18524BF50881"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\dist\\structure\\set.d.ts",
+        "Hash":  "8E609BB71C20B858C77F0E9F90BB1319DB8477B13F9F965F1A1E18524BF50881"
+    },
+    {
+        "Path":  "R:\\project\\semantic-typescript\\dist\\structure\\set.js",
+        "Hash":  "8E609BB71C20B858C77F0E9F90BB1319DB8477B13F9F965F1A1E18524BF50881"
+    }
+]

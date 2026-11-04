@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import * as ST from "../dist/index.js";
+import * as ST from "semantic-typescript";
 describe("导出与品牌校验", () => {
     test("P0-14 hash 模块已导出", () => {
         assert.equal(typeof ST.useHash, "function");

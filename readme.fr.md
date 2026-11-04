@@ -13,7 +13,7 @@ npm install semantic-typescript
 ```
 
 - Zéro dépendance au runtime, pur ESM, fournit ses propres types.
-- 55 tests de non-régression : `npm install && npm test`.
+- 496 tests de non-régression : `npm test`.
 - Historique des changements complet : [CHANGELOG.md](./CHANGELOG.md).
 
 ---
@@ -22,640 +22,413 @@ npm install semantic-typescript
 
 1. [Philosophie de conception](#1-design-philosophy)
 2. [Architecture](#2-architecture)
-3. [Flux de données : de la source au résultat](#3-data-flow-from-source-to-result)
-4. [Démarrage rapide](#4-quick-start)
-5. [Fonctions de fabrique](#5-factory-functions)
-6. [Opérateurs de transformation](#6-transformation-operators)
-7. [Collectables et opérations terminales](#7-collectables-and-terminal-operations)
-8. [Statistiques](#8-statistics)
-9. [Fenêtres](#9-windows)
-10. [Le modèle d'index](#10-the-index-model)
-11. [Le modèle asynchrone](#11-the-asynchronous-model)
-12. [Fonctions utilitaires](#12-utility-helpers)
-13. [Comparaison avec d'autres bibliothèques](#13-comparison-with-other-libraries)
-14. [Caractéristiques de performance](#14-performance-characteristics)
-15. [Pièges et FAQ](#15-pitfalls-and-faq)
-16. [Licence](#16-license)
+3. [Démarrage rapide](#3-quick-start)
+4. [Fonctions de fabrique](#4-factory-functions)
+5. [Opérateurs de transformation](#5-transformation-operators)
+6. [Collectables et opérations terminales](#6-collectables-and-terminal-operations)
+7. [Statistiques et fenêtres](#7-statistics-and-windows)
+8. [Le modèle d'index](#8-the-index-model)
+9. [Le modèle asynchrone](#9-the-asynchronous-model)
+10. [Analyse périodique : anneaux, champs et scores](#10-periodic-analysis-rings-fields-and-scores)
+11. [Fonctions utilitaires](#11-utility-helpers)
+12. [Performance et pièges](#12-performance-and-pitfalls)
+13. [Licence](#13-license)
 
 ---
 
 <a id="1-design-philosophy"></a>
 ## 1. Philosophie de conception
 
-**1. L'index d'abord.** Dans la plupart des bibliothèques de flux, une position est quelque chose que l'on
-*reconstruit* — un compteur que l'on transporte dans `scan`, ou un argument d'index que l'on fait passer
-manuellement. Ici la position est *intrinsèque* : le protocole du générateur fournit à chaque élément un index
-`bigint`, si bien que `distinct`, `skip`, `sub`, `reverse`, `translate` et `shuffle` s'expriment tous comme une
-arithmétique d'index plutôt que comme un état ad hoc. Modifier l'index d'un élément *revient à* le réordonner ;
-re-indexer *revient à* filtrer.
+Trois idées, un seul pipeline :
 
-**2. Propagation avec un signal d'arrêt explicite.** Une source est une fonction
-`(accept, interrupt) => void | Promise<void>`. Elle propage les éléments via `accept(element, index)` et demande
-à `interrupt(element, index)` s'il faut s'arrêter. Il n'y a aucun ordonnanceur caché, aucun objet d'abonnement,
-aucune phase de démontage à mémoriser — la contre-pression et la terminaison font partie du protocole, et les
-flux infinis deviennent des cas ordinaires (et non spéciaux).
+**L'index, c'est de la donnée.** Chaque élément est adressé par un `bigint`. L'inversion, la rotation, le mélange et
+le partitionnement sont de l'arithmétique d'index, pas des opérations sur tampon. Rien n'est matérialisé tant qu'un
+collectable ne le demande.
 
-**3. La paresse est le défaut ; la matérialisation est un choix.** Les opérateurs se contentent d'encapsuler des
-générateurs. Rien ne s'exécute tant qu'un **collectable** ne consomme pas le pipeline, et le collecteur que vous
-choisissez détermine le coût : `toUnordered()` est en O(n) et ne touche jamais vos index, `toOrdered()` est en
-O(n log n) et les normalise. Comme la décision figure explicitement dans le type renvoyé, vous savez toujours si
-l'ordre et la mémoire sont payés.
+**La paresse est le défaut.** Une fabrique encapsule un générateur ; un opérateur en encapsule un autre. Aucun
+élément n'est demandé tant qu'une opération terminale ne s'exécute, si bien qu'une source infinie est parfaitement
+légale tant que quelque chose en aval l'arrête.
 
-**4. Redirect est le seul mécanisme de réordonnancement.** `reverse()`, `translate()` et `shuffle()` ne sont rien
-d'autre que des stratégies `redirect()` pré-emballées — chacune réécrit l'index d'un élément et rien d'autre. C'est
-pourquoi elles **exigent toutes `toOrdered()`** pour prendre effet : le pipeline ne fait que réécrire les index, et
-c'est le collecteur ordonné qui décide ce que ces index signifient.
+**Les terminaux sont explicites.** `map` renvoie un `Semantic`, pas un tableau. Les valeurs n'apparaissent que
+lorsque vous nommez un collectable — `toUnordered()`, `toOrdered()`, `toNumericStatistics()`, `toWindow()` — et
+chacun énonce ce qu'il coûte et quel ordre il produit.
 
-**5. Synchrone et asynchrone : une seule API.** Les mêmes opérateurs existent aussi bien pour des données finies en
-mémoire que pour des promesses, itérables asynchrones, minuteries, blobs et abonnements à des événements. Les sources
-qui ne peuvent pas être synchrones le disent dans leur type de retour (`AsynchronousSemantic`), si bien que
-« ai-je attendu cela ? » cesse d'être une surprise à l'exécution.
+La même discipline s'applique à la moitié mathématique de la bibliothèque. Un `Complex`, un `Angle` ou une
+`Frequency` est une valeur immuable dont les invariants sont vérifiés à la construction ; un `Optional` remplace
+`null` ; et un anneau de phase énonce exactement combien d'éléments il contient, quelle période il a et
+dans quelle mesure il est équilibré.
 
 ---
 
 <a id="2-architecture"></a>
 ## 2. Architecture
 
-Trois couches, une seule direction. Les données descendent ; le type que vous détenez indique ce que vous pouvez faire ensuite.
-
 ```
-            SOURCES                     PIPELINE                      SINKS
- ┌──────────────────────────┐   ┌────────────────────────┐   ┌───────────────────────────┐
- │  useOf  useFrom  useRange│   │  map  filter  flatMap  │   │  toUnordered()  → Map     │
- │  useFill useEmpty useText│   │  distinct  limit  skip │   │  toOrdered()    → sorted  │
- │  useAttribute useGenerate│ → │  sub  takeWhile drop   │ → │  toNumericStatistics()    │
- │  usePromise useBlob      │   │  concat  peek  redirect│   │  toBigintStatistics()     │
- │  useIterate useInterval  │   │  reverse  translate    │   │  toWindow()               │
- │  useSubscription         │   │  shuffle  pipe         │   │  toCollectable(custom)    │
- └──────────────────────────┘   └────────────────────────┘   └───────────────────────────┘
-        Semantic<E>                    Semantic<E>                 Collectable<E>
-
-                                     terminal operations on the Collectable:
-                        toArray  toMap  toSet  count  forEach  join  group  reduce
-                        findFirst  findLast  findAt  findMaximum  …  anyMatch  …
+factory  ──▶  Semantic  ──▶  Semantic  ──▶  Collectable  ──▶  result
+ (source)      (map)         (filter)        (terminal)
+                    ▲
+                    └── chaque opérateur renvoie un nouveau Semantic encapsulant un générateur
 ```
 
-| Couche | Type | Responsabilité | Vous l'obtenez de |
-| :--- | :--- | :--- | :--- |
-| Source / pipeline | `SynchronousSemantic<E>`<br>`AsynchronousSemantic<E>` | Construit le pipeline paresseux : transforme, re-indexe, découpe, fusionne. Aucun élément n'est encore touché. | Les fabriques, et chaque opérateur d'un semantic |
-| Stockage / vue | `SynchronousUnorderedCollectable<E>`<br>`SynchronousOrderedCollectable<E>`<br>`SynchronousNumericStatistics<E>`<br>`SynchronousBigIntStatistics<E>`<br>`SynchronousWindowCollectable<E>`<br>(+ les contreparties `Asynchronous*`) | Matérialise le pipeline dans un tampon adressé par index et expose l'API terminale. La famille **ordered** possède la comptabilité des index ; la famille **unordered** y renonce au profit du débit. | `toUnordered()` `toOrdered()` `toNumericStatistics()` `toBigintStatistics()` `toWindow()` `toCollectable()` |
-| Collecteur | `SynchronousCollector<E, A, R>`<br>`AsynchronousCollector<E, A, R>` | Un pliage réutilisable : `identity → accumulator → finisher`, éventuellement avec un `interruptor`. Alimente chaque opération terminale et peut être écrit par l'utilisateur. | les fabriques de collecteurs `useSynchronous*` / `useAsynchronous*`, ou `Collectable.collect(...)` |
+| Couche | Module | Responsabilité |
+| :--- | :--- | :--- |
+| Sources | `synchronous/collectors`, `asynchronous/collectors` | Encapsule un itérable, un générateur, une promesse, un blob, une cible d'événement |
+| Pipelines | `synchronous/semantic`, `asynchronous/semantic` | Opérateurs paresseux et réécriture d'index |
+| Collectables | `synchronous/semantic`, `asynchronous/semantic` | Terminaux ordonnés, non ordonnés, statistiques, fenêtres et personnalisés |
+| Collecteurs | `synchronous/collector`, `asynchronous/collector` | Les primitives de pliage sur lesquelles chaque terminal est bâti |
+| Mathématiques | `mathematics/*` | Angles, complexes, fréquences, spectres, fenêtres, épicycles, anneaux de phase |
+| Structures | `structure/*` | Listes, ensembles, tables, arbres, anneaux, champs |
 
-Pourquoi la couche intermédiaire existe : séparer « ce qu'est le pipeline » de « comment il est stocké » permet au
-même `toOrdered()` de servir l'inversion, la rotation et le mélange — le pipeline ne fait que réécrire les index, et
-le collecteur décide ce que ces index signifient.
+Les familles synchrone et asynchrone partagent un seul vocabulaire : les mêmes noms d'opérateurs, la même
+sémantique d'index, les mêmes collectables. Les variantes asynchrones se contentent de renvoyer des promesses, et
+elles mettent les écritures en file d'attente afin qu'une lecture émise après une écriture l'observe toujours.
 
 ---
 
-<a id="3-data-flow-from-source-to-result"></a>
-## 3. Flux de données : de la source au résultat
-
-```typescript
-const result = useRange(0n, 100n)      // (1) source: reserve indices 0n,1n,2n,…
-  .filter(n => n % 2n === 0n)          // (2) operator: index is forwarded unchanged
-  .translate(2)                        // (3) operator: index becomes i + 2 (a lazy shift)
-  .limit(5n);                          // (4) operator: interrupt() returns true after 5 elements
-
-const ordered = result.toOrdered();    // (5) collectable: materialise; indices normalised mod n, sorted
-const array = ordered.toArray();       // (6) terminal: drain the buffer
-```
-
-1. **Construire.** Les étapes 1 à 4 ne construisent que des fermetures. Cent éléments ne sont jamais générés.
-2. **Propager.** Lorsqu'un collectable exécute enfin le générateur, les éléments circulent sans ordonnanceur : la
-   source pilote, `accept` écrit dans le collecteur, `interrupt` décide quand s'arrêter — voilà pourquoi
-   `limit(5n)` au milieu d'un intervalle d'un million d'éléments coûte cinq itérations, et non un million.
-3. **Indexer.** Les opérateurs ne perdent jamais l'index. `filter` transmet l'index d'origine (ainsi « le 3e
-   élément *conservé* » reste « l'index 3 »), tandis que `skip` / `sub` / `limit` / `distinct` re-indexent
-   délibérément.
-4. **Matérialiser.** Un collectable exécute le générateur exactement une fois, à la construction.
-5. **Terminal.** Les méthodes du collectable lisent le tampon ; elles sont peu coûteuses, répétables et ne
-   relancent jamais le pipeline.
-
-**La seule règle à retenir :** les transformations sont paresseuses, les collectables sont gourmands, les opérations terminales sont gratuites.
-
----
-
-<a id="4-quick-start"></a>
-## 4. Démarrage rapide
+<a id="3-quick-start"></a>
+## 3. Démarrage rapide
 
 ```typescript
 import {
   useOf, useFrom, useRange, useText, useStringify, usePromise
 } from "semantic-typescript";
 
-// Numeric aggregation
+// Agrégation numérique
 const sum: number = useOf(10, 20, 30, 40)
   .map(n => n * 2)
   .toNumericStatistics()
   .summate();                                   // 200
 
-// BigInt aggregation
+// Agrégation BigInt
 const bigSum: bigint = useOf(10n, 20n, 30n, 40n)
   .map(n => n * 2n)
   .toBigintStatistics()
   .summate();                                   // 200n
 
-// Reordering is index arithmetic — collect with toOrdered() for it to take effect
+// Le réordonnancement relève de l'arithmétique d'index — collectez avec toOrdered() pour qu'il prenne effet
 const reversed: number[] = useFrom([1, 2, 3, 4, 5]).reverse().toOrdered().toArray();      // [5,4,3,2,1]
 const rotated: number[]  = useFrom([1, 2, 3, 4, 5]).translate(2).toOrdered().toArray();   // [4,5,1,2,3]
 
-// Lazy evaluation over a large range
+// Évaluation paresseuse sur un grand intervalle
 const multiples: bigint[] = useRange(0n, 1_000_000n)
   .filter(n => n % 17n === 0n)
   .limit(10n)
   .toUnordered()
   .toArray();                                   // [0n,17n,…,153n]
 
-// Unicode-safe string processing (code points, not UTF-16 units)
+// Traitement de chaînes sûr pour Unicode (points de code, et non unités UTF-16)
 useText("semantic 👍").toUnordered().forEach(character => console.log(character));
 
-// Circular-safe serialisation
+// Sérialisation sûre face aux cycles
 const cyclic: any = { a: 1 }; cyclic.self = cyclic;
 useStringify(cyclic);                           // '{"a":1}'
 
-// Async sources
+// Sources asynchrones
 const total = await usePromise(Promise.resolve(7)).toNumericStatistics().summate();       // 7
 ```
 
 ---
 
-<a id="5-factory-functions"></a>
-## 5. Fonctions de fabrique
+<a id="4-factory-functions"></a>
+## 4. Fonctions de fabrique
 
-### 5.1 Aperçu
-
-La construction est toujours en O(1) — une fabrique se contente d'encapsuler un générateur. Le tableau ci-dessous
-indique le coût de *consommation* de `n` éléments de chaque source, ainsi que l'espace supplémentaire dont la source
-a besoin au-delà des éléments que vous collectez.
+La construction est toujours en O(1) — une fabrique se contente d'encapsuler un générateur. Le tableau indique le
+coût de *consommation* de `n` éléments, plus l'espace supplémentaire dont la source elle-même a besoin.
 
 | Fabrique | Signature (résultat) | Temps (consommer n) | Espace (source) | Notes |
 | :--- | :--- | :--- | :--- | :--- |
 | `useOf` | `useOf<E>(...elements) → SynchronousSemantic<E>` | O(n) | O(n) | Les index vont de 0..n−1 ; l'argument spread est déjà matérialisé |
-| `useFrom` | `useFrom<E>(Iterable<E>) → SynchronousSemantic<E>`<br>`useFrom<E>(AsyncIterable<E>) → AsynchronousSemantic<E>` | O(n) | O(1) | Encapsule tout `Iterable` / `AsyncIterable` ; itéré une fois à la collecte |
+| `useFrom` | `useFrom<E>(Iterable<E>) → SynchronousSemantic<E>`<br>`useFrom<E>(AsyncIterable<E>) → AsynchronousSemantic<E>` | O(n) | O(1) | Encapsule tout itérable ; itéré une fois à la collecte |
 | `useRange` | `useRange<N>(start, end, step?) → SynchronousSemantic<N>` | O(n) | O(1) | `end` est exclusif ; `step` doit être non nul ; `number` et `bigint` fonctionnent tous deux |
 | `useFill` | `useFill<E>(element \| supplier, count) → SynchronousSemantic<E>` | O(n) | O(1) | Un fournisseur est appelé une fois par élément |
 | `useEmpty` | `useEmpty<E>() → SynchronousSemantic<E>` | O(1) | O(1) | Élément neutre pour `concat` |
-| `useText` | `useText(text)`<br>`useText(text, delimiter)`<br>`useText(text, start)` / `(text, start, end)` | O(n) | O(n) pour le texte | Itère sur les **points de code**, si bien que les emoji et le CJK restent des éléments uniques |
-| `useAttribute` | `useAttribute<T>(object) → SynchronousSemantic<{key, value}>` | O(v + e) sur v valeurs et e arêtes | O(d + v) pour l'ensemble visité à la profondeur d | Parcourt récursivement les objets/tableaux imbriqués avec protection anti-cycle |
-| `useGenerate` | `useGenerate<E>(supplier, interrupt) → SynchronousSemantic<E>` | O(n) × coût du fournisseur | O(1) | **Doit** avoir un `interrupt` d'arrêt (ou un `limit` / `takeWhile` en aval) |
-| `useIterate` | `useIterate<E>(Iterable<E>) → SynchronousSemantic<E>`<br>`useIterate<E>(AsyncIterable<E>) → AsynchronousSemantic<E>` | O(n) par collecte | O(1) | Rejoue l'itérateur à chaque collecte |
-| `useInterval` | `useInterval(period, delay?) → AsynchronousSemantic<number>` | n × period (temps réel) | O(1) | Émet le temps écoulé ; consomme du temps réel |
+| `useText` | `useText(text, delimiter?)` | O(n) | O(n) pour le texte | Itère sur les **points de code**, si bien que les emoji et le CJK restent des éléments uniques |
+| `useAttribute` | `useAttribute<T>(object)` | O(v + e) | O(d + v) | Parcourt récursivement les objets imbriqués avec protection anti-cycle |
+| `useGenerate` | `useGenerate<E>(supplier, interrupt)` | O(n) × coût du fournisseur | O(1) | **Doit** avoir un `interrupt` d'arrêt ou un `limit` en aval |
+| `useIterate` | `useIterate<E>(Iterable<E>)` / `(AsyncIterable<E>)` | O(n) par collecte | O(1) | Rejoue l'itérateur à chaque collecte |
+| `useInterval` | `useInterval(period, delay?) → AsynchronousSemantic<number>` | n × period (temps réel) | O(1) | Émet le temps écoulé |
 | `usePromise` | `usePromise<T>(promise) → AsynchronousSemantic<T>` | O(1) | O(1) | Un seul élément à l'index `0n` |
-| `useBlob` | `useBlob(blob, chunk?) → AsynchronousSemantic<Uint8Array>` | O(blob size) | O(chunk) par copie émise | Le morceau par défaut est de 64 Kio ; chaque morceau est une copie indépendante |
-| `useSubscription` | `useSubscription(target, subscriber, event \| events) → AsynchronousSemantic<Event>` | un élément par événement | O(1) | `limit()` / `sub()` / `takeWhile()` définissent la frontière de désabonnement |
-
-### 5.2 Exemples
+| `useBlob` | `useBlob(blob, chunk?) → AsynchronousSemantic<Uint8Array>` | O(blob size) | O(chunk) par copie | Le morceau par défaut est de 64 Kio |
+| `useSubscription` | `useSubscription(target, subscriber, event) → AsynchronousSemantic<Event>` | un élément par événement | O(1) | `limit()` / `takeWhile()` définissent la frontière de désabonnement |
 
 ```typescript
-// useOf / useFrom
 useOf(1, 2, 3).toUnordered().toArray();                       // [1,2,3]
 useFrom(new Set([1, 2, 2])).toUnordered().toArray();          // [1,2]
-useFrom(new Map([["a", 1]])).toUnordered().toArray();         // [["a",1]]
-
-// useRange — half-open interval, number or bigint
 useRange(0, 5).toUnordered().toArray();                       // [0,1,2,3,4]
 useRange(10n, 0n, -5n).toUnordered().toArray();               // [10n,5n]
-
-// useFill
 useFill("x", 3n).toUnordered().toArray();                     // ["x","x","x"]
-useFill(() => Math.random(), 2n).toUnordered().toArray();     // two fresh randoms
-
-// useText — code-point aware
 useText("A😊B").toUnordered().toArray();                      // ["A","😊","B"]
-useText("a,b,c", ",").toUnordered().toArray();                // ["a","b","c"]
-useText("abcdef", 1, 3).toUnordered().toArray();              // ["b","c"]
-
-// useGenerate — infinite supplier with a stop predicate
-useGenerate(() => 7, (_element, index) => index >= 3n).toUnordered().toArray();   // [7,7,7]
-
-// useIterate — async generator
-async function* tick() { yield 1n; yield 2n; }
-await useIterate(tick()).toUnordered().toArray();             // [1n,2n]
-
-// useBlob — chunked binary read
-const blob = new Blob([new Uint8Array([1, 2, 3, 4, 5])]);
-await useBlob(blob, 2n).toUnordered().toArray();              // [Uint8Array[1,2], Uint8Array[3,4], Uint8Array[5]]
-
-// useSubscription — the boundary defines the unsubscribe point
-const subscriber = {
-  mount: () => { },
-  unmount: () => { },
-  subscribe: (event, handler) => window.addEventListener(event, handler),
-  unsubscribe: (event, handler) => window.removeEventListener(event, handler)
-};
-useSubscription(window, () => subscriber, "resize")
-  .limit(5n)
-  .toUnordered()
-  .forEach((event, index) => console.log(index, event));      // auto-unsubscribes after 5 events
+useGenerate(() => 7, (_e, index) => index >= 3n).toUnordered().toArray();   // [7,7,7]
 ```
 
 ---
 
-<a id="6-transformation-operators"></a>
-## 6. Opérateurs de transformation
+<a id="5-transformation-operators"></a>
+## 5. Opérateurs de transformation
 
-### 6.1 Aperçu
+Chaque opérateur renvoie un nouveau `Semantic` ; aucun ne touche un élément tant qu'un collectable ne s'exécute.
+Le temps est le coût supplémentaire **par élément** ; l'espace est ce que l'opérateur conserve pendant l'exécution.
 
-Chaque opérateur renvoie un nouveau `Semantic` ; aucun ne touche un élément tant qu'un collectable ne s'exécute. Le
-temps est le coût supplémentaire **par élément** (au-delà du coût propre de l'amont) ; l'espace est la mémoire
-supplémentaire conservée par l'opérateur pendant l'exécution du pipeline.
-
-| Opérateur | Objectif | Effet sur l'index | Temps (par élément) | Espace |
+| Opérateur | Objectif | Effet sur l'index | Temps | Espace |
 | :--- | :--- | :--- | :--- | :--- |
 | `map(mapper)` | transformation 1:1 | transmis | O(1) | O(1) |
 | `filter(predicate)` | conserve les éléments correspondants | transmis | O(1) | O(1) |
-| `flat(mapper)` | aplatissement 1:N (itérable ou semantic) | re-indexé à partir de 0 | O(1) par élément émis | O(1) |
-| `flatMap(mapper)` | aplatissement 1:N, peut changer le type de l'élément | re-indexé à partir de 0 | O(1) par élément émis | O(1) |
-| `distinct(keyExtractor?)` | supprime les clés répétées, conserve la première | transmis | O(1) en moyenne | O(n) pour l'ensemble de clés |
+| `flat(mapper)` / `flatMap(mapper)` | aplatissement 1:N | re-indexé à partir de 0 | O(1) par élément émis | O(1) |
+| `distinct(keyExtractor?)` | supprime les clés répétées, conserve la première | transmis | O(1) en moyenne | O(n) |
 | `peek(consumer)` | effet de bord, l'élément passe à travers | transmis | O(1) | O(1) |
-| `limit(count)` | prend les *n* premiers | re-indexé à partir de 0 | O(1), arrête l'amont après n | O(1) |
-| `skip(count)` | supprime les *n* premiers | transmis | O(1) par élément sauté | O(1) |
+| `limit(count)` | prend les *n* premiers | re-indexé à partir de 0 | O(1) | O(1) |
+| `skip(count)` | supprime les *n* premiers | transmis | O(1) | O(1) |
 | `sub(start, end)` | tranche positionnelle `[start, end)` | transmis | O(1) | O(1) |
-| `takeWhile(predicate)` | prend tant que le prédicat est vrai | transmis | O(1), arrête l'amont à la première défaillance | O(1) |
+| `takeWhile(predicate)` | prend tant que le prédicat est vrai | transmis | O(1) | O(1) |
 | `dropWhile(predicate)` | supprime tant que le prédicat est vrai | re-indexé à partir de 0 | O(1) | O(1) |
 | `concat(other)` | ajoute un semantic ou un itérable | poursuit l'index | O(1) | O(1) |
 | `redirect(redirector)` | calcule un nouvel index comme vous le souhaitez | **le vôtre** | O(1) | O(1) |
-| `reverse()` | `redirect((_e, i) => -i - 1n)` | négative et décalée | O(1) | O(1) |
-| `translate(offset)` | décalage paresseux de chaque index de *offset* | `i + offset` | O(1) | O(1) |
-| `translate(mapper)` | décalage d'index par élément | `i + mapper(element, i)` | O(1) | O(1) |
-| `shuffle(mapper?)` | rend l'index aléatoire (ou utilise votre propre mapper) | aléatoire | O(1) | O(1) |
+| `reverse()` | `redirect((_e, i) => -i - 1n)` | négatif et décalé | O(1) | O(1) |
+| `translate(offset \| mapper)` | décale chaque index | `i + offset` | O(1) | O(1) |
+| `shuffle(mapper?)` | rend l'index aléatoire | aléatoire | O(1) | O(1) |
 | `pipe(conversion)` | confie le générateur à une fonction personnalisée | à votre discrétion | le vôtre | le vôtre |
 | `semantic()` | remonte un collectable dans un semantic | inchangé | O(1) | O(1) |
 
-### 6.2 Notes importantes
-
-**`reverse`, `translate` et `shuffle` sont tous des stratégies `redirect` et nécessitent un collecteur ordonné.**
-Ils ne font que réécrire les index — rien n'est mis en tampon, rien n'est encore rotatif. C'est `toOrdered()` qui
-normalise les index modulo le nombre d'éléments et les transforme en un ordre :
+**`reverse`, `translate` et `shuffle` ne réécrivent que des index.** Rien n'est mis en tampon ni tourné tant que
+`toOrdered()` n'a pas normalisé les index modulo le nombre d'éléments :
 
 ```typescript
 useFrom([1, 2, 3, 4, 5]).reverse().toOrdered().toArray();            // [5,4,3,2,1]
 useFrom([1, 2, 3, 4, 5]).translate(2).toOrdered().toArray();         // [4,5,1,2,3]  (rotation)
-useFrom([1, 2, 3, 4, 5]).translate(-2).toOrdered().toArray();        // [3,4,5,1,2]
 useFrom([1, 2, 3, 4, 5]).translate(7).toOrdered().toArray();         // [4,5,1,2,3]  (7 ≡ 2 mod 5)
-useFrom([1, 2, 3, 4, 5]).shuffle().toOrdered().toArray();            // a fresh permutation per call
 useFrom([1, 2, 3]).shuffle((_e, i) => -i - 1n).toOrdered().toArray();   // [3,2,1]
 ```
 
-Collectés avec `toUnordered()` à la place, les mêmes pipelines renvoient les éléments dans l'ordre d'arrivée avec
-leurs index bruts — voir [Le modèle d'index](#10-the-index-model).
-
-**`translate` est un décalage d'index pur et paresseux.** Les deux surcharges s'ajoutent à l'index
-(`i + offset` ou `i + mapper(element, i)`) et ne mettent jamais le flux en tampon. Une rotation ne se matérialise
-que lorsque le *collecteur ordonné* normalise les index modulo le nombre d'éléments — ainsi `translate(2)` reste
-peu coûteux même sur un intervalle infini suivi d'un `limit`.
-
-**`redirect` est l'outil général.** Toute stratégie d'index peut s'y exprimer — inversée, entrelacée,
-partitionnée par hachage :
-
-```typescript
-useFrom([1, 2, 3, 4, 5]).redirect((_e, i) => -i - 1n).toOrdered().toArray();   // [5,4,3,2,1]
-useFrom([1, 2, 3, 4]).redirect((_e, i) => i % 2n === 0n ? i + 1n : i - 1n)
-  .toOrdered().toArray();                                                       // [2,1,4,3]
-```
-
-**Le découpage piloté par l'index reste de première classe :**
-
-```typescript
-useOf(1, 2, 3, 4, 5).sub(1, 3).toUnordered().toArray();               // [2,3]
-useOf(1, 2, 3, 4, 5).skip(2n).toUnordered().toArray();                // [3,4,5]
-useOf(1, 2, 3, 4, 5).takeWhile(n => n < 3).toUnordered().toArray();   // [1,2]
-useOf(1, 2, 3, 4, 1).dropWhile(n => n < 3).toUnordered().toArray();   // [3,4,1]
-```
-
 ---
 
-<a id="7-collectables-and-terminal-operations"></a>
-## 7. Collectables et opérations terminales
-
-### 7.1 Choisir un collectable
+<a id="6-collectables-and-terminal-operations"></a>
+## 6. Collectables et opérations terminales
 
 Le collectable possède à la fois l'**ordre** et la **comptabilité des index**. `n` est le nombre d'éléments.
 
-| Collectable | Structure | Temps | Espace | Ordre | À utiliser quand |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `toUnordered()` | `Map<bigint, E>` indexée par l'index | O(n) | O(n) | ordre d'insertion | débit maximal, ordre indifférent ; les index bruts sont préservés intacts |
-| `toOrdered()` | tableau trié par index d'élément | O(n log n) | O(n) | par index normalisé | inversion/rotation/mélange doivent prendre effet, ou vous avez besoin d'un accès positionnel |
-| `toOrdered(comparator)` | trié par votre comparateur, index reconstruit comme position | O(n log n) | O(n) | par votre comparateur | vues triées, lectures de type min/max |
-| `toNumericStatistics()` | tampon trié par valeur | O(n log n) | O(n) | par valeur | statistiques sur `number` |
-| `toBigintStatistics()` | tampon trié par valeur | O(n log n) | O(n) | par valeur | statistiques sur `bigint` |
-| `toWindow()` | tampon trié par valeur | O(n log n) | O(n) | par valeur | `slide` / `tumble` |
-| `toCollectable(mapper)` | ce que renvoie le mapper | — | — | — | collectables personnalisés |
-
-### 7.2 Terminaux
-
-Les coûts sont indiqués après matérialisation ; `k` est la position cible et `n` le nombre d'éléments.
-
-| Terminal | Renvoie | Temps | Espace | Notes |
+| Collectable | Structure | Temps | Ordre | À utiliser quand |
 | :--- | :--- | :--- | :--- | :--- |
-| `toArray()` | `Array<E>` | O(n) | O(n) | Vide le tampon |
-| `toSet()` | `Set<E>` | O(n) en moyenne | O(n) | Dédoublonne par identité |
-| `toMap(keyExtractor, valueExtractor?)` | `Map<K, V>` | O(n) en moyenne | O(n) | La dernière écriture l'emporte |
-| `count()` / `isEmpty()` | `bigint` / `boolean` | O(1) | O(1) | Le tampon le sait déjà |
-| `forEach(action)` | `void` | O(n) | O(1) | `action(element, index)` |
-| `join(…)` | `string` | O(n) | O(n) | `join()`, `join(delimiter)`, `join(prefix, delimiter, suffix)` |
-| `log()` / `error()` | `void` | O(n) | O(n) | Sortie console encapsulée dans `[prefix … suffix]` |
-| `write(stream, accumulator?)` | `WritableStream<S>` | O(n) | O(1) | Terminal de type E/S |
-| `collect(collector)`<br>`collect(identity, accumulator, finisher)` | `R` | O(n) | accumulator | Le pliage générique derrière chaque terminal ci-dessus |
-| `reduce(accumulator)` | `Optional<E>` | O(n) | O(1) | Flux vide → Optional vide |
-| `reduce(identity, accumulator)` | `E` | O(n) | O(1) | — |
-| `reduce(identity, accumulator, finisher)` | `R` | O(n) | O(1) | — |
-| `group(classifier)` | `Map<K, E[]>` | O(n) en moyenne | O(n) | — |
-| `groupBy(keyExtractor, valueExtractor)` | `Map<K, V[]>` | O(n) en moyenne | O(n) | — |
-| `partition(count)` | `Array<Array<E>>` | O(n) | O(n) | Round-robin par index dans `count` seaux |
-| `partitionBy(classifier)` | `Array<Array<E>>` | O(n) | O(n) | Le numéro de seau provient du classifieur |
-| `anyMatch` / `allMatch` / `nonMatch` | `boolean` | O(n) au pire, avec court-circuit | O(1) | — |
-| `findAny` / `findFirst` / `findLast` | `Optional<E>` | O(1)–O(n) | O(1) | Positionnel dans l'ordre matérialisé |
-| `findAt(k)` | `Optional<E>` | O(k), s'arrête tôt | O(1) | Le (k+1)-ième élément **dans l'ordre matérialisé** |
-| `findNegativeAt(k)` | `Optional<E>` | O(n−k), s'arrête tôt | O(1) | Compte à rebours depuis la fin de l'ordre matérialisé |
-| `findMaximum(comparator?)` / `findMinimum(comparator?)` | `Optional<E>` | O(n) (O(1) sur les statistiques) | O(1) | Comparaison structurelle par défaut |
-| `frequency()` | `Map<E, bigint>` | O(n) en moyenne | O(n) | Collectables de statistiques uniquement |
-| `[Symbol.iterator]()` / `[Symbol.asyncIterator]()` | itérateur | O(n) | O(1) | `for…of` sur un collectable |
+| `toUnordered()` | `Map<bigint, E>` indexée par l'index | O(n) | insertion | débit maximal ; les index bruts sont préservés intacts |
+| `toOrdered()` | tableau trié par index d'élément | O(n log n) | par index normalisé | une inversion/rotation doit prendre effet |
+| `toOrdered(comparator)` | trié par votre comparateur | O(n log n) | par votre comparateur | vues triées |
+| `toNumericStatistics()` | tampon trié par valeur | O(n log n) | par valeur | statistiques sur `number` |
+| `toBigintStatistics()` | tampon trié par valeur | O(n log n) | par valeur | statistiques sur `bigint` |
+| `toWindow()` | tampon trié par valeur | O(n log n) | par valeur | `slide` / `tumble` |
+| `toCollectable(mapper)` | ce que renvoie le mapper | — | — | collectables personnalisés |
 
-### 7.3 Exemples
-
-```typescript
-const stream = () => useOf(1, 2, 3, 4, 5).toUnordered();
-
-stream().count();                                    // 5n
-stream().anyMatch(n => n > 4);                       // true
-stream().allMatch(n => n > 0);                       // true
-stream().nonMatch(n => n > 9);                       // true
-stream().findFirst().orElse(-1);                     // 1
-stream().findLast().orElse(-1);                      // 5
-stream().findMaximum().orElse(-1);                   // 5
-stream().findAt(2n).orElse(-1);                      // 3 (materialised position 2)
-stream().findNegativeAt(-1n).orElse(-1);             // 5 (last materialised element)
-stream().join("|");                                  // "[1|2|3|4|5]"
-stream().reduce((a, b) => a + b).orElse(0);          // 15
-stream().reduce(100, (a, b) => a + b);               // 115
-stream().group(n => (n % 2 === 0 ? "even" : "odd"));  // Map { odd: [1,3,5], even: [2,4] }
-
-useRange(0n, 9n).toUnordered().partition(3n);
-// [[0n,3n,6n], [1n,4n,7n], [2n,5n,8n]] — round-robin by index
-
-useRange(0n, 6n).toUnordered().partitionBy((_element, index) => index % 2n);
-// [[0n,2n,4n], [1n,3n,5n]]
-
-// The fold is public: write your own collector inline
-useOf(1, 2, 3).toUnordered().collect(
-  () => 0,                          // identity
-  (sum, element) => sum + element,  // accumulator
-  sum => `total=${sum}`             // finisher
-);                                                 // "total=6"
-```
-
----
-
-<a id="8-statistics"></a>
-## 8. Statistiques
-
-`toNumericStatistics()` et `toBigintStatistics()` vous donnent un tampon trié par valeur ainsi qu'une API
-statistique. Les deux acceptent un mapper, si bien que vous pouvez calculer sur une valeur projetée :
-`.average(element => element.price)`.
-
-| Méthode | Signification | `number` | `bigint` |
+| Terminal | Renvoie | Temps | Notes |
 | :--- | :--- | :--- | :--- |
-| `summate()` | Σx | exact | exact |
-| `average()` / `mean()` | Σx / n | exact | division entière |
-| `median()` | valeur médiane (moyenne des deux médianes pour les décomptes pairs) | exact | arrondie |
-| `mode()` | valeur la plus fréquente | exact | exact |
-| `variance()` | variance populationnelle σ² | exact | arrondie |
-| `standardDeviation()` | √σ² | exact | arrondie |
-| `range()` | max − min | exact | exact |
-| `quantile(q)` | quantile au rang le plus proche, `0 ≤ q ≤ 1` | exact | exact |
-| `interquartileRange()` | q(0.75) − q(0.25) | exact | exact |
-| `skewness()` | Σ((x−μ)/σ)³ / n | exact | arrondie |
-| `kurtosis()` | Σ((x−μ)/σ)⁴ / n − 3 (excess) | exact | arrondie |
-| `frequency()` | valeur → compte | `Map<E, bigint>` | `Map<E, bigint>` |
-
-Toutes les méthodes sont en O(1) sur le tampon trié (le tri a été payé une fois, à la matérialisation), à
-l'exception de `frequency()` qui est en O(n) en moyenne avec un espace O(n).
-
-Les résultats `bigint` sont calculés en virgule flottante puis arrondis à `bigint`, car la division entière les
-fausserait autrement (la variance de `[1n,2n,3n,4n]` est `1.25`, et non `3`). Si vous avez besoin de statistiques
-fractionnaires exactes, mappez vers `number` et utilisez le collecteur numérique.
-
-```typescript
-const stats = useOf(1, 2, 3, 4).toNumericStatistics();
-stats.summate();              // 10
-stats.average();              // 2.5
-stats.median();               // 2.5
-stats.variance();             // 1.25
-stats.standardDeviation();    // 1.118…
-stats.skewness();             // 0
-stats.kurtosis();             // -1.36 (excess kurtosis)
-stats.range();                // 3
-stats.quantile(0.5);          // 2 (nearest rank)
-stats.frequency();            // Map { 1 => 1n, 2 => 1n, 3 => 1n, 4 => 1n }
-
-// Projected statistics
-useOf({ price: 10 }, { price: 30 }).toNumericStatistics().average(item => item.price);   // 20
-```
+| `toArray()` / `toSet()` | `Array<E>` / `Set<E>` | O(n) | Vide le tampon ; `toSet` dédoublonne par identité |
+| `toMap(key, value?)` | `Map<K, V>` | O(n) en moyenne | La dernière écriture l'emporte |
+| `count()` / `isEmpty()` | `bigint` / `boolean` | O(1) | Le tampon le sait déjà |
+| `forEach(action)` | `void` | O(n) | `action(element, index)` |
+| `join(…)` | `string` | O(n) | `join()`, `join(delimiter)`, `join(prefix, delimiter, suffix)` |
+| `reduce(…)` | `Optional<E>` / `E` / `R` | O(n) | Flux vide → `Optional` vide |
+| `group(classifier)` / `groupBy(key, value)` | `Map<K, E[]>` | O(n) en moyenne | — |
+| `partition(count)` | `Array<Array<E>>` | O(n) | Round-robin par index |
+| `partitionBy(classifier)` | `Array<Array<E>>` | O(n) | Le numéro de seau provient du classifieur |
+| `anyMatch` / `allMatch` / `nonMatch` | `boolean` | O(n) au pire, avec court-circuit | — |
+| `findAny` / `findFirst` / `findLast` | `Optional<E>` | O(1)–O(n) | Positionnel dans l'ordre matérialisé |
+| `findAt(k)` / `findNegativeAt(k)` | `Optional<E>` | O(k) / O(n−k) | Compte depuis le début / la fin |
+| `findMaximum(cmp?)` / `findMinimum(cmp?)` | `Optional<E>` | O(n) | Comparaison structurelle par défaut |
+| `frequency()` | `Map<E, bigint>` | O(n) en moyenne | Collectables de statistiques uniquement |
+| `write(stream, accumulator?)` | `WritableStream<S>` | O(n) | Terminal de type E/S |
+| `collect(collector)` | `R` | O(n) | Le pliage générique derrière chaque terminal ci-dessus |
 
 ---
 
-<a id="9-windows"></a>
-## 9. Fenêtres
-
-`toWindow()` renvoie un collectable dont les `slide` / `tumble` produisent un semantic *de semantics*.
+<a id="7-statistics-and-windows"></a>
+## 7. Statistiques et fenêtres
 
 ```typescript
-const windows = useOf(1, 2, 3, 4, 5).toWindow();
-
-windows.tumble(2n).toUnordered().toArray()
-  .map(window => window.toUnordered().toArray());
-// [[1,2], [3,4], [5]]
-
-windows.slide(3n, 1n).toUnordered().toArray()
-  .map(window => window.toUnordered().toArray());
-// [[1,2,3], [2,3,4], [3,4,5], [4,5], [5]]   — trailing partial windows are included
+useOf(3, 1, 4, 1, 5).toNumericStatistics().summate();              // 14
+useOf(3, 1, 4, 1, 5).toNumericStatistics().average();              // 2.8
+useOf(3, 1, 4, 1, 5).toNumericStatistics().median();               // 3
+useOf(3, 1, 4, 1, 5).toNumericStatistics().mode();                 // 1
+useOf(3, 1, 4, 1, 5).toNumericStatistics().variance();             // 2.56
+useOf(3, 1, 4, 1, 5).toNumericStatistics().standardDeviation();    // 1.6
+useFrom([1, 2, 3, 4]).toWindow().slide(2n, 1n);                    // [[1,2],[2,3],[3,4]]
 ```
 
-`tumble(size)` est globalement en O(n) ; `slide(size, step)` est en O(n × size) car les fenêtres se chevauchent.
-
-Les sources asynchrones fonctionnent de la même manière ; `slide` / `tumble` attendent que le tampon sous-jacent
-soit prêt :
-
-```typescript
-const asyncWindows = await useFrom(tick()).toWindow().tumble(2n).toUnordered().toArray();
-for (const window of asyncWindows) {
-  console.log(await window.toUnordered().toArray());
-}
-```
+Les deux familles de statistiques exposent la même surface — `summate`, `average`, `median`, `mode`,
+`variance`, `standardDeviation`, `frequency`, `findMaximum`, `findMinimum` — avec de l'arithmétique `bigint`
+pour `toBigintStatistics()`. Les fenêtres prennent en charge `slide(size, hop)` et `tumble(size)`.
 
 ---
 
-<a id="10-the-index-model"></a>
-## 10. Le modèle d'index
+<a id="8-the-index-model"></a>
+## 8. Le modèle d'index
 
-Le modèle d'index comporte deux parties : le **pipeline** réécrit les index à peu de frais et paresseusement ; le
-**collectable** décide ce qu'ils signifient. Cette séparation est délibérée, et c'est là que résident les coûts
-d'ordonnancement.
+Un index est un `bigint` attaché à chaque élément. Les opérateurs le **transmettent**, le **re-indexent**
+à partir de zéro, ou vous laissent le **calculer**.
 
-| Concept | Comportement |
-| :--- | :--- |
-| Type d'index | `bigint`, toujours disponible comme second argument de chaque callback |
-| Arithmétique du pipeline | `reverse()` = `redirect(-i - 1n)`, `translate(o)` = `redirect(i + o)`, `shuffle()` = `redirect(random)` — tous en O(1) par élément, tous paresseux, aucun ne met quoi que ce soit en tampon |
-| `toUnordered()` — aucune comptabilité | Conserve chaque index brut intact dans une `Map`. `translate(2)` collecté non ordonné renvoie encore les index `2n,3n,4n,…`. C'est le contrat de performance : aucun tri, aucune normalisation, O(n) |
-| `toOrdered()` — normalisation | Réécrit chaque index en `((i mod n) + n) mod n` (n = nombre d'éléments), puis trie. Les index négatifs ou trop grands se replient dans `0..n−1`, si bien que `reverse`, `translate(7)` et `shuffle` aboutissent tous à une position valide |
-| `toOrdered(comparator)` | Trie par valeur et reconstruit les index comme positions — c'est ce que utilisent les statistiques |
-| Rotation | Découle de la normalisation : `translate(2)` donne les index `2,3,4,0,1`, qui se trient en la rotation `[4,5,1,2,3]`. Aucune mise en tampon ne se produit dans l'opérateur |
-| Index dupliqués | Détectés par `toUnordered()` et dotés de clés substitutives, si bien qu'**aucun élément n'est silencieusement supprimé** ; `toOrdered()` conserve les index égaux dans l'ordre relatif |
-| `findAt(k)` / `findNegativeAt(k)` | Adressent l'**ordre matérialisé** — `findAt(1n)` est toujours le second élément de ce que le collectable a produit, `findNegativeAt(-1n)` toujours le dernier — indépendamment de ce que `redirect` / `reverse` / `translate` ont fait aux index bruts |
-| `distinct` | Conserve la première occurrence **et son index d'origine** |
-| `sub` / `skip` / `limit` | Comptent les éléments, pas les valeurs d'index |
+La collecte ordonnée normalise chaque index modulo le nombre d'éléments, puis trie sur le résultat. C'est
+pourquoi `translate(7)` sur cinq éléments équivaut à `translate(2)` : `7 ≡ 2 (mod 5)`.
 
-En bref : **`OrderedCollectable` et ses sous-classes possèdent la comptabilité des index** (normalisent modulo n,
-trient, adressent positionnellement), tandis que **`UnorderedCollectable` garantit la performance en ne touchant
-jamais aux index**. Choisissez par requête, et non par pipeline.
+La collecte non ordonnée conserve l'index que le pipeline a produit et renvoie les éléments dans l'ordre
+d'arrivée. Les index négatifs sont légaux et se trient simplement avant les non négatifs une fois normalisés.
 
 ---
 
-<a id="11-the-asynchronous-model"></a>
-## 11. Le modèle asynchrone
+<a id="9-the-asynchronous-model"></a>
+## 9. Le modèle asynchrone
 
-Les sources dont les données ne peuvent pas encore exister renvoient `AsynchronousSemantic<E>` :
-
-| Source asynchrone | Pourquoi |
-| :--- | :--- |
-| `usePromise` | la valeur arrive plus tard |
-| `useBlob` | `Blob.stream()` est asynchrone |
-| `useInterval` | piloté par `setInterval` |
-| `useSubscription` | piloté par des événements externes |
-| `useFrom` / `useIterate` avec un `AsyncIterable` | produit par `for await` |
-
-La consommation est uniforme — chaque terminal d'un `AsynchronousCollectable` renvoie une `Promise`, et la
-sémantique (modèle d'index, normalisation, `findAt` positionnel) est identique au côté synchrone :
+`AsynchronousSemantic` reflète la surface synchrone, en renvoyant des promesses. Les écritures sont mises en file
+d'attente, si bien qu'une lecture émise après une écriture l'observe toujours.
 
 ```typescript
-const stats = await useFrom(asyncGenerator()).map(n => n * 2n).limit(10n).toBigintStatistics();
-await stats.summate();
-
-for await (const element of usePromise(Promise.resolve(1)).toUnordered()) {
-  console.log(element);
-}
+const cycle = new AsynchronousCycle([1, 2]);
+const added   = cycle.add(3);          // mis en file d'attente
+const sampled = cycle.elementAt(2n);   // observe l'écriture ci-dessus
+await added;
+(await sampled).get().element;         // 3
 ```
 
-Trois choses que le système de types ne vous sauvera pas de :
-
-1. **Terminer le flux.** Une source d'événements ou de minuteries ne se termine jamais d'elle-même. Définissez la
-   frontière — `limit(n)`, `sub(start, end)` ou `takeWhile(predicate)` — sinon l'abonnement reste actif.
-2. **Attendre le collectable.** `toOrdered()`, les statistiques et `toWindow()` attendent que la source soit
-   complétée avant de répondre ; une source ne contenant que des promesses qui ne se termine jamais les laisse en
-   attente.
-3. **Mélanger les couches.** Un collectable synchrone ne peut pas consommer une source asynchrone. Dès qu'une
-   fabrique async intervient, gardez tout le pipeline côté async et `await` les terminaux.
+Les fabriques asynchrones par nature — `usePromise`, `useBlob`, `useInterval`, `useSubscription` — renvoient
+directement un `AsynchronousSemantic`, et `useFrom` / `useIterate` se mettent à niveau lorsqu'on leur confie un
+`AsyncIterable`.
 
 ---
 
-<a id="12-utility-helpers"></a>
-## 12. Fonctions utilitaires
+<a id="10-periodic-analysis-rings-fields-and-scores"></a>
+## 10. Analyse périodique : anneaux, champs et scores
 
-| Assistant | Objectif | Temps |
+La moitié mathématique de la bibliothèque traite un cycle comme un objet de première classe plutôt que comme une
+table de correspondance. Trois constructions travaillent ensemble.
+
+### 10.1 Un anneau est un entier
+
+Un `Cycle` est un **anneau n-fois** : le nombre d'éléments, la période positionnelle et le nombre de phases
+distinctes sont le même entier `n`. La phase d'une position est calculée à partir de son résidu exact, si bien que
+l'anneau est périodique au bit près :
+
+```typescript
+import { SynchronousCycle } from "semantic-typescript";
+
+const ring = new SynchronousCycle(["a", "b", "c", "d", "e", "f"]);
+ring.phaseAt(0n).get().toDegreeValue();   // 0
+ring.phaseAt(1n).get().toDegreeValue();   // 60
+ring.phaseAt(6n).get().getValue() === ring.phaseAt(0n).get().getValue();   // true, exactement
+ring.purity();                             // 1
+ring.isBalanced();                         // true
+ring.sequences().map(z => z.magnitude());  // [0, 6, 0, 0, 0, 0]
+```
+
+`frequency` est la vitesse de rotation **ambiante**, non un pas de phase entre positions : l'environnement
+déplace chaque phaseur du même angle, si bien qu'il ne peut jamais briser le motif intrinsèque. `span` fixe le
+nombre de tours qu'occupe l'anneau.
+
+`purity()` est la part d'énergie portée par le mode fondamental,
+`max(|c₁|², |c_{n−1}|²) / (n · Σ|z|²)`. Elle vaut `1` exactement lorsque l'anneau est constitué des racines
+`n`-ièmes de l'unité à une rotation près, et elle coûte `O(n)` car seuls deux bins sont nécessaires. Les deux
+sens sont testés, car un anneau peut parcourir le cercle dans un sens ou dans l'autre.
+
+### 10.2 Un champ est un score borné
+
+Un `PhaseField` associe une phase relative à un score dans `[-1, 1]` :
+
+```typescript
+import { useField } from "semantic-typescript";
+
+const cosine = useField([1]);              // cos(2πΔ) : +1 aligné, −1 opposé
+const mixed  = useField([0.4, 0.3, 0.3]);  // trois premières harmoniques
+
+cosine.sample(useRadian(0));               //  1
+cosine.sample(useRadian(Math.PI));         // -1
+```
+
+Le score est une série de cosinus tronquée, `a₀ + Σ wₘ·cos(2πmΔ)`, et le constructeur impose
+`|a₀| + Σ|wₘ| ≤ 1`. Par l'inégalité triangulaire, le score ne peut jamais sortir de `[-1, 1]` — la borne est une
+**conséquence de la construction**, et non un écrêtage appliqué après coup.
+
+La raison pour laquelle le champ est une série et non une table : une table à `n` points reproduit exactement ses
+propres échantillons, mais son interpolant trigonométrique dépasse entre ceux-ci. Une table à cinq points notée
+`[+1, +0.5, −1, −0.5, 0]` interpole sur `[−1.0428, 1.0041]`, ce qui brise déjà la promesse.
+Une série bornée ne le peut pas.
+
+### 10.3 L'analyse mesure les données à chaque élément
+
+Chaque élément de l'anneau est une phase de référence. `analyse` replace chaque observation sur l'anneau et la
+mesure par rapport à chaque référence :
+
+```typescript
+const ring = new SynchronousCycle(["a", "b", "c", "d", "e"]);
+const report = ring.analyse(["a", "c", "c", "a", "zz", "e"]);
+
+report.matched;                              // 5
+report.missed;                               // 1  ('zz' n'est pas sur l'anneau)
+report.references.map(r => r.count);         // [2, 0, 2, 0, 1]
+```
+
+Chaque ligne de référence rapporte `count`, la phase relative moyenne `mean` et la longueur résultante moyenne
+`resultant`. Une identité mérite d'être retenue : **`resultant` est identique pour chaque référence**,
+car changer la ligne de base ne fait que faire tourner toutes les phases relatives d'une constante. Ce qui diffère
+d'une référence à l'autre, c'est le compte et la moyenne.
+
+```typescript
+const cycle = new SynchronousCycle(["a", "b", "c"]);
+cycle.scoresAt(0, cosine);                   // un score par position, dans [-1, 1]
+```
+
+### 10.4 Instruments associés
+
+| Appel | Répond | Coût |
 | :--- | :--- | :--- |
-| `useCompare(a, b)` | Comparaison structurelle utilisée par chaque tri/min/max par défaut (`number`, `bigint`, `string`, `boolean`, `symbol`, objets via `Symbol.toPrimitive`) | O(1) pour les primitives |
-| `useRandom(start, end?)` | Génère un `number` / `bigint` aléatoire, uniforme sur l'intervalle semi-ouvert | O(1) |
-| `useHash(value, …)` | Hachage `bigint` stable d'environ 64 bits pour toute valeur (primitives, objets, cycles) | O(v) sur les valeurs visitées |
-| `register(type, handler)` / `unregister(type)` / `maskOf(type)` | Étend le hachage pour des types personnalisés | O(1) |
-| `useTraverse(object, callback)` | Parcours en profondeur avec protection anti-cycle ; le callback reçoit `(key, value, path)` | O(v + e) |
-| `useStringify(object, callback?)` | Sérialisation JSON qui survit aux références circulaires | O(v + e) |
-| `useToNumber(value)` / `useToBigInt(value)` | Conversions totales (ne lèvent jamais d'exception ; renvoient `0` / `0n` pour une entrée inutilisable) | O(1) |
-| `useGenerator(iterable)` / `useArrange(source, comparator?)` | Générateur brut `(accept, interrupt)`, et un générateur de tri | O(n) / O(n log n) |
-| `Optional<T>` | `of`, `ofNullable`, `ofNonNull`, `empty` ; `map`, `flat`, `flatMap`, `filter`, `get`, `get(default)`, `ifPresent(action, elseAction)`, `orElse`, `isPresent`, `isEmpty`, `semantic()` | O(1) par méthode |
-| Gardes de type | `isNumber` (exclut `NaN` et `Infinity`), `isBigInt`, `isString`, `isBoolean`, `isSymbol`, `isFunction`, `isObject`, `isPrimitive`, `isIterable`, `isAsyncIterable`, `isPromise`, `isAsyncFunction`, `isGeneratorFunction`, `isAsyncGeneratorFunction`, `isOptional`, `isSynchronousSemantic` / `isAsynchronousSemantic`, `isSynchronousCollectable` (+ async), `isSynchronousOrderedCollectable`, `isSynchronousUnorderedCollectable`, `isSynchronousStatistics`, `isSynchronousNumericStatistics`, `isSynchronousBigIntStatistics`, `isSynchronousWindowCollectable`, `isSynchronousCollector` | O(1) |
+| `purity()` | l'anneau est-il toujours les racines `n`-ièmes de l'unité ? | O(n) |
+| `resultant(t?)` | à quel point les phaseurs sont-ils concentrés maintenant ? | O(n) |
+| `analyse(data)` | comment ces données se situent-elles par rapport à chaque élément ? | O(n · m) |
+| `toSpectrum()` | l'anneau comme spectre, nombre d'onde sur l'axe des fréquences | O(n²) |
+| `useAngularSpectrum(cycle, instants, plan)` | le plan `(ω, n)` au fil du temps | O(n² · frames) |
 
-```typescript
-useCompare(1, 2);                        // negative
-useRandom(1n, 10n);                      // 1n … 9n
-useHash({ a: 1 }) === useHash({ a: 1 }); // true — stable and structural
-useTraverse({ a: { b: 1 } }, (key, value) => console.log(key, value));
-useToBigInt("42");                       // 42n
-Optional.ofNullable(null).orElse(5);     // 5
-```
+Deux primitives supplémentaires complètent le modèle : `combineCycles(a, b)` joint deux anneaux sur leur plus petit
+commun multiple (un pullback, pas un produit — les paires qui ne peuvent pas partager un instant sont simplement
+absentes), et `rate()` donne à chaque élément sa propre fréquence intrinsèque, afin qu'un anneau puisse dériver par
+rapport à l'environnement. `jetAt`, `windingAt` et `errorIntegralAt` exposent l'état différentiel de cette dérive.
 
 ---
 
-<a id="13-comparison-with-other-libraries"></a>
-## 13. Comparaison avec d'autres bibliothèques
+<a id="11-utility-helpers"></a>
+## 11. Fonctions utilitaires
 
-| Aspect | Semantic-TypeScript | RxJS | Itérateurs natifs |
-| :--- | :--- | :--- | :--- |
-| Modèle | propagation avec un signal `interrupt` explicite | propagation, objets d'abonnement | tirage |
-| Position | index `bigint` intrinsèque sur chaque élément | opérateurs que vous composez (`scan`, `withLatestFrom`) | compteur manuel |
-| Paresse | opérateurs paresseux, collectables explicites | opérateurs paresseux, `subscribe` gourmand | paresseux |
-| Sync + async | une seule API, fabriques async signalées dans le type | asynchrone d'abord | pontage `for await` manuel |
-| API terminale | collectable riche (`toArray`, `toMap`, `group`, `reduce`, `find*`, statistiques) | opérateurs uniquement | aucune |
-| Statistiques | intégrées, pour `number` et `bigint` | externes | aucune |
-| Sécurité du cycle de vie | l'opérateur de frontière se désabonne | `unsubscribe` / `takeUntil` manuels | manuel |
-| Écosystème / taille | petit, zéro dépendance | grand écosystème d'opérateurs | zéro |
-
-Choisissez Semantic-TypeScript lorsque vous voulez un traitement de données piloté par l'index avec un modèle de
-coût explicite et sans ordonnanceur. Choisissez RxJS lorsque vous avez besoin de son écosystème d'opérateurs, de sa
-sémantique multi-observateurs et de son contrôle d'ordonnancement.
+| Assistant | Objectif |
+| :--- | :--- |
+| `useCompare(a, b)` | Ordre total entre primitives mixtes |
+| `useToNumber` / `useToBigInt` | Conversion numérique sans perte et vérifiée en plage |
+| `useRandom` | Assistants aléatoires avec ou sans graine |
+| `useTraverse` | Parcours structurel d'objets et de tableaux imbriqués |
+| `useStringify` | Sérialisation JSON sûre face aux cycles |
+| `useHash` / `maskOf` / `register` / `unregister` | Hachage structurel et registre de stratégies de hachage |
+| `invalidate` / `validate` | Gardes qui lèvent une forme d'erreur cohérente |
+| `Optional<T>` | Le remplacement de `null` de la bibliothèque : `Optional.of(x)` / `Optional.empty()` |
 
 ---
 
-<a id="14-performance-characteristics"></a>
-## 14. Caractéristiques de performance
+<a id="12-performance-and-pitfalls"></a>
+## 12. Performance et pièges
 
-Le coût d'une requête est la somme de trois parties visibles : source (§5), opérateurs (§6), collectable (§7). Rien
-de caché ne s'exécute jamais deux fois.
+**La paresse a un prix par étage.** Chaque opérateur ajoute un saut de générateur. Pour des boucles numériques
+serrées sur des tableaux en mémoire, une simple boucle `for` battra n'importe quel pipeline ; le pipeline gagne
+lorsque la source est paresseuse, infinie, ou que le pipeline est assez long pour que la discipline d'index paie.
 
-| Opération | Temps | Espace | Notes |
-| :--- | :--- | :--- | :--- |
-| `map` / `filter` / `peek` | O(1) par élément | O(1) | transformation pure |
-| `limit` / `takeWhile` | O(1) par élément | O(1) | arrête l'amont immédiatement |
-| `reverse` / `translate` / `shuffle` | O(1) par élément | O(1) | arithmétique d'index uniquement — aucune mise en tampon |
-| `distinct` | O(1) en moyenne par élément | O(n) | `Set` de clés |
-| `toUnordered()` | O(n) | O(n) | une insertion `Map` par élément ; index intacts |
-| `toOrdered()` | O(n log n) | O(n) | normalise O(n) + tri O(n log n) |
-| Statistiques | O(n log n) une fois, puis O(1) par méthode | O(n) | conserve un tampon trié/agrégé |
-| `findAt(k)` / `findNegativeAt(k)` | O(k) / O(n−k) | O(1) | interruption anticipée dès que la position est dépassée |
-| `findMaximum` / `findMinimum` | O(n) générique, O(1) statistiques | O(1) | passage unique avec le meilleur courant |
+**`toOrdered()` trie ; `toUnordered()` ne trie pas.** Si une inversion semble « ne pas avoir marché », le
+collecteur était non ordonné — une réécriture d'index ne devient un ordre que lorsque les index sont normalisés.
 
-Règles générales : gardez le pipeline paresseux jusqu'à ce que vous ayez réellement besoin d'un résultat ; préférez
-`toUnordered()` sauf si l'ordre compte ; placez `limit` / `takeWhile` aussi tôt que la sémantique le permet ; laissez
-le *collectable*, et non l'opérateur, décider du coût de l'ordonnancement.
+**`useGenerate` sans `interrupt` ne se termine jamais.** Fournissez toujours un prédicat d'arrêt ou un
+`limit` / `takeWhile` en aval.
 
----
+**`Cycle` est un ensemble à ordre d'insertion.** Les éléments sont uniques et conservent l'ordre dans lequel ils ont
+été ajoutés pour la première fois. Un `add` en double renvoie `false`, et un `set` qui en introduirait un lève une
+exception. C'est ce qui permet à une phase d'être une fonction de l'*élément* plutôt que de la position
+qu'il occupe par hasard.
 
-<a id="15-pitfalls-and-faq"></a>
-## 15. Pièges et FAQ
-
-**« Mon pipeline ne renvoie rien / bloque. »** La source ne s'est jamais terminée. `useInterval`,
-`useSubscription`, `usePromise` et `useGenerate` ont besoin d'une frontière (`limit`, `sub`, `takeWhile`) ou d'une
-source qui se termine.
-
-**« reverse() n'a rien fait. »** Vous l'avez consommé avec `toUnordered()`, qui garantit l'absence de
-comptabilité d'index. Utilisez `toOrdered()`.
-
-**« translate(2) a renvoyé les éléments non rotatifs. »** Même raison : `translate` ne fait que décaler les index ;
-la rotation est réalisée par la normalisation modulo de `toOrdered()`. Collecté non ordonné, le décalage reste
-visible dans les index bruts.
-
-**« Pourquoi un élément manque-t-il ? »** Un amont a produit des index dupliqués et vous consommez via
-`toUnordered()`. Les clés substitutives préviennent la perte de données, mais si vous devez *voir* les deux éléments
-dans l'ordre, consommez plutôt avec `toOrdered()`.
-
-**« findAt(1n) renvoie quelque chose d'inattendu. »** `findAt` adresse l'**ordre matérialisé**, et non l'index
-brut. Après `.reverse().toOrdered()`, la position 1 est le second élément de la séquence inversée. Si vous voulez
-l'élément portant l'index brut `1n`, filtrez explicitement sur l'index.
-
-**« Les statistiques bigint semblent arrondies. »** Elles le sont — les résultats `bigint` sont arrondis en entier
-par conception (voir [Statistiques](#8-statistics)). Mappez vers `number` pour des fractions exactes.
-
-**« Dois-je appeler `toXxx()` avant `toArray()` ? »** Oui. Les opérations terminales résident sur les collectables,
-et non sur les semantics. C'est délibéré : cela rend le coût de stockage et d'ordonnancement visible dans le type.
-
-**« Le tree-shaking fonctionne-t-il ? »** `sideEffects: false` est déclaré, importez donc uniquement ce que vous
-utilisez. Notez que `useHash` enregistre ses gestionnaires par défaut au chargement du module.
+**`Spectrum` suppose un signal réel dans ses assistants unilatéraux.** `oneSided()`, `getNyquist()` et
+`centroid()` supposent une symétrie conjuguée. Le spectre spatial d'un anneau de phase est complexe et en
+général non symétrique — un anneau qui parcourt le cercle à rebours place toute son énergie dans le bin
+`n − 1`, au-delà de Nyquist. Lisez les bins directement.
 
 ---
 
-<a id="16-license"></a>
-## 16. Licence
+<a id="13-license"></a>
+## 13. Licence
 
 MIT © Eloy Kim
-
-Voir [CHANGELOG.md](./CHANGELOG.md) pour l'historique complet des versions.

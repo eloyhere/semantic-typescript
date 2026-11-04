@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "..",
+    "paths": {
+      "#semantic/*": ["../src/*.ts"],
+      "semantic-typescript": ["../src/index.ts"]
+    }
+  },
+  "include": ["structure-api.types.ts", "advanced-structure-api.types.ts", "map-ordering-api.types.ts", "structure-factories-api.types.ts"]
+}
