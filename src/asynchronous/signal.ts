@@ -1,110 +1,38 @@
 /**
  * Window-aware spectral analysis for a real-valued signal.
  *
- * This module re-exports the value object {@link SignalCollectable}, a buffered,
- * ordered sequence of numbers that also knows its sampling plan and its analysis
- * window, so that every spectral quantity can be reported with the normalisation
- * its definition requires instead of the one a raw transform happens to produce.
- * The class itself is defined in `#semantic/asynchronous/collectable`, beside the
- * ordered base class it extends, so its heritage is evaluated by the module that
- * defines the base. This module keeps the numeric helpers its methods delegate
- * to and re-exports the class so that its import path is unchanged.
+ * This module is the facade and the numeric home of the asynchronous signal API:
+ * it defines the `signal*` helpers and the value class
+ * {@link AsynchronousSignalCollectable}. The 23 `useAsynchronous*` collector
+ * factories that the class delegates to live in
+ * `#semantic/asynchronous/collectors/signal`; this module imports them for the
+ * class methods and re-exports them so that the public surface of
+ * `#semantic/asynchronous/signal` is unchanged.
  *
- * This is the asynchronous twin of `#semantic/synchronous/signal`. The numeric
- * specification is identical — the same helpers, the same formulas, the same
- * normalisations — and only the execution model differs: every analysis method
- * returns a promise and awaits the collector that drains the source. Construction
- * stays synchronous because the base collectable buffers the samples eagerly and
- * the numeric helpers run inside the finisher of the collection.
+ * The two modules form an import cycle by construction: the factories call the
+ * helpers defined here, and the class methods call the factories. The cycle is
+ * safe because every cross-module use is deferred to a closure — the factories
+ * read the helpers only inside their finishers, and the class reads the
+ * factories only inside its method bodies. The factory module also declares its
+ * binder state with `var` and its binder function as a declaration, so the bind
+ * call at the end of this module is safe even when the factory module is the
+ * entry point and this module is evaluated during its import phase. First-import
+ * of either module therefore succeeds without a temporal-dead-zone error.
  *
- * Module layout. The numeric work lives in the exported `signal*` helpers, which
- * are pure functions over a value sequence plus a configuration. Each analysis
- * method of {@link SignalCollectable} delegates to exactly one factory from
- * `#semantic/asynchronous/collectors` — `useAsynchronous<Method>` for the method
- * `<Method>` — and the factory is the only place that owns the accumulation. That
- * split is deliberate: the class is a thin, documented facade, the helper holds
- * the formula, and the factory is the strategy the collectable applies. No two
- * methods share a factory and no method inlines one. The constructor-time
- * metadata accessors are the sole exception: `getSample`, `getValues`,
- * `getWindow`, `getCoherentGain`, `getNoiseBandwidth`, `getRate`, `getNyquist`,
- * `getResolution`, `size`, `at`, `toFrame`, `equals` and `toString` only read the
- * frozen state of the instance in constant time, so there is no accumulation for
- * a strategy to own.
- *
- * The 16 traps of `docs/research/signal-analysis.md` and where each is handled:
- *
- * 1. DC and Nyquist are never doubled. See {@link signalOneSided},
- *    {@link signalAmplitude} and {@link signalPowerSpectralDensity}; the edge
- *    test is `index === 0 || (even && index === last)` in all three.
- * 2. `10 * log10` is only used for power and `20 * log10` only for amplitude.
- *    {@link SignalCollectable.decibel} is the amplitude convention,
- *    {@link SignalCollectable.powerDecibel} the power one, and
- *    {@link SpectralDensity.decibelAt} the power one.
- * 3. Coherent-gain correction is mandatory for amplitudes. {@link signalAmplitude}
- *    divides by `count * coherentGain(window, count)`.
- * 4. No hard-coded gain. The gain is recomputed from the actual window vector at
- *    the actual length, so a symmetric Hann reads `0.4375` at eight samples
- *    rather than `0.5`.
- * 5. Noise is normalised by `sum(w^2)`, not by `count` and not by
- *    `count * gain * gain`; only that divisor makes a white-noise density
- *    unbiased. See {@link signalPowerSpectralDensity}.
- * 6. Negative window lobes are preserved. The module uses the library windows as
- *    supplied and never clips a weight to zero, so the flat-top main lobe stays
- *    flat and its scalloping loss stays near zero.
- * 7. Time-frequency analysis uses the periodic (DFT-even) windows. The default
- *    taper of this module is the periodic Hann window, which satisfies the
- *    constant-overlap-add condition at fifty percent overlap;
- *    {@link signalColaResidual} measures the residual so the claim can be
- *    asserted rather than assumed.
- * 8. Zero padding interpolates, it never resolves. `spectrum(size)` accepts a
- *    transform length above the signal length and documents that only the peak
- *    *location* becomes finer; the resolving power stays governed by the window.
- * 9. One-sided folding is never applied to a complex sequence. Every helper here
- *    consumes a real sequence, and {@link SignalCollectable.oneSided} documents
- *    that the fold is valid only because the input is real.
- * 10. The Hilbert transform is circular. {@link SignalCollectable.analyticSignal}
- *     documents the edge contamination and the recommended remedy.
- * 11. A vanishing envelope does not define a phase.
- *     {@link SignalCollectable.instantaneousFrequency} gates on the envelope and
- *     reports zero where the phase is meaningless.
- * 12. Correlation is reported normalised. {@link SignalCollectable.autocorrelation}
- *     defaults to the coefficient convention, so `rho[0]` is exactly one and the
- *     profile is comparable across signal lengths.
- * 13. Coherence is not offered here: a single segment makes it identically one,
- *     so a correct implementation would have to force a segment count of at least
- *     two and report that count. The method is therefore deliberately absent
- *     rather than silently wrong.
- * 14. Band energy is only integrated over the one-sided axis. The density of this
- *     module is already folded, with DC and Nyquist un-doubled.
- * 15. Flatness uses the *power* spectrum over the one-sided half.
- *     {@link signalSpectralFlatness} never traverses the conjugate half.
- * 16. Frames cover every sample. {@link signalShortTimeFourierTransform} extends
- *     the signal by half a frame at each end and pads the tail, so no sample is
- *     silently dropped.
- *
- * The published relations this module relies on are Parseval's theorem in its
- * density form (`sum(Pxx[k]) * resolution` equals the mean square) and the
- * identity `power = amplitude^2 / 2` for every interior bin, which is why
- * {@link SignalCollectable.power} sums to the equivalent noise bandwidth times
- * the mean square rather than to the mean square itself.
- *
- * Dependency note: the value object itself lives in
- * `#semantic/asynchronous/collectable` and is re-exported here; the collector
- * factories in `#semantic/asynchronous/collectors` import the helpers of this
- * module. Those cross-module values are only dereferenced inside function
- * bodies, never during module evaluation, so the remaining cycle is inert for
- * every entry order. Every analysis method awaits its collector, so a rejection
- * raised by a helper surfaces as a rejected promise rather than as a synchronous
- * throw; the constructor still throws synchronously, because it validates before
- * the first await.
+ * The numeric specification, including the 16 traps and the normalisation
+ * conventions, is documented beside each helper below. `SpectralDensity` is
+ * defined once in `#semantic/synchronous/signal` and re-exported here so that
+ * both families report the same value object.
  *
  * @module
  */
 
 import {
     coherentGain,
+    equivalentNoiseBandwidth,
     isSpectralWindow,
     useHannPeriodicWindow,
+    useRectangularWindow,
     windowed
 } from "#semantic/mathematics/window";
 import { amplitudeDecibel, powerDecibel } from "#semantic/mathematics/bin";
@@ -113,14 +41,55 @@ import { asComplex } from "#semantic/mathematics/transform";
 import { fastFourierTransform } from "#semantic/mathematics/spectral";
 import { Frame } from "#semantic/mathematics/frame";
 import { Frequency } from "#semantic/mathematics/frequency";
+import { Sampler } from "#semantic/mathematics/sampler";
 import { Sample } from "#semantic/mathematics/sample";
 import { Spectrogram } from "#semantic/mathematics/spectrogram";
 import { Spectrum } from "#semantic/mathematics/spectrum";
 import { isBigInt, isIterable, isNumber } from "#semantic/guard";
 import { Optional } from "#semantic/optional";
+import { SpectralDensity } from "#semantic/synchronous/signal";
+import { AsynchronousOrderedCollectable } from "#semantic/asynchronous/collectable";
+import {
+    bindSignalCollectableFactory,
+    useAsynchronousAmplitude,
+    useAsynchronousAnalyticSignal,
+    useAsynchronousAutocorrelation,
+    useAsynchronousBlueStein,
+    useAsynchronousDecibel,
+    useAsynchronousDetrended,
+    useAsynchronousDiscreteFourierTransform,
+    useAsynchronousEnvelope,
+    useAsynchronousFastFourierTransform,
+    useAsynchronousInstantaneousFrequency,
+    useAsynchronousInstantaneousPhase,
+    useAsynchronousLaplacianTransform,
+    useAsynchronousMeilinTransform,
+    useAsynchronousOneSided,
+    useAsynchronousPower,
+    useAsynchronousPowerDecibel,
+    useAsynchronousPowerSpectralDensity,
+    useAsynchronousRadix2,
+    useAsynchronousRadix3,
+    useAsynchronousRadix5,
+    useAsynchronousRadix7,
+    useAsynchronousShortTimeFourierTransform,
+    useAsynchronousSignalToNoiseRatio,
+    useAsynchronousSpectralBandwidth,
+    useAsynchronousSpectralCentroid,
+    useAsynchronousSpectralFlatness,
+    useAsynchronousSpectralFlux,
+    useAsynchronousSpectralRolloff,
+    useAsynchronousSpectrogram,
+    useAsynchronousSpectrum,
+    useAsynchronousWaveletTransform,
+    useAsynchronousWindowed,
+    useAsynchronousZeroCrossingRate
+} from "#semantic/asynchronous/collectors/signal";
 import type { Angle } from "#semantic/mathematics/angle";
 import type { Bin } from "#semantic/mathematics/bin";
 import type { Complex } from "#semantic/mathematics/complex";
+import type { Samplable } from "#semantic/mathematics/sampler";
+import type { WaveletLevel } from "#semantic/mathematics/spectral";
 import type { SpectralWindow } from "#semantic/mathematics/window";
 import type { BiConsumer, BiPredicate, Consumer, Predicate } from "#semantic/utility";
 
@@ -603,376 +572,14 @@ export const signalPowerDecibel: (plan: Sample, values: Iterable<number>, window
     }
 
 /**
- * An immutable one-sided power spectral density on a fixed frequency grid.
+ * The power spectral density value object.
  *
- * A density carries the physical unit of the samples squared per hertz, so it can
- * be integrated over a band, compared across segment lengths and combined with
- * the equivalent noise bandwidth. That is precisely what a plain power cannot do:
- * a bare `unit^2` value changes meaning when the frame length changes, while
- * `unit^2 / Hz` does not.
- *
- * Every grid entry is one bin, and `integrate` multiplies each density by the bin
- * spacing before summing, so integrating the whole grid yields the mean square of
- * the analysed signal whenever the estimate is unbiased. The class is a value
- * object: the arrays are copied and frozen at construction and every query is a
- * pure read.
+ * `SpectralDensity` is defined in `#semantic/synchronous/signal`: a density is
+ * arithmetic over a finite sample, so the synchronous and the asynchronous module
+ * must report the same class rather than two structurally identical copies. The
+ * class is re-exported here so that the import path of this module is unchanged.
  */
-export class SpectralDensity {
-
-    /**
-     * The frequency of every bin, in increasing order and frozen.
-     */
-    private readonly frequencies: ReadonlyArray<Frequency>;
-    /**
-     * The density of every bin, in `unit^2 / Hz`, aligned with `frequencies`.
-     */
-    private readonly densities: ReadonlyArray<number>;
-    /**
-     * The spacing between adjacent bins, which is also the integration step.
-     */
-    private readonly resolution: Frequency;
-    /**
-     * The number of segments that were averaged into this estimate.
-     */
-    private readonly segments: bigint;
-    /**
-     * The taper the segments were weighted with.
-     */
-    private readonly taper: SpectralWindow;
-
-    /**
-     * Creates a density from a frequency grid and a matching density vector.
-     *
-     * Both sequences are consumed once, copied and frozen, and they must have the
-     * same length, because a density without a frequency is not addressable. The
-     * resolution is stored as supplied rather than recomputed from the grid, so a
-     * caller that integrates a sub-grid still pays the original bin spacing.
-     *
-     * @param frequencies - the frequency of every bin, in increasing order.
-     * @param densities - the density of every bin, in `unit^2 / Hz`.
-     * @param resolution - the spacing between adjacent bins.
-     * @param segments - the number of averaged segments, at least one.
-     * @param taper - the window the segments were weighted with.
-     * @throws {TypeError} if a frequency is not a `Frequency`, a density is not a
-     *         finite number, the resolution is not a `Frequency`, the segment
-     *         count is not a `bigint`, or the taper is not callable.
-     * @throws {RangeError} if the grid and the density vector differ in length,
-     *         the grid is empty, or the segment count is not positive.
-     */
-    public constructor(frequencies: Iterable<Frequency>, densities: Iterable<number>, resolution: Frequency, segments: bigint, taper: SpectralWindow) {
-        if (!isIterable(frequencies)) {
-            throw new TypeError("Spectral density frequencies must be iterable.");
-        }
-        const grid: Array<Frequency> = [];
-        for (const frequency of frequencies) {
-            if (!(frequency instanceof Frequency)) {
-                throw new TypeError("Spectral density frequencies must be Frequency values.");
-            }
-            grid.push(frequency);
-        }
-        if (!isIterable(densities)) {
-            throw new TypeError("Spectral density values must be iterable.");
-        }
-        const values: Array<number> = [];
-        for (const density of densities) {
-            if (!isNumber(density)) {
-                throw new TypeError("Spectral density values must be finite numbers.");
-            }
-            values.push(density);
-        }
-        if (!(resolution instanceof Frequency)) {
-            throw new TypeError("Spectral density resolution must be a Frequency.");
-        }
-        if (!isBigInt(segments)) {
-            throw new TypeError("Spectral density segment count must be a bigint.");
-        }
-        if (!isSpectralWindow(taper)) {
-            throw new TypeError("Spectral density window must be a window function.");
-        }
-        if (grid.length !== values.length) {
-            throw new RangeError("Spectral density grid and values must have the same length.");
-        }
-        if (grid.length < 1) {
-            throw new RangeError("Spectral density requires at least one bin.");
-        }
-        if (segments < 1n) {
-            throw new RangeError("Spectral density segment count must be positive.");
-        }
-        this.frequencies = Object.freeze(grid);
-        this.densities = Object.freeze(values);
-        this.resolution = resolution;
-        this.segments = segments;
-        this.taper = taper;
-    }
-
-    /**
-     * Returns the number of bins on the grid.
-     *
-     * @returns the bin count, a positive integer.
-     */
-    public size(): number {
-        return this.densities.length;
-    }
-
-    /**
-     * Returns whether this density holds no bins.
-     *
-     * The constructor requires at least one bin, so this is `false` for every
-     * constructed density; it remains part of the surface for callers that forward
-     * the query.
-     *
-     * @returns `true` if the grid is empty.
-     */
-    public isEmpty(): boolean {
-        return this.densities.length === 0;
-    }
-
-    /**
-     * Returns the spacing between adjacent bins.
-     *
-     * @returns the bin spacing in hertz.
-     */
-    public getResolution(): Frequency {
-        return this.resolution;
-    }
-
-    /**
-     * Returns the number of segments that were averaged.
-     *
-     * A count of one means the estimate is a single periodogram: unbiased, but with
-     * a variance that does not shrink as the record grows. Averaging at least a
-     * handful of segments is what makes the estimate usable, at the cost of a
-     * coarser resolution because each segment is shorter.
-     *
-     * @returns the averaged segment count.
-     */
-    public getSegments(): bigint {
-        return this.segments;
-    }
-
-    /**
-     * Returns the taper applied to every segment.
-     *
-     * @returns the analysis window.
-     */
-    public getWindow(): SpectralWindow {
-        return this.taper;
-    }
-
-    /**
-     * Returns the frequency of one bin.
-     *
-     * The index must be an integer but need not lie inside the grid: an
-     * out-of-range index yields an empty `Optional` rather than an exception, so
-     * probing a range needs no caller-side bounds check.
-     *
-     * @param index - the zero-based bin index.
-     * @returns the bin frequency in an `Optional`.
-     * @throws {TypeError} if the index is not a finite integer.
-     */
-    public frequencyAt(index: number): Optional<Frequency> {
-        if (!isNumber(index) || !Number.isInteger(index)) {
-            throw new TypeError("Spectral density index must be a finite integer.");
-        }
-        if (index < 0 || index >= this.frequencies.length) {
-            return Optional.empty();
-        }
-        return Optional.of(this.frequencies[index]);
-    }
-
-    /**
-     * Returns the density of one bin.
-     *
-     * @param index - the zero-based bin index.
-     * @returns the density in `unit^2 / Hz` in an `Optional`.
-     * @throws {TypeError} if the index is not a finite integer.
-     */
-    public densityAt(index: number): Optional<number> {
-        if (!isNumber(index) || !Number.isInteger(index)) {
-            throw new TypeError("Spectral density index must be a finite integer.");
-        }
-        if (index < 0 || index >= this.densities.length) {
-            return Optional.empty();
-        }
-        return Optional.of(this.densities[index]);
-    }
-
-    /**
-     * Returns the level of one bin in decibels.
-     *
-     * The conversion is `10 * log10(density / reference)`, the power convention,
-     * because a density is a power per hertz and not an amplitude. Passing it
-     * through the amplitude convention would halve the level: minus 6.02 would
-     * report as minus 12.04 decibels. A zero density reports negative infinity.
-     *
-     * @param index - the zero-based bin index.
-     * @param reference - the positive density that maps to zero decibels, and one
-     *        by default.
-     * @returns the level in decibels in an `Optional`.
-     * @throws {TypeError} if the index is not a finite integer, or the reference is
-     *         not a finite number.
-     * @throws {RangeError} if an in-range bin is requested with a reference that is
-     *         not positive.
-     */
-    public decibelAt(index: number, reference: number = 1): Optional<number> {
-        if (!isNumber(index) || !Number.isInteger(index)) {
-            throw new TypeError("Spectral density index must be a finite integer.");
-        }
-        if (index < 0 || index >= this.densities.length) {
-            return Optional.empty();
-        }
-        return Optional.of(powerDecibel(this.densities[index], reference));
-    }
-
-    /**
-     * Integrates the density over a half-open frequency band.
-     *
-     * Every bin whose frequency lies in `[low, high)` contributes its density
-     * multiplied by the bin spacing, which is the rectangle rule on a uniform grid.
-     * A bin on the lower edge is counted and a bin on the upper edge is not, so
-     * equal bounds describe an empty band and report zero. Because the grid is
-     * uniform and the bounds are compared with exact frequencies, no interpolation
-     * is performed: a band whose bounds fall between two bins still measures whole
-     * bins.
-     *
-     * Integrating the whole grid yields the mean square of the analysed signal,
-     * which is Parseval's theorem in its density form. That identity is what makes
-     * a density the right tool for noise and for total power, and it is why this
-     * class exists next to the peak-convention power array.
-     *
-     * @param low - the inclusive lower bound in hertz.
-     * @param high - the exclusive upper bound in hertz.
-     * @returns the integrated power in squared units of the samples.
-     * @throws {TypeError} if either bound is not a `Frequency`.
-     */
-    public integrate(low: Frequency, high: Frequency): number {
-        if (!(low instanceof Frequency)) {
-            throw new TypeError("Integration lower bound must be a Frequency.");
-        }
-        if (!(high instanceof Frequency)) {
-            throw new TypeError("Integration upper bound must be a Frequency.");
-        }
-        const step: number = this.resolution.getHertz();
-        let total: number = 0;
-        for (let index: number = 0; index < this.densities.length; index += 1) {
-            const frequency: number = this.frequencies[index].getHertz();
-            if (frequency >= low.getHertz() && frequency < high.getHertz()) {
-                total += this.densities[index] * step;
-            }
-        }
-        return total;
-    }
-
-    /**
-     * Integrates the density over the whole grid.
-     *
-     * For an unbiased density this equals the mean square of the detrended signal,
-     * so a white-noise record reads its variance and a unit sinusoid reads one
-     * half. That is Parseval's theorem, and it is the check that distinguishes a
-     * correctly normalised density from one that is off by the equivalent noise
-     * bandwidth.
-     *
-     * @returns the total power in squared units of the samples.
-     */
-    public totalPower(): number {
-        const step: number = this.resolution.getHertz();
-        let total: number = 0;
-        for (const density of this.densities) {
-            total += density * step;
-        }
-        return total;
-    }
-
-    /**
-     * Returns a quantile of the density, the usual robust noise floor.
-     *
-     * The default median is a robust estimate of a flat noise floor because it
-     * ignores the few bins a tonal component occupies, whereas the mean would be
-     * dragged upwards by exactly those bins. The quantile is computed on a copy and
-     * interpolates linearly between order statistics, so it is defined for any
-     * fraction strictly between zero and one.
-     *
-     * @param quantile - the fraction of bins at or below the floor, and `0.5` by
-     *        default.
-     * @returns the density at that quantile in an `Optional`.
-     * @throws {TypeError} if the quantile is not a finite number.
-     * @throws {RangeError} if the quantile is not within `(0, 1)`, or the grid is
-     *         empty.
-     */
-    public noiseFloor(quantile: number = 0.5): Optional<number> {
-        if (!isNumber(quantile)) {
-            throw new TypeError("Noise floor quantile must be a finite number.");
-        }
-        if (quantile <= 0 || quantile >= 1) {
-            throw new RangeError("Noise floor quantile must be within (0, 1).");
-        }
-        if (this.densities.length < 1) {
-            return Optional.empty();
-        }
-        const sorted: Array<number> = this.densities.slice().sort((first: number, second: number): number => first - second);
-        const position: number = quantile * (sorted.length - 1);
-        const lower: number = Math.floor(position);
-        const upper: number = Math.min(sorted.length - 1, lower + 1);
-        const fraction: number = position - lower;
-        return Optional.of(sorted[lower] * (1 - fraction) + sorted[upper] * fraction);
-    }
-
-    /**
-     * Compares this density with another entry by entry.
-     *
-     * Two densities are equal when their resolutions, segment counts, tapers and
-     * grids match and every density agrees within the tolerance. The taper is
-     * compared by identity, because two distinct window functions are not
-     * meaningfully comparable without evaluating them.
-     *
-     * @param other - the density to compare with.
-     * @param epsilon - the absolute tolerance applied to the densities, and `1E-9`
-     *        by default.
-     * @returns whether the two estimates are indistinguishable.
-     * @throws {TypeError} if the argument is not a `SpectralDensity`, or the
-     *         tolerance is not a finite number.
-     * @throws {RangeError} if the tolerance is negative.
-     */
-    public equals(other: SpectralDensity, epsilon: number = Tolerance): boolean {
-        if (!(other instanceof SpectralDensity)) {
-            throw new TypeError("Spectral density comparison requires a SpectralDensity.");
-        }
-        if (!isNumber(epsilon)) {
-            throw new TypeError("Spectral density tolerance must be a finite number.");
-        }
-        if (epsilon < 0) {
-            throw new RangeError("Spectral density tolerance must not be negative.");
-        }
-        if (this.densities.length !== other.densities.length) {
-            return false;
-        }
-        if (this.segments !== other.segments || this.taper !== other.taper) {
-            return false;
-        }
-        if (Math.abs(this.resolution.getHertz() - other.resolution.getHertz()) > epsilon) {
-            return false;
-        }
-        for (let index: number = 0; index < this.densities.length; index += 1) {
-            if (Math.abs(this.frequencies[index].getHertz() - other.frequencies[index].getHertz()) > epsilon) {
-                return false;
-            }
-            if (Math.abs(this.densities[index] - other.densities[index]) > epsilon) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * Returns a short, stable description of this density.
-     *
-     * @returns a description naming the bin count, the resolution and the segment
-     *          count.
-     */
-    public toString(): string {
-        return `SpectralDensity(bins=${this.densities.length}, resolution=${this.resolution.getHertz()}, segments=${this.segments})`;
-    }
-}
+export { SpectralDensity } from "#semantic/synchronous/signal";
 
 /**
  * Estimates a one-sided power spectral density with Welch's method.
@@ -1804,18 +1411,6 @@ export const signalColaResidual: (window: SpectralWindow, count: number, hopSize
     }
 
 /**
- * The signal value object.
- *
- * `SignalCollectable` is defined in `#semantic/asynchronous/collectable`, beside
- * the `OrderedCollectable` class it extends. Keeping the heritage in one module
- * removes the temporal-dead-zone read that occurred when this module was reached
- * through a dependency cycle before the base class had been initialized; the class
- * is re-exported here so that the import path of this module is unchanged.
- */
-export { SignalCollectable } from "#semantic/asynchronous/collectable";
-
-
-/**
  * Validates and copies the samples of a signal.
  *
  * The helper exists so that the constructor can validate before it calls `super`,
@@ -1873,3 +1468,1054 @@ export const sequenceGenerator: <E extends number>(values: ReadonlyArray<E>) => 
             }
         };
     }
+
+/**
+ * A real-valued signal bound to its sampling plan and its analysis window.
+ *
+ * The class is a thin, ordered collectable over the samples that also carries the
+ * two pieces of context every spectral formula needs: the sampling rate, which
+ * turns bin indices into hertz, and the taper, which decides both the coherent gain
+ * and the equivalent noise bandwidth. Keeping them on the value object is the whole
+ * point — a caller who has to remember "divide by the coherent gain" will
+ * eventually forget, and the resulting 6.02 decibel error looks like a plausible
+ * measurement.
+ *
+ * Two conventions are fixed and documented because they are the ones that cause
+ * silent errors elsewhere in the wild:
+ *
+ * - A *one-sided* fold keeps DC and Nyquist un-doubled. They are self-conjugate and
+ *   have no mirror partner, so doubling them invents energy.
+ * - A *peak* power is not a *density*. `power()` reports the mean square a sinusoid
+ *   on that bin would have, and sums to the equivalent noise bandwidth times the
+ *   mean square; `powerSpectralDensity()` reports a density and integrates to the
+ *   mean square itself.
+ *
+ * Every analysis method delegates to exactly one `useAsynchronous<Method>` factory
+ * from `#semantic/asynchronous/collectors/signal`, and the factory owns the
+ * accumulation.
+ * The constructor-time metadata accessors only read the frozen state of the
+ * instance in constant time and therefore have no strategy to select.
+ *
+ * Complexity: construction buffers and sorts O(n) samples; every analysis method
+ * documents its own bound and is at least O(n).
+ *
+ * @template E - The element type, constrained to `number` so that the spectral
+ *               formulas are total.
+ */
+export class AsynchronousSignalCollectable<E extends number> extends AsynchronousOrderedCollectable<E> {
+
+    /**
+     * The built-in object tag identifying this API implementation.
+     */
+    [Symbol.toStringTag]: string = "AsynchronousSignalCollectable";
+    /**
+     * The sampling plan that fixes the rate and the covered duration.
+     */
+    private readonly plan: Sample;
+    /**
+     * The samples, in acquisition order and frozen after construction.
+     */
+    private readonly values: ReadonlyArray<E>;
+    /**
+     * The taper applied by every spectral method that does not override it.
+     */
+    private readonly taper: SpectralWindow;
+    /**
+     * The coherent gain of `taper` at this length, recomputed per instance.
+     */
+    private readonly coherent: number;
+    /**
+     * The equivalent noise bandwidth of `taper` at this length, in bins.
+     */
+    private readonly bandwidth: number;
+
+    /**
+     * Buffers a value sequence under a sampling plan and an analysis window.
+     *
+     * The samples are copied and validated before the ordered buffer is built, so a
+     * rejected sample leaves no partially constructed instance behind. The coherent
+     * gain and the equivalent noise bandwidth of the window are computed once, at
+     * this exact length, and reused by every later call; recomputing them per call
+     * would be correct but would also invite the assumption that they are constants,
+     * which they are not.
+     *
+     * @param plan - the sampling plan; its frame count must equal the sample count.
+     * @param values - the samples, at least one, every one a finite number.
+     * @param window - the analysis taper; defaults to the periodic Hann window.
+     * @throws {TypeError} if the plan is not a `Sample`, a sample is not a finite
+     *         number, or the window is not callable.
+     * @throws {RangeError} if the samples are empty, their count differs from the
+     *         plan's frame count, or the window weights sum to zero.
+     */
+    public constructor(plan: Sample, values: Iterable<E>, window?: SpectralWindow) {
+        const collected: Array<E> = requireSignalValues<E>(values);
+        super(sequenceGenerator<E>(collected));
+        if (!(plan instanceof Sample)) {
+            throw new TypeError("Signal plan must be a Sample.");
+        }
+        if (plan.getCount() !== collected.length) {
+            throw new RangeError("Signal plan frame count must match the signal length.");
+        }
+        const taper: SpectralWindow = resolveWindow(window);
+        this.plan = plan;
+        this.values = Object.freeze(collected);
+        this.taper = taper;
+        this.coherent = coherentGain(taper, collected.length);
+        this.bandwidth = equivalentNoiseBandwidth(taper, collected.length);
+    }
+
+    /**
+     * Creates a signal from samples and a sampling rate.
+     *
+     * The covered duration is derived as `count / rate`, so the plan's last sample
+     * starts one sampling interval before the end. At least one sample is required,
+     * and the rate is validated before the samples are read, so an invalid rate is
+     * reported without consuming the source.
+     *
+     * @param values - the samples, at least one.
+     * @param rate - the sampling rate in hertz, positive and finite.
+     * @param window - the analysis taper; defaults to the periodic Hann window.
+     * @returns a new signal over the samples.
+     * @throws {TypeError} if the rate is not a finite number, a sample is not finite,
+     *         or the window is not callable.
+     * @throws {RangeError} if the rate is not positive, the samples are empty, or the
+     *         window weights sum to zero.
+     */
+    public static useRate<E extends number>(values: Iterable<E>, rate: number, window?: SpectralWindow): AsynchronousSignalCollectable<E> {
+        if (!isNumber(rate)) {
+            throw new TypeError("Signal rate must be a finite number.");
+        }
+        if (rate <= 0) {
+            throw new RangeError("Signal rate must be positive.");
+        }
+        const collected: Array<E> = requireSignalValues<E>(values);
+        return new AsynchronousSignalCollectable<E>(new Sample(collected.length, collected.length / rate), collected, window);
+    }
+
+    /**
+     * Creates a signal from an existing frame.
+     *
+     * The frame contributes both its samples and its sampling plan, so the rate and
+     * the covered duration are preserved exactly. The frame itself is not modified.
+     *
+     * @param frame - the frame to reinterpret as a signal, holding at least one
+     *        sample.
+     * @param window - the analysis taper; defaults to the periodic Hann window.
+     * @returns a new signal over the frame's samples.
+     * @throws {TypeError} if the argument is not a `Frame`, or the window is not
+     *         callable.
+     * @throws {RangeError} if the window weights sum to zero.
+     */
+    public static useFrame(frame: Frame, window?: SpectralWindow): AsynchronousSignalCollectable<number> {
+        if (!(frame instanceof Frame)) {
+            throw new TypeError("Signal frame must be a Frame.");
+        }
+        return new AsynchronousSignalCollectable<number>(frame.getSample(), frame.getValues(), window);
+    }
+
+    /**
+     * Returns the sampling plan of this signal.
+     *
+     * @returns the retained plan, not a copy.
+     */
+    public getSample(): Sample {
+        return this.plan;
+    }
+
+    /**
+     * Returns the samples in acquisition order.
+     *
+     * @returns the frozen sample array, whose length equals `size()`.
+     */
+    public getValues(): ReadonlyArray<E> {
+        return this.values;
+    }
+
+    /**
+     * Returns the analysis window configured for this signal.
+     *
+     * @returns the taper applied by default.
+     */
+    public getWindow(): SpectralWindow {
+        return this.taper;
+    }
+
+    /**
+     * Returns the coherent gain of the configured window at this length.
+     *
+     * The value is `sum(w) / count`, the factor by which a sinusoid's spectral line
+     * is scaled by the taper. It is recomputed for this instance rather than assumed,
+     * because a symmetric window deviates from its closed-form value at short lengths
+     * and a custom window has no closed form at all.
+     *
+     * @returns the mean window weight, dimensionless.
+     */
+    public getCoherentGain(): number {
+        return this.coherent;
+    }
+
+    /**
+     * Returns the equivalent noise bandwidth of the configured window, in bins.
+     *
+     * The value is `count * sum(w^2) / sum(w)^2`, the width of the rectangular window
+     * that would admit the same white-noise power. It is what a sum of
+     * peak-convention bin powers exceeds the mean square by.
+     *
+     * @returns the noise bandwidth in bins, dimensionless and at least one.
+     */
+    public getNoiseBandwidth(): number {
+        return this.bandwidth;
+    }
+
+    /**
+     * Returns the number of samples.
+     *
+     * @returns the sample count as a `bigint`, matching the collectable layer.
+     */
+    public size(): bigint {
+        return BigInt(this.values.length);
+    }
+
+    /**
+     * Returns one sample by index.
+     *
+     * The index must be a `bigint` but need not lie inside the signal: a negative
+     * index or one at or beyond `size()` yields an empty `Optional` rather than an
+     * exception.
+     *
+     * @param index - the zero-based sample index.
+     * @returns the sample in an `Optional`.
+     * @throws {TypeError} if the index is not a `bigint`.
+     */
+    public at(index: bigint): Optional<E> {
+        if (!isBigInt(index)) {
+            throw new TypeError("Signal index must be a bigint.");
+        }
+        if (index < 0n || index >= BigInt(this.values.length)) {
+            return Optional.empty();
+        }
+        return Optional.of(this.values[Number(index)]);
+    }
+
+    /**
+     * Returns the sampling rate in hertz.
+     *
+     * @returns the rate that converts a bin index into a frequency.
+     */
+    public getRate(): number {
+        return this.plan.getRate();
+    }
+
+    /**
+     * Returns the Nyquist frequency, half the sampling rate.
+     *
+     * @returns the highest frequency a one-sided spectrum can describe.
+     */
+    public getNyquist(): Frequency {
+        return new Frequency(this.plan.getRate() / 2);
+    }
+
+    /**
+     * Returns the spacing between adjacent transform bins.
+     *
+     * The value is `rate / count`, the grid resolution. It is not the resolving
+     * power: two components closer than about one bin of a rectangular window, or
+     * one and a half bins of a Hann window, remain merged no matter how the transform
+     * is padded.
+     *
+     * @returns the bin spacing in hertz.
+     */
+    public getResolution(): Frequency {
+        return new Frequency(this.plan.getRate() / this.values.length);
+    }
+
+    /**
+     * Converts this signal to a plain frame over the same plan.
+     *
+     * The frame copies the samples, so mutating the returned frame's source array
+     * cannot affect this signal; the two objects share only the immutable plan.
+     *
+     * @returns a new frame holding the same samples under the same plan.
+     */
+    public toFrame(): Frame {
+        return new Frame(this.plan, this.values);
+    }
+
+    /**
+     * Compares this signal with another value by value.
+     *
+     * Two signals are equal when their plans match and every sample agrees within the
+     * tolerance. The window is compared by identity, because two distinct window
+     * functions are not comparable without evaluating them.
+     *
+     * @param other - the signal to compare with.
+     * @param epsilon - the absolute tolerance applied to the samples, and `1E-9` by
+     *        default.
+     * @returns whether the two signals are indistinguishable.
+     * @throws {TypeError} if the argument is not a `AsynchronousSignalCollectable`, or the
+     *         tolerance is not a finite number.
+     * @throws {RangeError} if the tolerance is negative.
+     */
+    public equals(other: AsynchronousSignalCollectable<E>, epsilon: number = Tolerance): boolean {
+        if (!(other instanceof AsynchronousSignalCollectable)) {
+            throw new TypeError("Signal comparison requires a AsynchronousSignalCollectable.");
+        }
+        if (!isNumber(epsilon)) {
+            throw new TypeError("Signal tolerance must be a finite number.");
+        }
+        if (epsilon < 0) {
+            throw new RangeError("Signal tolerance must not be negative.");
+        }
+        if (!this.plan.equals(other.plan) || this.taper !== other.taper) {
+            return false;
+        }
+        if (this.values.length !== other.values.length) {
+            return false;
+        }
+        for (let index: number = 0; index < this.values.length; index += 1) {
+            if (Math.abs(this.values[index] - other.values[index]) > epsilon) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Returns a short, stable description of this signal.
+     *
+     * @returns a description naming the sample count, the rate and the window.
+     */
+    public toString(): string {
+        const label: string = this.taper === useHannPeriodicWindow ? "hann-periodic" : this.taper === useRectangularWindow ? "rectangular" : "custom";
+        return `AsynchronousSignalCollectable(size=${this.values.length}, rate=${this.plan.getRate()}, window=${label})`;
+    }
+
+    /**
+     * Removes a trend from this signal and returns the result as a new signal.
+     *
+     * A constant offset leaks into the low bins of a windowed transform and a drift
+     * smears the whole low band, so both are usually removed before a density
+     * estimate. `"constant"` subtracts the mean and `"linear"` subtracts the
+     * least-squares line; `"none"` is the identity. The plan, the rate and the window
+     * are preserved, so the result is the same signal with different samples.
+     *
+     * @param mode - the trend to remove; defaults to `"constant"`.
+     * @returns a new signal over the detrended samples, typed over `number`
+     *          because a detrended sample is an arbitrary real value rather than
+     *          a member of a narrower numeric domain.
+     * @throws {TypeError} if the mode is not one of the three supported names.
+     */
+    public async detrended(mode: DetrendMode = "constant"): Promise<AsynchronousSignalCollectable<number>> {
+        return await useAsynchronousDetrended<E>(this.plan, this.taper, mode).collect(this.source());
+    }
+
+    /**
+     * Weights every sample by a window and returns the result as a new signal.
+     *
+     * The window becomes the analysis window of the result as well, so a later
+     * spectral call does not apply it a second time unless it is asked to. Passing a
+     * different window re-tapers an already tapered signal, which is occasionally
+     * what a cross-fade wants and is otherwise a mistake worth making explicit.
+     *
+     * @param window - the taper to apply; defaults to the window of this signal.
+     * @returns a new signal over the weighted samples, typed over `number`
+     *          because a weight is an arbitrary real value.
+     * @throws {TypeError} if the window is not callable.
+     * @throws {RangeError} if a window weight is not finite.
+     */
+    public async windowed(window?: SpectralWindow): Promise<AsynchronousSignalCollectable<number>> {
+        return await useAsynchronousWindowed<E>(this.plan, window ?? this.taper).collect(this.source());
+    }
+
+    /**
+     * Returns the complex spectrum of this signal.
+     *
+     * The signal is tapered, optionally zero-padded and then transformed, so the
+     * coefficients are raw and unnormalised: their magnitude grows with the transform
+     * length and with the window. Use `amplitude()` or `power()` for calibrated
+     * values, and `oneSided()` for the folded view.
+     *
+     * The returned `Spectrum` keeps the full complex grid, because its constructor
+     * derives each bin frequency from the bin position over the plan's frame count: a
+     * one-sided fold has half as many bins and would report every frequency at twice
+     * its true value. The fold itself is available through {@link oneSided}, which is
+     * the only place the DC and Nyquist rule is applied.
+     *
+     * Padding does not improve resolution. A transform length above the sample count
+     * samples the same windowed DTFT more densely, which sharpens the peak *location*
+     * and turns `rate / size` into the bin spacing; the ability to separate two
+     * components stays governed by the window length and shape. Two equal tones `0.4`
+     * bins apart stay merged at any padding: with a 256-point record and a Hann
+     * window, padding to 8192 produces two local maxima whose dip is only 0.79
+     * decibels, far too shallow to call them resolved.
+     *
+     * @param size - the transform length in samples, at least the sample count;
+     *        defaults to the sample count, which means no padding.
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @returns the spectrum over `size` bins.
+     * @throws {TypeError} if the length is not a `bigint` or does not fit a safe
+     *         integer, or the window is not callable.
+     * @throws {RangeError} if the length is below the sample count, which would
+     *         truncate the observation.
+     */
+    public async spectrum(size?: bigint, window?: SpectralWindow): Promise<Spectrum> {
+        const length: bigint = size === undefined ? BigInt(this.values.length) : size;
+        return await useAsynchronousSpectrum(this.plan, requireCount(length, "Spectrum transform length"), window ?? this.taper).collect(this.source());
+    }
+
+    /**
+     * Returns the one-sided bins of this signal, with DC and Nyquist un-doubled.
+     *
+     * A real signal satisfies `X[count - k] = conj(X[k])`, so the negative frequencies
+     * carry no independent information and are folded onto the positive half by
+     * doubling every interior bin. The constant bin and, for an even length, the
+     * Nyquist bin are self-conjugate: they are their own mirror, so doubling them
+     * would report four instead of two at DC for `2 + cos(PI * n)` and two instead of
+     * one at Nyquist, exactly 6.02 decibels too high in each case. Those two bins are
+     * therefore kept exactly as the transform produced them.
+     *
+     * The returned amplitudes are still raw, so the doubling is a fold and not a
+     * calibration; use `amplitude()` for calibrated values.
+     *
+     * @param size - the transform length in samples, at least the sample count;
+     *        defaults to the sample count.
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @returns the bins from zero hertz through the top of the lower half.
+     * @throws {TypeError} if the length or the window is invalid.
+     * @throws {RangeError} if the length would truncate the signal.
+     */
+    public async oneSided(size?: bigint, window?: SpectralWindow): Promise<Array<Bin>> {
+        const length: bigint = size === undefined ? BigInt(this.values.length) : size;
+        return await useAsynchronousOneSided(this.plan, requireCount(length, "Spectrum transform length"), window ?? this.taper).collect(this.source());
+    }
+
+    /**
+     * Returns the calibrated one-sided amplitudes of this signal.
+     *
+     * The estimate is `2 * |X[k]| / (count * CG)` for an interior bin and
+     * `|X[k]| / (count * CG)` for DC and Nyquist. Both corrections matter: an interior
+     * tone at unit amplitude reads `0.5` without the factor of two and `0.5` again
+     * without the gain correction, so omitting either reports minus 6.02 decibels.
+     * The gain itself is never assumed to be one half; it is recomputed from the
+     * actual window vector.
+     *
+     * The value is a narrow-band measurement. A broadband noise floor has no
+     * amplitude, and its level belongs in `powerSpectralDensity()`.
+     *
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @returns one amplitude per one-sided bin, in units of the samples.
+     * @throws {TypeError} if the window is not callable.
+     * @throws {RangeError} if the window weights sum to zero.
+     */
+    public async amplitude(window?: SpectralWindow): Promise<Array<number>> {
+        return await useAsynchronousAmplitude(this.plan, window ?? this.taper).collect(this.source());
+    }
+
+    /**
+     * Returns the one-sided power of this signal, with DC and Nyquist un-doubled.
+     *
+     * An interior bin reports `A[k]^2 / 2`, the mean square of a sinusoid of
+     * amplitude `A[k]`, and DC or Nyquist report `A[k]^2` because they do not
+     * oscillate. This is the peak convention: each bin answers "what mean square
+     * would a tone on this bin have". It is not the Parseval convention — a window
+     * spreads each line over its main lobe, so summing every bin over-counts by the
+     * equivalent noise bandwidth, which is 1.5 for Hann — and the total power
+     * question belongs to `powerSpectralDensity()`.
+     *
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @returns one power per one-sided bin, in squared units of the samples.
+     * @throws {TypeError} if the window is not callable.
+     * @throws {RangeError} if the window weights sum to zero.
+     */
+    public async power(window?: SpectralWindow): Promise<Array<number>> {
+        return await useAsynchronousPower(this.plan, window ?? this.taper).collect(this.source());
+    }
+
+    /**
+     * Returns the amplitude levels of the one-sided bins in decibels.
+     *
+     * The conversion is `20 * log10(amplitude)`, the amplitude convention. It is
+     * correct for an amplitude, a voltage, a displacement or a sound pressure, and
+     * wrong for a power or a density: quartering a power is minus 6.02 decibels but
+     * reads minus 12.04 under this convention. Use {@link powerDecibel} for those. A
+     * silent bin reports negative infinity.
+     *
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @returns one level per one-sided bin, in decibels relative to one.
+     * @throws {TypeError} if the window is not callable.
+     * @throws {RangeError} if the window weights sum to zero.
+     */
+    public async decibel(window?: SpectralWindow): Promise<Array<number>> {
+        return await useAsynchronousDecibel(this.plan, window ?? this.taper).collect(this.source());
+    }
+
+    /**
+     * Returns the power levels of the one-sided bins in decibels.
+     *
+     * The conversion is `10 * log10(power)`, the power convention, and it is the only
+     * correct choice for a power, an energy, a mean square or a density. The two
+     * conventions agree only through the square relation between their quantities, so
+     * a power of one quarter reports minus 6.02 decibels here and would report minus
+     * 12.04 under {@link decibel}. A silent bin reports negative infinity.
+     *
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @returns one level per one-sided bin, in decibels relative to one.
+     * @throws {TypeError} if the window is not callable.
+     * @throws {RangeError} if the window weights sum to zero.
+     */
+    public async powerDecibel(window?: SpectralWindow): Promise<Array<number>> {
+        return await useAsynchronousPowerDecibel(this.plan, window ?? this.taper).collect(this.source());
+    }
+
+    /**
+     * Estimates the one-sided power spectral density of this signal by Welch's
+     * method.
+     *
+     * The record is cut into overlapping segments, each segment is detrended,
+     * weighted and transformed, and the periodograms are averaged. The normalisation
+     * is `|X|^2 / (rate * sum(w^2))` with the interior bins doubled and DC and
+     * Nyquist not, which is the only divisor that keeps a white-noise floor unbiased:
+     * dividing by the segment length reads `0.375` for unit noise instead of `1.0`,
+     * and dividing by `count * CG^2` reads `1.5`.
+     *
+     * Averaging is what makes the estimate usable. A single periodogram is unbiased
+     * but inconsistent — its variance does not shrink as the record grows — so `M`
+     * segments buy roughly `1 / M` of the variance at the cost of a coarser
+     * resolution, because each segment is `M` times shorter. An estimate reporting a
+     * single segment is therefore valid but noisy, and the segment count is part of
+     * the result rather than a hidden detail.
+     *
+     * @param frameSize - the segment length in samples; defaults to the smaller of
+     *        256 and the sample count.
+     * @param hopSize - the samples between segment starts; defaults to half a segment,
+     *        rounded down.
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @returns the averaged one-sided density.
+     * @throws {TypeError} if a length is not a `bigint` or does not fit a safe
+     *         integer, or the window is not callable.
+     * @throws {RangeError} if the segment exceeds the signal, the hop exceeds the
+     *         segment, or the window weights are all zero.
+     */
+    public async powerSpectralDensity(frameSize?: bigint, hopSize?: bigint, window?: SpectralWindow): Promise<SpectralDensity> {
+        const length: number = this.values.length;
+        const segment: bigint = frameSize === undefined ? BigInt(Math.min(DefaultFrameSize, length)) : frameSize;
+        const resolved: number = requireCount(segment, "Density segment length");
+        const rawHop: bigint = hopSize === undefined ? BigInt(Math.max(1, Math.floor(resolved / 2))) : hopSize;
+        const step: number = requireCount(rawHop, "Density hop size");
+        return await useAsynchronousPowerSpectralDensity(this.plan, resolved, step, window ?? this.taper).collect(this.source());
+    }
+
+    /**
+     * Returns the short-time Fourier transform of this signal.
+     *
+     * The signal is extended by half a frame at each end and padded at the tail, so
+     * the first frame is centred on the first sample, the last frame reaches the last
+     * sample and no sample is lost. Retaining only complete frames instead discards up
+     * to `frameSize - 1` samples: for 1000 samples with a frame of 256 and a hop of
+     * 128 that is 232 samples, nearly a quarter of the record.
+     *
+     * Frame centres lie at `m * hopSize / rate` seconds on the original axis, which is
+     * the convention `Spectrogram.getTime` reports. Every column is a raw `Spectrum`
+     * over `frameSize` bins, exactly as `spectrum()` would produce for the same frame.
+     *
+     * @param frameSize - the frame length in samples, at most the sample count.
+     * @param hopSize - the samples between frame starts, at most the frame length.
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @returns one spectrum per frame, in centre-time order.
+     * @throws {TypeError} if a length is not a `bigint` or does not fit a safe
+     *         integer, or the window is not callable.
+     * @throws {RangeError} if the frame exceeds the signal, the hop exceeds the frame,
+     *         or the framing yields no frame.
+     */
+    public async shortTimeFourierTransform(frameSize: bigint, hopSize: bigint, window?: SpectralWindow): Promise<Array<Spectrum>> {
+        const size: number = requireCount(frameSize, "Short-time frame size");
+        const step: number = requireCount(hopSize, "Short-time hop size");
+        return await useAsynchronousShortTimeFourierTransform(this.plan, size, step, window ?? this.taper).collect(this.source());
+    }
+
+    /**
+     * Returns the time-frequency view of this signal.
+     *
+     * The columns are exactly the spectra of `shortTimeFourierTransform` with the same
+     * framing, and the view retains the hop, the taper and the zero boundary so that
+     * it can report frame centre times and trim the extension when it rebuilds a
+     * frame. The default taper is the periodic Hann window, which satisfies the
+     * constant-overlap-add condition at fifty percent overlap; the symmetric form of
+     * the same window does not, and ripples by 0.84 decibels at sixteen samples, 0.21
+     * at sixty-four and 0.013 at one thousand and twenty-four. That difference never
+     * raises an error, it only modulates the reconstruction.
+     *
+     * @param frameSize - the frame length in samples, at most the sample count.
+     * @param hopSize - the samples between frame starts, at most the frame length.
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @returns the time-frequency view of this signal.
+     * @throws {TypeError} if a length or the window is invalid.
+     * @throws {RangeError} if the framed columns cannot be built.
+     */
+    public async spectrogram(frameSize: bigint, hopSize: bigint, window?: SpectralWindow): Promise<Spectrogram> {
+        const size: number = requireCount(frameSize, "Spectrogram frame size");
+        const step: number = requireCount(hopSize, "Spectrogram hop size");
+        return await useAsynchronousSpectrogram(this.plan, size, step, window ?? this.taper).collect(this.source());
+    }
+
+    /**
+     * Returns the spectrum of this signal through the Sampler's radix-two path.
+     *
+     * The samples are presented to `Sampler.radix2` as a time-continuous source
+     * over this signal's plan, so the transform runs entirely in the mathematics
+     * module. The plan's frame count must be a power of two.
+     *
+     * @returns the complex spectrum of the signal.
+     * @throws {RangeError} if the frame count is not a power of two.
+     */
+    public async radix2(): Promise<Spectrum> {
+        return await useAsynchronousRadix2(new Sampler(this.plan)).collect(this.samplables());
+    }
+
+    /**
+     * Returns the spectrum of this signal through the Sampler's radix-three path.
+     *
+     * The plan's frame count must be a power of three.
+     *
+     * @returns the complex spectrum of the signal.
+     * @throws {RangeError} if the frame count is not a power of three.
+     */
+    public async radix3(): Promise<Spectrum> {
+        return await useAsynchronousRadix3(new Sampler(this.plan)).collect(this.samplables());
+    }
+
+    /**
+     * Returns the spectrum of this signal through the Sampler's radix-five path.
+     *
+     * The plan's frame count must be a power of five.
+     *
+     * @returns the complex spectrum of the signal.
+     * @throws {RangeError} if the frame count is not a power of five.
+     */
+    public async radix5(): Promise<Spectrum> {
+        return await useAsynchronousRadix5(new Sampler(this.plan)).collect(this.samplables());
+    }
+
+    /**
+     * Returns the spectrum of this signal through the Sampler's radix-seven path.
+     *
+     * The plan's frame count must be a power of seven.
+     *
+     * @returns the complex spectrum of the signal.
+     * @throws {RangeError} if the frame count is not a power of seven.
+     */
+    public async radix7(): Promise<Spectrum> {
+        return await useAsynchronousRadix7(new Sampler(this.plan)).collect(this.samplables());
+    }
+
+    /**
+     * Returns the spectrum of this signal through the Sampler's Bluestein path.
+     *
+     * Every frame count is accepted; the convolution is padded internally.
+     *
+     * @returns the complex spectrum of the signal.
+     */
+    public async blueStein(): Promise<Spectrum> {
+        return await useAsynchronousBlueStein(new Sampler(this.plan)).collect(this.samplables());
+    }
+
+    /**
+     * Returns the spectrum of this signal through the direct discrete transform.
+     *
+     * The direct path is the quadratic reference implementation; prefer
+     * {@link fastFourierTransform} for large signals.
+     *
+     * @returns the complex spectrum of the signal.
+     */
+    public async discreteFourierTransform(): Promise<Spectrum> {
+        return await useAsynchronousDiscreteFourierTransform(new Sampler(this.plan)).collect(this.samplables());
+    }
+
+    /**
+     * Returns the spectrum of this signal through the fastest available path.
+     *
+     * The Sampler selects mixed-radix or Bluestein from the frame count.
+     *
+     * @returns the complex spectrum of the signal.
+     */
+    public async fastFourierTransform(): Promise<Spectrum> {
+        return await useAsynchronousFastFourierTransform(new Sampler(this.plan)).collect(this.samplables());
+    }
+
+    /**
+     * Returns the wavelet decomposition of this signal.
+     *
+     * The plan's frame count must be a power of two.
+     *
+     * @param levels - the number of decomposition levels, defaulting to the maximum.
+     * @returns one level per decomposition step.
+     * @throws {RangeError} if the frame count or the level count is invalid.
+     */
+    public async waveletTransform(levels?: number): Promise<Array<WaveletLevel>> {
+        return await useAsynchronousWaveletTransform(new Sampler(this.plan), levels).collect(this.samplables());
+    }
+
+    /**
+     * Returns the Laplacian transform of this signal.
+     *
+     * @param parameters - the real parameters of the transform.
+     * @returns one complex value per parameter.
+     * @throws {RangeError} if a parameter is outside the transform's domain.
+     */
+    public async laplacianTransform(parameters: Iterable<number>): Promise<Array<Complex>> {
+        return await useAsynchronousLaplacianTransform(new Sampler(this.plan), parameters).collect(this.samplables());
+    }
+
+    /**
+     * Returns the Mellin transform of this signal.
+     *
+     * @param parameters - the real parameters of the transform.
+     * @returns one complex value per parameter.
+     * @throws {RangeError} if a parameter is outside the transform's domain.
+     */
+    public async meilinTransform(parameters: Iterable<number>): Promise<Array<Complex>> {
+        return await useAsynchronousMeilinTransform(new Sampler(this.plan), parameters).collect(this.samplables());
+    }
+
+    /**
+     * Adapts the buffered samples to the time-continuous source contract.
+     *
+     * The sampler evaluates the source at `index / rate`, so rounding recovers
+     * the index exactly. A probe at the plan's duration, which the quadrature
+     * transforms append, clamps to the last observed sample because the signal
+     * holds no value beyond its record.
+     *
+     * @returns a source that reads this signal's samples by time.
+     */
+    private samplable(): Samplable {
+        const rate: number = this.plan.getRate();
+        const values: ReadonlyArray<E> = this.values;
+        return (time: number): number => {
+            const index: number = Math.round(time * rate);
+            return values[Math.max(0, Math.min(values.length - 1, index))];
+        };
+    }
+
+    /**
+     * Wraps the signal's source descriptor in an asynchronous iterable.
+     *
+     * @returns an asynchronous generator over the single source descriptor.
+     */
+    private async *samplables(): AsyncGenerator<Samplable> {
+        yield this.samplable();
+    }
+
+    /**
+     * Returns the analytic signal of this signal.
+     *
+     * The negative-frequency half of the transform is cleared and the positive half is
+     * doubled, so the inverse yields `x[n] + i * H(x)[n]`. The real part recovers the
+     * samples and the modulus is the envelope; the argument is the instantaneous
+     * phase. Because the transform is circular, the first and last samples of a record
+     * whose period does not divide its length are contaminated by the wrap-around: a
+     * tone of 8.3 cycles over 512 samples has a middle envelope within 0.2 percent of
+     * the truth and last-eight-sample errors of up to 87 percent. Mirror-pad before
+     * analysis or discard the ends.
+     *
+     * @returns one analytic sample per input sample, in order.
+     */
+    public async analyticSignal(): Promise<Array<Complex>> {
+        return await useAsynchronousAnalyticSignal(this.plan).collect(this.source());
+    }
+
+    /**
+     * Returns the instantaneous phase of this signal in radians.
+     *
+     * Each analytic sample is mapped to its argument, normalised into `[0, 2 * PI)`.
+     * The phase is folded into one turn, so it jumps by a full turn once per cycle;
+     * the instantaneous frequency below unwraps it before differentiating.
+     *
+     * @returns one radian phase per sample.
+     */
+    public async instantaneousPhase(): Promise<Array<Angle>> {
+        return await useAsynchronousInstantaneousPhase(this.plan).collect(this.source());
+    }
+
+    /**
+     * Returns the instantaneous envelope of this signal.
+     *
+     * The envelope is `|z[n]|`, which is a constant `A` for `A * cos(w * t + p)`. It
+     * inherits the circular edge behaviour of the Hilbert transform, so the two ends of
+     * a non-integer-periodic record are the least trustworthy samples.
+     *
+     * @returns one non-negative amplitude per sample, in units of the samples.
+     */
+    public async envelope(): Promise<Array<number>> {
+        return await useAsynchronousEnvelope(this.plan).collect(this.source());
+    }
+
+    /**
+     * Returns the instantaneous frequency of this signal in hertz.
+     *
+     * The unwrapped analytic phase is differentiated by a forward difference and
+     * scaled by `rate / (2 * PI)`. The first sample has no predecessor and reports
+     * zero.
+     *
+     * The envelope gate is not optional in practice. Where the envelope vanishes the
+     * phase is undefined and the difference of two rounding-noise angles can reach
+     * half a turn, which reads as half the sampling rate: two equal tones at 100 and
+     * 102 hertz sampled at 2048 hertz drop to an envelope of `1.2e-14` at their beat
+     * nodes and report 932 hertz out of a possible 1024. Every sample whose envelope,
+     * or whose predecessor's envelope, falls below `gate` times the peak therefore
+     * reports zero instead of that artefact.
+     *
+     * @param rate - the sampling rate in hertz used to scale the phase step; defaults
+     *        to the rate of this signal.
+     * @param gate - the envelope threshold as a fraction of the peak envelope, within
+     *        `[0, 1]`; defaults to `1E-3`.
+     * @returns one frequency in hertz per sample, whose first entry is zero.
+     * @throws {TypeError} if the rate or the gate is not a finite number.
+     * @throws {RangeError} if the rate is not positive, or the gate lies outside
+     *         `[0, 1]`.
+     */
+    public async instantaneousFrequency(rate?: number, gate?: number): Promise<Array<number>> {
+        const resolved: number = rate === undefined ? this.plan.getRate() : rate;
+        const threshold: number = gate === undefined ? DefaultEnvelopeGate : gate;
+        return await useAsynchronousInstantaneousFrequency(this.plan, resolved, threshold).collect(this.source());
+    }
+
+    /**
+     * Returns the zero-crossing rate of this signal.
+     *
+     * The rate is the fraction of adjacent sample pairs with strictly opposite signs,
+     * that is the crossing count divided by `count - 1`. A sine of `f` hertz sampled
+     * at `rate` hertz reads `2 * f / rate`, and a signal that alternates on every
+     * sample reads one, the maximum. The absolute difference of the sign function that
+     * some texts use counts two per crossing and must be halved before dividing, which
+     * is the same quantity; this module reports the crossing count rather than twice
+     * it.
+     *
+     * This is a rate, not a count. `Frame.zeroCrossings` returns an integer, which
+     * cannot be compared across record lengths.
+     *
+     * @param perSecond - whether to report crossings per second rather than per sample;
+     *        defaults to `false`.
+     * @returns the zero-crossing rate, zero for a one-sample signal.
+     * @throws {TypeError} if the flag is not a boolean.
+     */
+    public async zeroCrossingRate(perSecond: boolean = false): Promise<number> {
+        return await useAsynchronousZeroCrossingRate(this.plan, perSecond).collect(this.source());
+    }
+
+    /**
+     * Returns the spectral flux of this signal, one value per frame transition.
+     *
+     * Each frame's one-sided magnitude spectrum is scaled to unit Euclidean norm and
+     * compared with the previous frame by the Euclidean distance of the two normalised
+     * vectors. Normalising first makes the value a statement about spectral shape
+     * rather than loudness: two frames of different level but the same spectrum
+     * produce zero flux. The result holds `frames - 1` values and is empty when the
+     * framing yields a single frame.
+     *
+     * @param frameSize - the frame length in samples; defaults to the smaller of 256
+     *        and the sample count.
+     * @param hopSize - the samples between frame starts; defaults to half a frame.
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @returns one flux value per adjacent frame pair, in frame order.
+     * @throws {TypeError} if a length or the window is invalid.
+     * @throws {RangeError} if the framed columns cannot be built.
+     */
+    public async spectralFlux(frameSize?: bigint, hopSize?: bigint, window?: SpectralWindow): Promise<Array<number>> {
+        const length: number = this.values.length;
+        const segment: bigint = frameSize === undefined ? BigInt(Math.min(DefaultFrameSize, length)) : frameSize;
+        const resolved: number = requireCount(segment, "Spectral flux frame size");
+        const rawHop: bigint = hopSize === undefined ? BigInt(Math.max(1, Math.floor(resolved / 2))) : hopSize;
+        const step: number = requireCount(rawHop, "Spectral flux hop size");
+        return await useAsynchronousSpectralFlux(this.plan, resolved, step, window ?? this.taper).collect(this.source());
+    }
+
+    /**
+     * Returns the normalised auto-correlation of this signal.
+     *
+     * The raw estimate `r[k] = sum(x[n] * x[n + k])` grows linearly with the record
+     * length, so comparing two lengths by the raw peak is meaningless: the same tone
+     * in a record twice as long reports a peak twice as large. The default
+     * normalisation therefore divides by `r[0]`, which makes `rho[0]` exactly one and
+     * every value lie in `[-1, 1]`. The `"unbiased"` rule divides by `count - k`
+     * instead, removing the triangular taper at the cost of a variance that grows with
+     * the lag. A periodic component peaks at its own period; the biased peak is
+     * slightly below one, so a tone of period 128 in a record of 1024 reads `0.875` at
+     * lag 128 and `-0.9375` at lag 64.
+     *
+     * @param maximumLag - the largest lag to report, at most `size - 1`; defaults to
+     *        `size - 1`.
+     * @param normalization - the normalisation rule; defaults to `"coefficient"`.
+     * @returns one value per lag from zero through `maximumLag`.
+     * @throws {TypeError} if the lag is not a `bigint` or the rule is not a supported
+     *         name.
+     * @throws {RangeError} if the lag is negative or not below the sample count.
+     */
+    public async autocorrelation(maximumLag?: bigint, normalization: CorrelationNormalization = "coefficient"): Promise<Array<number>> {
+        const limit: bigint = maximumLag === undefined ? BigInt(this.values.length - 1) : maximumLag;
+        if (!isBigInt(limit)) {
+            throw new TypeError("Autocorrelation maximum lag must be a bigint.");
+        }
+        if (limit < 0n) {
+            throw new RangeError("Autocorrelation maximum lag must not be negative.");
+        }
+        if (limit >= BigInt(this.values.length)) {
+            throw new RangeError("Autocorrelation maximum lag must be below the signal length.");
+        }
+        if (limit > BigInt(Number.MAX_SAFE_INTEGER)) {
+            throw new TypeError("Autocorrelation maximum lag must fit a safe integer.");
+        }
+        return await useAsynchronousAutocorrelation(this.plan, Number(limit), normalization).collect(this.source());
+    }
+
+    /**
+     * Returns the power-weighted centroid of the one-sided spectrum in hertz.
+     *
+     * The centroid is `sum(f[k] * p[k]) / sum(p[k])` with `p[k] = |X[k]|^2`, the centre
+     * of mass of the spectral power. A pure tone reports its own frequency; a
+     * broadband record reports the middle of its band. The value is empty for a silent
+     * signal, which has no centre of mass.
+     *
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @returns the centroid in hertz in an `Optional`.
+     * @throws {TypeError} if the window is not callable.
+     */
+    public async spectralCentroid(window?: SpectralWindow): Promise<Optional<Frequency>> {
+        return await useAsynchronousSpectralCentroid(this.plan, window ?? this.taper).collect(this.source());
+    }
+
+    /**
+     * Returns the power-weighted spectral bandwidth in hertz.
+     *
+     * The value is the standard deviation of the power distribution around the
+     * centroid, so a pure tone reports approximately zero and a flat band reports
+     * roughly the standard deviation of a uniform distribution over it. It is empty for
+     * a silent signal.
+     *
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @returns the bandwidth in hertz in an `Optional`.
+     * @throws {TypeError} if the window is not callable.
+     */
+    public async spectralBandwidth(window?: SpectralWindow): Promise<Optional<Frequency>> {
+        return await useAsynchronousSpectralBandwidth(this.plan, window ?? this.taper).collect(this.source());
+    }
+
+    /**
+     * Returns the frequency below which a fraction of the spectral power lies.
+     *
+     * The cumulative power over the one-sided half is accumulated in increasing
+     * frequency order and the first bin that reaches `ratio` of the total is reported.
+     * The default is eighty-five percent, matching `Spectrum.rolloff`; the value is an
+     * application convention rather than a theorem. The result is empty for a silent
+     * signal.
+     *
+     * @param ratio - the cumulative fraction, within `(0, 1]`; defaults to `0.85`.
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @returns the rolloff frequency in hertz in an `Optional`.
+     * @throws {TypeError} if the ratio or the window is invalid.
+     * @throws {RangeError} if the ratio lies outside `(0, 1]`.
+     */
+    public async spectralRolloff(ratio: number = DefaultRolloffRatio, window?: SpectralWindow): Promise<Optional<Frequency>> {
+        return await useAsynchronousSpectralRolloff(this.plan, window ?? this.taper, ratio).collect(this.source());
+    }
+
+    /**
+     * Returns the spectral flatness of this signal.
+     *
+     * The value is the ratio of the geometric mean to the arithmetic mean of the
+     * one-sided **power** spectrum, so it approaches one for a flat, noise-like record
+     * and zero for a tonal one. The definition is over power and over the one-sided
+     * half: an amplitude version has a different numeric value, and a two-sided
+     * traversal counts the same information twice. Any exactly zero bin makes the value
+     * zero, which is the correct reading of a perfectly tonal record. The ratio is
+     * usually quoted in decibels, which is `10 * log10` of this value because it
+     * compares powers.
+     *
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @returns the flatness ratio, between zero and one.
+     * @throws {TypeError} if the window is not callable.
+     */
+    public async spectralFlatness(window?: SpectralWindow): Promise<number> {
+        return await useAsynchronousSpectralFlatness(this.plan, window ?? this.taper).collect(this.source());
+    }
+
+    /**
+     * Estimates the signal-to-noise ratio of this signal in decibels.
+     *
+     * The noise floor is the median of the density, which is robust against the few
+     * bins a tone occupies where a mean would be dragged up by them. The in-band power
+     * is the integral of the density, the in-band noise is the floor times the band
+     * width, and the estimate is `10 * log10((band - noise) / noise)`. Both the
+     * flat-noise and the negligible-out-of-band-leakage assumptions are stated because
+     * the number is an indicator when either fails.
+     *
+     * @param frameSize - the segment length used by the density; defaults to the
+     *        smaller of 256 and the sample count.
+     * @param hopSize - the samples between segment starts; defaults to half a segment.
+     * @param window - the analysis taper; defaults to the window of this signal.
+     * @param floorQuantile - the quantile used as the noise floor, within `(0, 1)`;
+     *        defaults to the median.
+     * @returns the ratio in decibels in an `Optional`, empty when the band holds no
+     *         power above the estimated floor.
+     * @throws {TypeError} if a length, the window or the quantile is invalid.
+     * @throws {RangeError} if the framing is impossible, or the quantile lies outside
+     *         `(0, 1)`.
+     */
+    public async signalToNoiseRatio(frameSize?: bigint, hopSize?: bigint, window?: SpectralWindow, floorQuantile: number = 0.5): Promise<Optional<number>> {
+        const length: number = this.values.length;
+        const segment: bigint = frameSize === undefined ? BigInt(Math.min(DefaultFrameSize, length)) : frameSize;
+        const resolved: number = requireCount(segment, "Density segment length");
+        const rawHop: bigint = hopSize === undefined ? BigInt(Math.max(1, Math.floor(resolved / 2))) : hopSize;
+        const step: number = requireCount(rawHop, "Density hop size");
+        return await useAsynchronousSignalToNoiseRatio(this.plan, resolved, step, window ?? this.taper, floorQuantile).collect(this.source());
+    }
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Public re-exports: collector factories
+ * ---------------------------------------------------------------------------
+ *
+ * The factory layer is the single definition site of every collector factory.
+ * Re-exporting them here, name for name, keeps the public import path
+ * `#semantic/asynchronous/signal` unchanged.
+ */
+export {
+    useAsynchronousAmplitude,
+    useAsynchronousAnalyticSignal,
+    useAsynchronousAutocorrelation,
+    useAsynchronousDecibel,
+    useAsynchronousDetrended,
+    useAsynchronousEnvelope,
+    useAsynchronousInstantaneousFrequency,
+    useAsynchronousInstantaneousPhase,
+    useAsynchronousOneSided,
+    useAsynchronousPower,
+    useAsynchronousPowerDecibel,
+    useAsynchronousPowerSpectralDensity,
+    useAsynchronousShortTimeFourierTransform,
+    useAsynchronousSignalToNoiseRatio,
+    useAsynchronousSpectralBandwidth,
+    useAsynchronousSpectralCentroid,
+    useAsynchronousSpectralFlatness,
+    useAsynchronousSpectralFlux,
+    useAsynchronousSpectralRolloff,
+    useAsynchronousSpectrogram,
+    useAsynchronousSpectrum,
+    useAsynchronousWindowed,
+    useAsynchronousZeroCrossingRate
+} from "#semantic/asynchronous/collectors/signal";
+
+/*
+ * ---------------------------------------------------------------------------
+ * Constructor binding
+ * ---------------------------------------------------------------------------
+ *
+ * The class and its `AsynchronousOrderedCollectable` base are fully evaluated at
+ * this point. The factory module declares the binder state with `var` and the
+ * binder function as a declaration, so this call also succeeds when the factory
+ * module is the first import and this module is evaluated inside its import
+ * phase.
+ */
+bindSignalCollectableFactory({
+    create: (plan, values, window) => new AsynchronousSignalCollectable<number>(plan, values, window)
+});

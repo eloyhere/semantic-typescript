@@ -1,5 +1,8 @@
+import type { AsynchronousOrderedCollectable, AsynchronousUnorderedCollectable } from "#semantic/asynchronous/collectable";
 import type { AsynchronousCollector } from "#semantic/asynchronous/collector";
-import type { AsynchronousBigIntStatistics, AsynchronousNumericStatistics, AsynchronousOrderedCollectable, AsynchronousSemantic, AsynchronousStatistics, AsynchronousUnorderedCollectable, AsynchronousWindowCollectable } from "#semantic/asynchronous/semantic";
+import type { AsynchronousSemantic } from "#semantic/asynchronous/semantic";
+import type { AsynchronousBigIntStatistics, AsynchronousNumericStatistics, AsynchronousStatistics } from "#semantic/asynchronous/statistics";
+import type { AsynchronousWindowCollectable } from "#semantic/asynchronous/window";
 import type { Optional } from "#semantic/optional";
 import type { AsynchronousCollection, SynchronousCollection } from "#semantic/structure/collection";
 import type { AsynchronousList, SynchronousList } from "#semantic/structure/list";
@@ -46,8 +49,11 @@ import type { Spectrum } from "#semantic/mathematics/spectrum";
 import type { Tone } from "#semantic/mathematics/tone";
 import type { Track, TrackEvent } from "#semantic/mathematics/track";
 import type { Waveform } from "#semantic/mathematics/waveform";
+import type { SynchronousOrderedCollectable, SynchronousUnorderedCollectable } from "#semantic/synchronous/collectable";
 import type { SynchronousCollector } from "#semantic/synchronous/collector";
-import type { SynchronousBigIntStatistics, SynchronousNumericStatistics, SynchronousOrderedCollectable, SynchronousSemantic, SynchronousStatistics, SynchronousUnorderedCollectable, SynchronousWindowCollectable } from "#semantic/synchronous/semantic";
+import type { SynchronousSemantic } from "#semantic/synchronous/semantic";
+import type { SynchronousBigIntStatistics, SynchronousNumericStatistics, SynchronousStatistics } from "#semantic/synchronous/statistics";
+import type { SynchronousWindowCollectable } from "#semantic/synchronous/window";
 import type { AsyncFunction, MaybePrimitive, Primitive } from "#semantic/utility";
 /**
  * Tests whether a value is a primitive boolean.

@@ -1,7 +1,7 @@
 ﻿import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SignalCollectable, SpectralDensity, signalColaResidual } from '../dist/synchronous/signal.js';
-import { SignalCollectable as AsynchronousSignalCollectable } from '../dist/asynchronous/signal.js';
+import { SynchronousSignalCollectable, SpectralDensity, signalColaResidual } from '../dist/synchronous/signal.js';
+import { AsynchronousSignalCollectable } from '../dist/asynchronous/signal.js';
 import { Frequency } from '../dist/mathematics/frequency.js';
 import {
     useFlatTopPeriodicWindow, useHannPeriodicWindow, useHannWindow, useRectangularWindow,
@@ -22,7 +22,7 @@ const tone = (count, bin) => Array.from({ length: count }, (_, index) => Math.co
 
 /** Builds a signal whose single tone sits exactly on a bin. */
 const sine = (bin = BIN, count = COUNT, rate = RATE, window) =>
-    SignalCollectable.useRate(tone(count, bin), rate, window);
+    SynchronousSignalCollectable.useRate(tone(count, bin), rate, window);
 
 /** Returns the largest-magnitude bin of a bin array. */
 const peakOf = (bins) => bins.reduce((best, bin) => bin.magnitude() > best.magnitude() ? bin : best, bins[0]);
@@ -88,7 +88,7 @@ test('the one-sided fold never doubles DC or Nyquist', () => {
     // `2 + cos(PI * n)` puts 2.0 on DC and 1.0 on Nyquist. Doubling either reports
     // exactly 6.02 decibels too much, which is the classic one-sided error.
     const values = Array.from({ length: COUNT }, (_, index) => 2 + Math.cos(PI * index));
-    const offset = SignalCollectable.useRate(values, RATE);
+    const offset = SynchronousSignalCollectable.useRate(values, RATE);
     const amplitude = offset.amplitude();
     const power = offset.power();
     close(amplitude[0], 2, 1e-9, 'DC amplitude');
@@ -128,7 +128,7 @@ test('power is the peak convention and sums to the noise bandwidth times the mea
     close(total / meanSquareOf(samples), signal.getNoiseBandwidth(), 1e-9, 'power sum over mean square');
     // A tone plus a constant behaves the same way: the ratio is the bandwidth.
     const mixed = Array.from({ length: COUNT }, (_, index) => 0.5 + Math.cos(2 * PI * BIN * index / COUNT));
-    const mixedPower = SignalCollectable.useRate(mixed, RATE).power();
+    const mixedPower = SynchronousSignalCollectable.useRate(mixed, RATE).power();
     close(mixedPower.reduce((sum, value) => sum + value, 0) / meanSquareOf(mixed), 1.5, 1e-9, 'mixed power ratio');
 });
 
@@ -164,7 +164,7 @@ test('the one-sided density satisfies Parseval and the one-sided band energy agr
     // A white-noise record integrates to its variance within a few percent, which
     // is the check that catches a wrong `sum(w^2)` divisor.
     const noise = standardNormal(4096);
-    const noiseSignal = SignalCollectable.useRate(noise, 4096);
+    const noiseSignal = SynchronousSignalCollectable.useRate(noise, 4096);
     const noiseDensity = noiseSignal.powerSpectralDensity(512n, 256n);
     const ratio = noiseDensity.totalPower() / meanSquareOf(noise);
     assert.ok(ratio > 0.95 && ratio < 1.05, `white-noise density integral ratio ${ratio}`);
@@ -180,7 +180,7 @@ test('zero padding interpolates the peak but never changes the resolving power',
     assert.equal(peakOf(signal.oneSided(4096n)).getFrequency().getHertz(), BIN);
     // A tone between two bins reads the nearer coarse bin without padding and a
     // finer location with it, yet two tones 0.4 bins apart stay merged either way.
-    const between = SignalCollectable.useRate(tone(COUNT, 8.4), RATE);
+    const between = SynchronousSignalCollectable.useRate(tone(COUNT, 8.4), RATE);
     assert.equal(peakOf(between.oneSided()).getFrequency().getHertz(), 8);
     close(peakOf(between.oneSided(4096n)).getFrequency().getHertz(), 8.5, 1e-9, 'padded peak location');
     assert.throws(() => signal.spectrum(16n), RangeError);
@@ -204,8 +204,8 @@ test('a flat-top window keeps its negative lobe and its flat main lobe', () => {
     // Halfway between two bins is the worst case. Hann loses about 1.42 decibels
     // there; the flat top is chosen precisely because it does not.
     const between = tone(COUNT, 8.5);
-    const hann = Math.max(...SignalCollectable.useRate(between, RATE).amplitude().slice(1, -1));
-    const flat = Math.max(...SignalCollectable.useRate(between, RATE, useFlatTopPeriodicWindow).amplitude().slice(1, -1));
+    const hann = Math.max(...SynchronousSignalCollectable.useRate(between, RATE).amplitude().slice(1, -1));
+    const flat = Math.max(...SynchronousSignalCollectable.useRate(between, RATE, useFlatTopPeriodicWindow).amplitude().slice(1, -1));
     assert.ok(hann > 0.84 && hann < 0.86, `Hann scalloping ${hann}`);
     assert.ok(flat > 0.99, `flat-top scalloping ${flat}`);
 });
@@ -227,7 +227,7 @@ test('the spectrogram frames every sample and reports centre times', () => {
     // A thousand samples with a 256 frame and a 128 hop keep every sample: nine
     // frames cover 1280 extended samples, not the six complete frames a naive loop
     // would retain.
-    const long = SignalCollectable.useRate(new Array(1000).fill(0).map((_, index) => Math.cos(2 * PI * 4 * index / 1000)), 1000);
+    const long = SynchronousSignalCollectable.useRate(new Array(1000).fill(0).map((_, index) => Math.cos(2 * PI * 4 * index / 1000)), 1000);
     assert.ok(long.shortTimeFourierTransform(256n, 128n).length > 6);
 });
 
@@ -256,7 +256,7 @@ test('the instantaneous frequency reads the carrier and gates the envelope zeros
     // reach several hundred hertz without it.
     const beat = Array.from({ length: 2048 }, (_, index) =>
         Math.cos(2 * PI * 100 * index / 2048) + Math.cos(2 * PI * 102 * index / 2048));
-    const beatSignal = SignalCollectable.useRate(beat, 2048);
+    const beatSignal = SynchronousSignalCollectable.useRate(beat, 2048);
     const gated = beatSignal.instantaneousFrequency();
     const ungated = beatSignal.instantaneousFrequency(2048, 0);
     assert.ok(Math.max(...ungated.map(Math.abs)) > 300, 'the ungated path must expose the spike');
@@ -269,9 +269,9 @@ test('the zero-crossing rate is a rate rather than a count', () => {
     close(signal.zeroCrossingRate(), 16 / 1023, 1e-12, 'crossings per sample');
     close(signal.zeroCrossingRate(true), 16 / 1023 * RATE, 1e-9, 'crossings per second');
     // A signal that alternates on every sample reads one, the maximum.
-    const alternating = SignalCollectable.useRate([1, -1, 1, -1, 1, -1, 1, -1], 8);
+    const alternating = SynchronousSignalCollectable.useRate([1, -1, 1, -1, 1, -1, 1, -1], 8);
     close(alternating.zeroCrossingRate(), 1, 1e-12, 'alternating signal');
-    close(SignalCollectable.useRate([1], 1).zeroCrossingRate(), 0, 1e-12, 'one sample');
+    close(SynchronousSignalCollectable.useRate([1], 1).zeroCrossingRate(), 0, 1e-12, 'one sample');
     assert.throws(() => signal.zeroCrossingRate('yes'), TypeError);
 });
 
@@ -305,11 +305,11 @@ test('the spectral shape descriptors describe a tone and a noise floor', () => {
     // The flatness is a power ratio over the one-sided half: a tone is nearly zero
     // and a white-noise floor approaches the exponential of minus Euler's constant.
     const tonal = signal.spectralFlatness();
-    const noisy = SignalCollectable.useRate(standardNormal(4096), 4096).spectralFlatness();
+    const noisy = SynchronousSignalCollectable.useRate(standardNormal(4096), 4096).spectralFlatness();
     assert.ok(tonal >= 0 && tonal < 1e-10, `tonal flatness ${tonal}`);
     assert.ok(noisy > 0.3 && noisy < 1, `noise flatness ${noisy}`);
     // A silent signal has no spectral mass, so every descriptor is absent.
-    const silent = SignalCollectable.useRate(new Array(64).fill(0), 64);
+    const silent = SynchronousSignalCollectable.useRate(new Array(64).fill(0), 64);
     assert.equal(silent.spectralCentroid().isEmpty(), true);
     assert.equal(silent.spectralBandwidth().isEmpty(), true);
     assert.equal(silent.spectralRolloff().isEmpty(), true);
@@ -328,7 +328,7 @@ test('the spectral flux measures shape change rather than loudness', () => {
     // An onset produces a larger change than a steady tone.
     const onset = Array.from({ length: COUNT }, (_, index) =>
         index < COUNT / 2 ? Math.cos(2 * PI * BIN * index / COUNT) : Math.cos(2 * PI * 64 * index / COUNT));
-    const onsetFlux = SignalCollectable.useRate(onset, RATE).spectralFlux(256n, 128n);
+    const onsetFlux = SynchronousSignalCollectable.useRate(onset, RATE).spectralFlux(256n, 128n);
     assert.ok(Math.max(...onsetFlux) > Math.max(...interior) + 0.5);
 });
 
@@ -336,16 +336,16 @@ test('the signal-to-noise estimate is positive for a tone and absent for silence
     const ratio = signal.signalToNoiseRatio();
     assert.equal(ratio.isEmpty(), false);
     assert.ok(ratio.get() > 20, `sinusoidal SNR ${ratio.get()}`);
-    const silent = SignalCollectable.useRate(new Array(64).fill(0), 64);
+    const silent = SynchronousSignalCollectable.useRate(new Array(64).fill(0), 64);
     assert.equal(silent.signalToNoiseRatio().isEmpty(), true);
     assert.throws(() => signal.signalToNoiseRatio(256n, 128n, useHannPeriodicWindow, 1), RangeError);
 });
 
 test('detrending and windowing return new signals over the same plan', () => {
-    const offset = SignalCollectable.useRate(Array.from({ length: COUNT }, (_, index) => 3 + samples[index]), RATE);
+    const offset = SynchronousSignalCollectable.useRate(Array.from({ length: COUNT }, (_, index) => 3 + samples[index]), RATE);
     close(offset.detrended().getValues().reduce((total, value) => total + value, 0) / COUNT, 0, 1e-9, 'mean removed');
     close(offset.detrended('none').getValues()[0], 4, 1e-12, 'identity detrend');
-    const ramp = SignalCollectable.useRate(Array.from({ length: COUNT }, (_, index) => samples[index] + 0.5 * index), RATE);
+    const ramp = SynchronousSignalCollectable.useRate(Array.from({ length: COUNT }, (_, index) => samples[index] + 0.5 * index), RATE);
     assert.ok(Math.max(...ramp.detrended('linear').getValues().map(Math.abs)) < 1.01);
     const tapered = signal.windowed();
     close(tapered.getValues()[0], 0, 1e-12, 'periodic Hann starts at zero');
@@ -356,12 +356,12 @@ test('detrending and windowing return new signals over the same plan', () => {
 });
 
 test('construction and analysis validate their arguments', () => {
-    assert.throws(() => new SignalCollectable(null, [1, 2]), TypeError);
-    assert.throws(() => new SignalCollectable(new (signal.getSample().constructor)(2, 2), [1]), RangeError);
-    assert.throws(() => SignalCollectable.useRate([], 8), RangeError);
-    assert.throws(() => SignalCollectable.useRate([1, 2], 0), RangeError);
-    assert.throws(() => SignalCollectable.useRate([1, 2], Number.NaN), TypeError);
-    assert.throws(() => SignalCollectable.useRate([1, Number.NaN], 8), TypeError);
+    assert.throws(() => new SynchronousSignalCollectable(null, [1, 2]), TypeError);
+    assert.throws(() => new SynchronousSignalCollectable(new (signal.getSample().constructor)(2, 2), [1]), RangeError);
+    assert.throws(() => SynchronousSignalCollectable.useRate([], 8), RangeError);
+    assert.throws(() => SynchronousSignalCollectable.useRate([1, 2], 0), RangeError);
+    assert.throws(() => SynchronousSignalCollectable.useRate([1, 2], Number.NaN), TypeError);
+    assert.throws(() => SynchronousSignalCollectable.useRate([1, Number.NaN], 8), TypeError);
     assert.throws(() => signal.spectrum(undefined, 7), TypeError);
     assert.throws(() => signal.spectrogram(2048n, 128n), RangeError);
     assert.throws(() => signal.spectrogram(256n, 512n), RangeError);

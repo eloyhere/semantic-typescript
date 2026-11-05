@@ -123,7 +123,7 @@ test('numeric projections determine range, variance and nearest rank', { timeout
   const stats = values(-2, 0, 2).toNumericStatistics();
   assert.equal(await stats.range(x => x * x), 4);
   assert.equal((await stats.quantile(0.5, x => x * x)).get(), 4);
-  // 此处因 1.2.0→1.3.0 的定义变更而更新：variance 由总体 25 改为样本 50，标准差由 5 改为 sqrt(50)。
+  // 此处因 1.2.0 → 2.0.0 的定义变更而更新：variance 由总体 25 改为样本 50，标准差由 5 改为 sqrt(50)。
   assert.equal((await values(1, 2).toNumericStatistics().variance(x => x * 10)).get(), 50);
   assert.equal((await values(1, 2).toNumericStatistics().standardDeviation(x => x * 10)).get(), Math.sqrt(50));
 });
@@ -132,7 +132,7 @@ for (const mode of ['toNumericStatistics', 'toBigintStatistics']) {
   test(`${mode} quantile endpoints, even samples, NaN and projected ordering`, { timeout: 1200 }, async () => {
     const bigint = mode === 'toBigintStatistics'; const cast = value => bigint ? BigInt(value) : value;
     const stats = values(...[1, 2, 3, 4].map(cast))[mode]();
-    // 此处因 1.2.0→1.3.0 的定义变更而更新：默认 H&F 类型 7，旧值 [1, 1, 2, 3, 4]。
+    // 此处因 1.2.0 → 2.0.0 的定义变更而更新：默认 H&F 类型 7，旧值 [1, 1, 2, 3, 4]。
     const expected = bigint ? [1n, 2n, 3n, 3n, 4n] : [1, 1.75, 2.5, 3.25, 4];
     assert.deepEqual(await Promise.all([0, 0.25, 0.5, 0.75, 1].map(q => stats.quantile(q).then(result => result.get()))), expected);
     assert.equal((await stats.quantile(0.25, value => -value)).get(), bigint ? -3n : -3.25);
@@ -147,7 +147,7 @@ for (const mode of ['toNumericStatistics', 'toBigintStatistics']) {
 test('bigint statistics preserve small differences around large origins', { timeout: 1200 }, async () => {
   const b = 2n ** 60n;
   const stats = values(b, b + 2n).toBigintStatistics();
-  // 此处因 1.2.0→1.3.0 的定义变更而更新：样本方差为 2n（旧总体方差 1n），标准差仍为 1n。
+  // 此处因 1.2.0 → 2.0.0 的定义变更而更新：样本方差为 2n（旧总体方差 1n），标准差仍为 1n。
   const [variance, deviation, range] = await Promise.all([stats.variance(), stats.standardDeviation(), stats.range()]);
   assert.equal(variance.get(), 2n);
   assert.equal(deviation.get(), 1n);

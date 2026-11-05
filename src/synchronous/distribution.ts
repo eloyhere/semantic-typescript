@@ -44,7 +44,7 @@ import type {
     VarianceOptions
 } from "#semantic/mathematics/quantile";
 import { Optional } from "#semantic/optional";
-import { OrderedCollectable } from "#semantic/synchronous/collectable";
+import { SynchronousOrderedCollectable } from "#semantic/synchronous/collectable";
 import {
     DistributionAccumulator,
     entropyOfHistogram,
@@ -1560,7 +1560,7 @@ export class DensityEstimate {
  * re-consume the source. `quantile` is therefore O(1) after construction and the
  * ECDF queries are O(log n); only methods that document otherwise cost a pass.
  *
- * The class extends {@link OrderedCollectable}, so every inherited terminal
+ * The class extends {@link SynchronousOrderedCollectable}, so every inherited terminal
  * operation traverses the same ascending buffer and reports the sorted position
  * as the bigint index. The instance is frozen.
  *
@@ -1572,7 +1572,7 @@ export class DensityEstimate {
  *
  * @template E - The numeric source element type.
  */
-export class DistributionCollectable<E extends number> extends OrderedCollectable<E> {
+export class SynchronousDistributionCollectable<E extends number> extends SynchronousOrderedCollectable<E> {
     /**
      * The ascending sample shared with the collector finishers.
      */
@@ -1580,7 +1580,7 @@ export class DistributionCollectable<E extends number> extends OrderedCollectabl
     /**
      * The built-in object tag identifying this API implementation.
      */
-    [Symbol.toStringTag]: string = "DistributionCollectable";
+    [Symbol.toStringTag]: string = "SynchronousDistributionCollectable";
     /**
      * Validates, drains and sorts the input.
      *
@@ -1806,11 +1806,11 @@ export class DistributionCollectable<E extends number> extends OrderedCollectabl
      *
      * @param other - The distribution to compare with.
      * @returns Whether the order statistics match element by element.
-     * @throws {TypeError} If the operand is not a `DistributionCollectable`.
+     * @throws {TypeError} If the operand is not a `SynchronousDistributionCollectable`.
      */
-    public equals(other: DistributionCollectable<E>): boolean {
-        if (!(other instanceof DistributionCollectable)) {
-            throw new TypeError("Distribution operand must be a DistributionCollectable.");
+    public equals(other: SynchronousDistributionCollectable<E>): boolean {
+        if (!(other instanceof SynchronousDistributionCollectable)) {
+            throw new TypeError("Distribution operand must be a SynchronousDistributionCollectable.");
         }
         let left: ReadonlyArray<number> = this.sample.ascendingValues();
         let right: ReadonlyArray<number> = other.sample.ascendingValues();
@@ -1827,13 +1827,13 @@ export class DistributionCollectable<E extends number> extends OrderedCollectabl
     /**
      * Renders the sample size and the observed range.
      *
-     * @returns A description such as `DistributionCollectable(n=200, [-3.1, 25])`.
+     * @returns A description such as `SynchronousDistributionCollectable(n=200, [-3.1, 25])`.
      */
     public toString(): string {
         let ascending: ReadonlyArray<number> = this.sample.ascendingValues();
         if (ascending.length === 0) {
-            return "DistributionCollectable(n=0)";
+            return "SynchronousDistributionCollectable(n=0)";
         }
-        return `DistributionCollectable(n=${ascending.length}, [${ascending[0]}, ${ascending[ascending.length - 1]}])`;
+        return `SynchronousDistributionCollectable(n=${ascending.length}, [${ascending[0]}, ${ascending[ascending.length - 1]}])`;
     }
 }

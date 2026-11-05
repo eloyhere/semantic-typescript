@@ -18,17 +18,17 @@ import { AsynchronousList, SynchronousList } from "#semantic/structure/list";
 const FullTurn: number = Math.PI * 2;
 
 /**
- * The sampled view of one cycle element. A record is an immutable snapshot:
+ * The sampled view of one ring element. A record is an immutable snapshot:
  * later list mutations do not change a record returned earlier.
  *
  * @template E the type of the stored element
  */
-export interface CycleElement<E> {
+export interface RingElement<E> {
     /** The element stored at the sampled position. */
     readonly element: E;
     /** The intrinsic phase of the sampled position. */
     readonly phase: Angle;
-    /** The ambient rotation rate shared by the whole cycle. */
+    /** The ambient rotation rate shared by the whole ring. */
     readonly frequency: Frequency;
     /** The intrinsic phasor of the element at the sampled position. */
     readonly complex: Complex;
@@ -45,7 +45,7 @@ export interface CycleElement<E> {
  *
  * @template E the type of the stored element
  */
-export interface CycleView<E> {
+export interface RingView<E> {
     /** The element stored at the sampled position. */
     readonly element: E;
     /** The position that produced this view. */
@@ -72,7 +72,7 @@ export interface CycleView<E> {
  *
  * @template E the type of the stored element
  */
-export interface CycleJet<E> {
+export interface RingJet<E> {
     /** The element stored at the sampled position. */
     readonly element: E;
     /** The position that produced this jet. */
@@ -95,7 +95,7 @@ export interface CycleJet<E> {
  *
  * @template E the type of the stored element
  */
-export interface CycleReading<E> {
+export interface RingReading<E> {
     /** The observed element. */
     readonly element: E;
     /** The ring position the element occupies. */
@@ -115,7 +115,7 @@ export interface CycleReading<E> {
  *
  * @template E the type of the stored element
  */
-export interface CycleReference<E> {
+export interface RingReference<E> {
     /** The reference element. */
     readonly element: E;
     /** The ring position of the reference. */
@@ -129,7 +129,7 @@ export interface CycleReference<E> {
 }
 
 /**
- * The result of analysing data against a cycle.
+ * The result of analysing data against a ring.
  *
  * Every ring element is a reference phase, and every observation is matched
  * back to the ring by identity. Observations whose element is absent are
@@ -138,7 +138,7 @@ export interface CycleReference<E> {
  *
  * @template E the type of the stored element
  */
-export interface CycleAnalysis<E> {
+export interface RingAnalysis<E> {
     /** The number of elements in the ring. */
     readonly size: number;
     /** The number of observations supplied. */
@@ -148,15 +148,15 @@ export interface CycleAnalysis<E> {
     /** The number of observations whose element the ring does not hold. */
     readonly missed: number;
     /** One reading per matched observation, in the order supplied. */
-    readonly readings: ReadonlyArray<CycleReading<E>>;
+    readonly readings: ReadonlyArray<RingReading<E>>;
     /** One row per ring element, in ring order. */
-    readonly references: ReadonlyArray<CycleReference<E>>;
+    readonly references: ReadonlyArray<RingReference<E>>;
 }
 
 /**
- * Construction options shared by both cycle modes.
+ * Construction options shared by both ring modes.
  *
- * A cycle is an `n`-fold ring: the element count, the positional period and the
+ * A ring carries `n` elements: the element count, the positional period and the
  * number of distinct phases are all the same integer `n`. Position `i` carries
  * the intrinsic phase `phase + span * 2*PI * (i mod n) / n`, computed from the
  * exact residue of `i` rather than from an accumulated floating-point product,
@@ -173,7 +173,7 @@ export interface CycleAnalysis<E> {
  *
  * @template E the type of stored elements
  */
-export interface CycleOptions<E> {
+export interface RingOptions<E> {
     /** Phase at position zero; defaults to zero radians. */
     phase?: Angle;
     /** Ambient rotation rate shared by the whole ring; defaults to zero hertz. */
@@ -202,9 +202,9 @@ export interface CycleOptions<E> {
  * unity. Balance therefore heals itself under structural change; only a
  * non-unit `magnitude` can keep a ring out of balance.
  *
- * @template E the type of elements in this cycle
+ * @template E the type of elements in this ring
  */
-export interface AsynchronousCycle<E> extends AsynchronousList<E> {
+export interface AsynchronousRing<E> extends AsynchronousList<E> {
 
     /** The phase at position zero. */
     getPhase(): Angle;
@@ -220,16 +220,16 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
      *
      * @param index the cyclic position to sample
      * @returns a promise that resolves to the sampled element, or to an empty
-     *          `Optional` if this cycle is empty
+     *          `Optional` if this ring is empty
      */
-    elementAt(index: bigint): Promise<Optional<CycleElement<E>>>;
+    elementAt(index: bigint): Promise<Optional<RingElement<E>>>;
 
     /**
      * Returns the ambient rotation rate.
      *
      * @param index the cyclic position to sample
      * @returns a promise that resolves to the shared rate, or to an empty
-     *          `Optional` if this cycle is empty
+     *          `Optional` if this ring is empty
      */
     frequencyAt(index: bigint): Promise<Optional<Frequency>>;
 
@@ -238,7 +238,7 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
      *
      * @param index the cyclic position to sample
      * @returns a promise that resolves to the intrinsic phase, or to an empty
-     *          `Optional` if this cycle is empty
+     *          `Optional` if this ring is empty
      */
     phaseAt(index: bigint): Promise<Optional<Angle>>;
 
@@ -252,7 +252,7 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
      * @param index the cyclic position to sample
      * @param time the elapsed time in seconds
      * @returns a promise that resolves to the relative phase, or to an empty
-     *          `Optional` if this cycle is empty
+     *          `Optional` if this ring is empty
      */
     relativeAt(index: bigint, time: number): Promise<Optional<Angle>>;
 
@@ -262,9 +262,9 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
      * @param index the cyclic position to sample
      * @param time the elapsed time in seconds
      * @returns a promise that resolves to the view, or to an empty `Optional`
-     *          if this cycle is empty
+     *          if this ring is empty
      */
-    viewAt(index: bigint, time: number): Promise<Optional<CycleView<E>>>;
+    viewAt(index: bigint, time: number): Promise<Optional<RingView<E>>>;
 
     /**
      * Returns the state of every element at an instant, in ring order.
@@ -272,7 +272,7 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
      * @param time the elapsed time in seconds
      * @returns a promise that resolves to one view per element
      */
-    viewsAt(time: number): Promise<Array<CycleView<E>>>;
+    viewsAt(time: number): Promise<Array<RingView<E>>>;
 
     /**
      * Returns the differential state of one element at an instant.
@@ -280,9 +280,9 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
      * @param index the cyclic position to sample
      * @param time the elapsed time in seconds
      * @returns a promise that resolves to the jet, or to an empty `Optional`
-     *          if this cycle is empty
+     *          if this ring is empty
      */
-    jetAt(index: bigint, time: number): Promise<Optional<CycleJet<E>>>;
+    jetAt(index: bigint, time: number): Promise<Optional<RingJet<E>>>;
 
     /**
      * Returns the whole turns an element has slipped relative to the environment.
@@ -290,7 +290,7 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
      * @param index the cyclic position to sample
      * @param time the elapsed time in seconds
      * @returns a promise that resolves to the truncated slip in turns, or to an
-     *          empty `Optional` if this cycle is empty
+     *          empty `Optional` if this ring is empty
      */
     windingAt(index: bigint, time: number): Promise<Optional<bigint>>;
 
@@ -301,7 +301,7 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
      * @param time the elapsed time in seconds
      * @param origin the instant the accumulation starts, defaulting to zero
      * @returns a promise that resolves to the integral in turns times seconds,
-     *          or to an empty `Optional` if this cycle is empty
+     *          or to an empty `Optional` if this ring is empty
      */
     errorIntegralAt(index: bigint, time: number, origin?: number): Promise<Optional<number>>;
 
@@ -310,7 +310,7 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
      *
      * @param time the elapsed time in seconds, defaulting to zero
      * @returns a promise that resolves to the resultant length within `[0, 1]`,
-     *          or to an empty `Optional` if this cycle is empty
+     *          or to an empty `Optional` if this ring is empty
      */
     resultant(time?: number): Promise<Optional<number>>;
 
@@ -326,12 +326,12 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
      * @param time the elapsed time in seconds used for relative phases, defaulting to zero
      * @returns a promise that resolves to the analysis
      */
-    analyse(data: Iterable<E>, time?: number): Promise<CycleAnalysis<E>>;
+    analyse(data: Iterable<E>, time?: number): Promise<RingAnalysis<E>>;
 
     /**
      * Returns the phasor of every element, in ring order.
      *
-     * @returns a promise that resolves to the intrinsic phasors of this cycle
+     * @returns a promise that resolves to the intrinsic phasors of this ring
      */
     toComplex(): Promise<Array<Complex>>;
 
@@ -340,7 +340,7 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
      *
      * @param index the cyclic position to sample
      * @returns a promise that resolves to the phasor, or to an empty `Optional`
-     *          if this cycle is empty
+     *          if this ring is empty
      */
     toComplex(index: bigint): Promise<Optional<Complex>>;
 
@@ -348,7 +348,7 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
      * Returns the mean phasor of the ring, which is its zero sequence.
      *
      * @returns a promise that resolves to the mean phasor, or to an empty
-     *          `Optional` if this cycle is empty
+     *          `Optional` if this ring is empty
      */
     zeroSequence(): Promise<Optional<Complex>>;
 
@@ -380,7 +380,7 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
      * signal.
      *
      * @returns a promise that resolves to the spectrum, or to an empty
-     *          `Optional` if this cycle is empty
+     *          `Optional` if this ring is empty
      */
     toSpectrum(): Promise<Optional<Spectrum>>;
 
@@ -400,7 +400,7 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
      * @param time the elapsed time in seconds
      * @param field the field to sample with the relative phase
      * @returns a promise that resolves to the score within `[-1, 1]`, or to an
-     *          empty `Optional` if this cycle is empty
+     *          empty `Optional` if this ring is empty
      */
     scoreAt(index: bigint, time: number, field: PhaseField): Promise<Optional<number>>;
 
@@ -430,9 +430,9 @@ export interface AsynchronousCycle<E> extends AsynchronousList<E> {
  * unity. Balance therefore heals itself under structural change; only a
  * non-unit `magnitude` can keep a ring out of balance.
  *
- * @template E the type of elements in this cycle
+ * @template E the type of elements in this ring
  */
-export interface SynchronousCycle<E> extends SynchronousList<E> {
+export interface SynchronousRing<E> extends SynchronousList<E> {
 
     /** The phase at position zero. */
     getPhase(): Angle;
@@ -447,15 +447,15 @@ export interface SynchronousCycle<E> extends SynchronousList<E> {
      * Returns the sampled view of the element at the specified position.
      *
      * @param index the cyclic position to sample
-     * @returns the sampled element, or an empty `Optional` if this cycle is empty
+     * @returns the sampled element, or an empty `Optional` if this ring is empty
      */
-    elementAt(index: bigint): Optional<CycleElement<E>>;
+    elementAt(index: bigint): Optional<RingElement<E>>;
 
     /**
      * Returns the ambient rotation rate.
      *
      * @param index the cyclic position to sample
-     * @returns the shared rate, or an empty `Optional` if this cycle is empty
+     * @returns the shared rate, or an empty `Optional` if this ring is empty
      */
     frequencyAt(index: bigint): Optional<Frequency>;
 
@@ -463,7 +463,7 @@ export interface SynchronousCycle<E> extends SynchronousList<E> {
      * Returns the intrinsic phase of the specified position.
      *
      * @param index the cyclic position to sample
-     * @returns the intrinsic phase, or an empty `Optional` if this cycle is empty
+     * @returns the intrinsic phase, or an empty `Optional` if this ring is empty
      */
     phaseAt(index: bigint): Optional<Angle>;
 
@@ -476,7 +476,7 @@ export interface SynchronousCycle<E> extends SynchronousList<E> {
      *
      * @param index the cyclic position to sample
      * @param time the elapsed time in seconds
-     * @returns the relative phase, or an empty `Optional` if this cycle is empty
+     * @returns the relative phase, or an empty `Optional` if this ring is empty
      */
     relativeAt(index: bigint, time: number): Optional<Angle>;
 
@@ -485,9 +485,9 @@ export interface SynchronousCycle<E> extends SynchronousList<E> {
      *
      * @param index the cyclic position to sample
      * @param time the elapsed time in seconds
-     * @returns the view, or an empty `Optional` if this cycle is empty
+     * @returns the view, or an empty `Optional` if this ring is empty
      */
-    viewAt(index: bigint, time: number): Optional<CycleView<E>>;
+    viewAt(index: bigint, time: number): Optional<RingView<E>>;
 
     /**
      * Returns the state of every element at an instant, in ring order.
@@ -495,16 +495,16 @@ export interface SynchronousCycle<E> extends SynchronousList<E> {
      * @param time the elapsed time in seconds
      * @returns one view per element
      */
-    viewsAt(time: number): Array<CycleView<E>>;
+    viewsAt(time: number): Array<RingView<E>>;
 
     /**
      * Returns the differential state of one element at an instant.
      *
      * @param index the cyclic position to sample
      * @param time the elapsed time in seconds
-     * @returns the jet, or an empty `Optional` if this cycle is empty
+     * @returns the jet, or an empty `Optional` if this ring is empty
      */
-    jetAt(index: bigint, time: number): Optional<CycleJet<E>>;
+    jetAt(index: bigint, time: number): Optional<RingJet<E>>;
 
     /**
      * Returns the whole turns an element has slipped relative to the environment.
@@ -515,7 +515,7 @@ export interface SynchronousCycle<E> extends SynchronousList<E> {
      *
      * @param index the cyclic position to sample
      * @param time the elapsed time in seconds
-     * @returns the truncated slip in turns, or an empty `Optional` if this cycle
+     * @returns the truncated slip in turns, or an empty `Optional` if this ring
      *          is empty
      */
     windingAt(index: bigint, time: number): Optional<bigint>;
@@ -532,7 +532,7 @@ export interface SynchronousCycle<E> extends SynchronousList<E> {
      * @param time the elapsed time in seconds
      * @param origin the instant the accumulation starts, defaulting to zero
      * @returns the integral in turns times seconds, or an empty `Optional` if
-     *          this cycle is empty
+     *          this ring is empty
      */
     errorIntegralAt(index: bigint, time: number, origin?: number): Optional<number>;
 
@@ -551,7 +551,7 @@ export interface SynchronousCycle<E> extends SynchronousList<E> {
      *
      * @param time the elapsed time in seconds, defaulting to zero
      * @returns the resultant length within `[0, 1]`, or an empty `Optional` if
-     *          this cycle is empty
+     *          this ring is empty
      */
     resultant(time?: number): Optional<number>;
 
@@ -574,12 +574,12 @@ export interface SynchronousCycle<E> extends SynchronousList<E> {
      * @returns the analysis
      * @throws {TypeError} if the data is not iterable or the time is not finite
      */
-    analyse(data: Iterable<E>, time?: number): CycleAnalysis<E>;
+    analyse(data: Iterable<E>, time?: number): RingAnalysis<E>;
 
     /**
      * Returns the phasor of every element, in ring order.
      *
-     * @returns the intrinsic phasors of this cycle
+     * @returns the intrinsic phasors of this ring
      */
     toComplex(): Array<Complex>;
 
@@ -587,14 +587,14 @@ export interface SynchronousCycle<E> extends SynchronousList<E> {
      * Returns the intrinsic phasor of the element at the specified position.
      *
      * @param index the cyclic position to sample
-     * @returns the phasor, or an empty `Optional` if this cycle is empty
+     * @returns the phasor, or an empty `Optional` if this ring is empty
      */
     toComplex(index: bigint): Optional<Complex>;
 
     /**
      * Returns the mean phasor of the ring, which is its zero sequence.
      *
-     * @returns the mean phasor, or an empty `Optional` if this cycle is empty
+     * @returns the mean phasor, or an empty `Optional` if this ring is empty
      */
     zeroSequence(): Optional<Complex>;
 
@@ -631,7 +631,7 @@ export interface SynchronousCycle<E> extends SynchronousList<E> {
      * assume a real signal and are therefore only meaningful when the modes
      * appear in conjugate pairs; read the bins directly otherwise.
      *
-     * @returns the spectrum, or an empty `Optional` if this cycle is empty
+     * @returns the spectrum, or an empty `Optional` if this ring is empty
      */
     toSpectrum(): Optional<Spectrum>;
 
@@ -650,7 +650,7 @@ export interface SynchronousCycle<E> extends SynchronousList<E> {
      * @param index the cyclic position to sample
      * @param time the elapsed time in seconds
      * @param field the field to sample with the relative phase
-     * @returns the score within `[-1, 1]`, or an empty `Optional` if this cycle
+     * @returns the score within `[-1, 1]`, or an empty `Optional` if this ring
      *          is empty
      */
     scoreAt(index: bigint, time: number, field: PhaseField): Optional<number>;
@@ -665,19 +665,19 @@ export interface SynchronousCycle<E> extends SynchronousList<E> {
     scoresAt(time: number, field: PhaseField): Array<number>;
 }
 
-/** Creates an asynchronous cycle. Null and undefined elements are rejected. */
-export interface AsynchronousCycleConstructor {
-    new <E = unknown>(): AsynchronousCycle<E>;
-    new <E>(source: Iterable<E>, options?: CycleOptions<E>): AsynchronousCycle<E>;
-    new <E>(source: AsyncIterable<E>, options?: CycleOptions<E>): AsynchronousCycle<E>;
-    new <E = unknown>(source: undefined, options: CycleOptions<E>): AsynchronousCycle<E>;
+/** Creates an asynchronous ring. Null and undefined elements are rejected. */
+export interface AsynchronousRingConstructor {
+    new <E = unknown>(): AsynchronousRing<E>;
+    new <E>(source: Iterable<E>, options?: RingOptions<E>): AsynchronousRing<E>;
+    new <E>(source: AsyncIterable<E>, options?: RingOptions<E>): AsynchronousRing<E>;
+    new <E = unknown>(source: undefined, options: RingOptions<E>): AsynchronousRing<E>;
 }
 
-/** Creates a synchronous cycle. Null and undefined elements are rejected. */
-export interface SynchronousCycleConstructor {
-    new <E = unknown>(): SynchronousCycle<E>;
-    new <E>(source: Iterable<E>, options?: CycleOptions<E>): SynchronousCycle<E>;
-    new <E = unknown>(source: undefined, options: CycleOptions<E>): SynchronousCycle<E>;
+/** Creates a synchronous ring. Null and undefined elements are rejected. */
+export interface SynchronousRingConstructor {
+    new <E = unknown>(): SynchronousRing<E>;
+    new <E>(source: Iterable<E>, options?: RingOptions<E>): SynchronousRing<E>;
+    new <E = unknown>(source: undefined, options: RingOptions<E>): SynchronousRing<E>;
 }
 
 /** One link of the ring. The head and tail references are connected in both directions. */
@@ -689,31 +689,31 @@ interface RingNode<E> {
 
 const requireIndex: (index: unknown) => bigint = (index: unknown): bigint => {
     if (typeof index !== "bigint") {
-        throw new TypeError("Cycle index must be a bigint.");
+        throw new TypeError("Ring index must be a bigint.");
     }
     return index;
 }
 
 const requirePhase: (phase: unknown) => Angle = (phase: unknown): Angle => {
     if (!(phase instanceof Angle)) {
-        throw new TypeError("Cycle phase must be an Angle.");
+        throw new TypeError("Ring phase must be an Angle.");
     }
     return phase;
 }
 
 const requireFrequency: (frequency: unknown) => Frequency = (frequency: unknown): Frequency => {
     if (!(frequency instanceof Frequency)) {
-        throw new TypeError("Cycle frequency must be a Frequency.");
+        throw new TypeError("Ring frequency must be a Frequency.");
     }
     return frequency;
 }
 
 const requireSpan: (span: unknown) => number = (span: unknown): number => {
     if (!isNumber(span)) {
-        throw new TypeError("Cycle span must be a finite number of turns.");
+        throw new TypeError("Ring span must be a finite number of turns.");
     }
     if (span <= 0) {
-        throw new RangeError("Cycle span must be positive.");
+        throw new RangeError("Ring span must be positive.");
     }
     return span;
 }
@@ -727,7 +727,7 @@ const requireFinite: (value: unknown, name: string) => number = (value: unknown,
 
 const requireField: (field: unknown) => PhaseField = (field: unknown): PhaseField => {
     if (!(field instanceof PhaseField)) {
-        throw new TypeError("Cycle field must be a PhaseField.");
+        throw new TypeError("Ring field must be a PhaseField.");
     }
     return field;
 }
@@ -742,11 +742,11 @@ const requireField: (field: unknown) => PhaseField = (field: unknown): PhaseFiel
  * current ring length, so the ring is exactly periodic and its balance cannot
  * drift.
  */
-function createCycleConstructor(name: string, asynchronous: boolean) {
+function createRingConstructor(name: string, asynchronous: boolean) {
     const constructor = function (
         this: object,
         source?: Iterable<unknown> | AsyncIterable<unknown>,
-        options: CycleOptions<unknown> = {},
+        options: RingOptions<unknown> = {},
     ): object {
         if (!new.target) {
             throw new TypeError(`${name} must be constructed with new.`);
@@ -759,11 +759,11 @@ function createCycleConstructor(name: string, asynchronous: boolean) {
         const span: number = requireSpan(options.span ?? 1);
         const magnitude = options.magnitude ?? ((): number => 1);
         if (typeof magnitude !== "function") {
-            throw new TypeError("Cycle magnitude must be a function.");
+            throw new TypeError("Ring magnitude must be a function.");
         }
         const rate = options.rate;
         if (rate !== undefined && typeof rate !== "function") {
-            throw new TypeError("Cycle rate must be a function.");
+            throw new TypeError("Ring rate must be a function.");
         }
         const omega = frequency.toOmega();
         let head: RingNode<unknown> | undefined;
@@ -774,11 +774,11 @@ function createCycleConstructor(name: string, asynchronous: boolean) {
             const result: RingNode<unknown>[] = [];
             let current = head;
             for (let index = 0; index < count; index++) {
-                if (!current) throw new TypeError("Cycle links are inconsistent.");
+                if (!current) throw new TypeError("Ring links are inconsistent.");
                 result.push(current);
                 current = current.next;
             }
-            if (count > 0 && current !== head) throw new TypeError("Cycle is not closed.");
+            if (count > 0 && current !== head) throw new TypeError("Ring is not closed.");
             return result;
         };
         const append = (element: unknown): boolean => {
@@ -864,7 +864,7 @@ function createCycleConstructor(name: string, asynchronous: boolean) {
             setValue: (index: number, value: unknown): void => {
                 const ring = nodes();
                 if (ring.some((node, position) => position !== index && same(node.element, value))) {
-                    throw new RangeError("Cycle elements must be unique.");
+                    throw new RangeError("Ring elements must be unique.");
                 }
                 ring[index].element = value;
             },
@@ -913,7 +913,7 @@ function createCycleConstructor(name: string, asynchronous: boolean) {
             if (!rate) return 0;
             const value = rate(node.element, index);
             if (!(value instanceof Frequency)) {
-                throw new TypeError("Cycle rate must be a Frequency.");
+                throw new TypeError("Ring rate must be a Frequency.");
             }
             return value.getHertz();
         };
@@ -926,30 +926,30 @@ function createCycleConstructor(name: string, asynchronous: boolean) {
         const weightOf = (node: RingNode<unknown>, index: bigint): number => {
             const weight: number = magnitude(node.element, index);
             if (!isNumber(weight) || weight < 0) {
-                throw new RangeError("Cycle magnitude must be a finite non-negative number.");
+                throw new RangeError("Ring magnitude must be a finite non-negative number.");
             }
             return weight;
         };
         const phasorOf = (node: RingNode<unknown>, index: bigint): Complex =>
             usePolar(weightOf(node, index), intrinsic(index));
-        const viewOf = (node: RingNode<unknown>, index: bigint): CycleElement<unknown> => ({
+        const viewOf = (node: RingNode<unknown>, index: bigint): RingElement<unknown> => ({
             element: node.element,
             phase: intrinsic(index),
             frequency,
             complex: phasorOf(node, index),
         });
-        const sampledElement = (index: bigint): Optional<CycleElement<unknown>> => {
+        const sampledElement = (index: bigint): Optional<RingElement<unknown>> => {
             const node = nodeAt(index);
             return node ? Optional.of(viewOf(node, index)) : Optional.empty();
         };
         const sampledPhase = (index: bigint): Optional<Angle> =>
             nodeAt(index) ? Optional.of(intrinsic(index)) : Optional.empty();
         const sampledRelative = (index: bigint, time: number): Optional<Angle> => {
-            const seconds = requireFinite(time, "Cycle time");
+            const seconds = requireFinite(time, "Ring time");
             const node = nodeAt(index);
             return node ? Optional.of(relativePhase(node, index, seconds)) : Optional.empty();
         };
-        const viewAtTime = (node: RingNode<unknown>, index: bigint, seconds: number): CycleView<unknown> => {
+        const viewAtTime = (node: RingNode<unknown>, index: bigint, seconds: number): RingView<unknown> => {
             const current = advanced(node, index, seconds);
             return {
                 element: node.element,
@@ -961,18 +961,18 @@ function createCycleConstructor(name: string, asynchronous: boolean) {
                 complex: usePolar(weightOf(node, index), current),
             };
         };
-        const sampledView = (index: bigint, time: number): Optional<CycleView<unknown>> => {
-            const seconds = requireFinite(time, "Cycle time");
+        const sampledView = (index: bigint, time: number): Optional<RingView<unknown>> => {
+            const seconds = requireFinite(time, "Ring time");
             const node = nodeAt(index);
             return node ? Optional.of(viewAtTime(node, index, seconds)) : Optional.empty();
         };
-        const sampledViews = (time: number): CycleView<unknown>[] => {
-            const seconds = requireFinite(time, "Cycle time");
+        const sampledViews = (time: number): RingView<unknown>[] => {
+            const seconds = requireFinite(time, "Ring time");
             return nodes().map((node: RingNode<unknown>, position: number) =>
                 viewAtTime(node, BigInt(position), seconds));
         };
-        const sampledJet = (index: bigint, time: number): Optional<CycleJet<unknown>> => {
-            const seconds = requireFinite(time, "Cycle time");
+        const sampledJet = (index: bigint, time: number): Optional<RingJet<unknown>> => {
+            const seconds = requireFinite(time, "Ring time");
             const node = nodeAt(index);
             if (!node) return Optional.empty();
             const own: number = rateValue(node, index);
@@ -986,15 +986,15 @@ function createCycleConstructor(name: string, asynchronous: boolean) {
             });
         };
         const sampledWinding = (index: bigint, time: number): Optional<bigint> => {
-            const seconds = requireFinite(time, "Cycle time");
+            const seconds = requireFinite(time, "Ring time");
             const node = nodeAt(index);
             if (!node) return Optional.empty();
             const turns: number = (rateValue(node, index) - frequency.getHertz()) * seconds;
             return Optional.of(BigInt(Math.trunc(turns)));
         };
         const sampledError = (index: bigint, time: number, origin: number): Optional<number> => {
-            const end = requireFinite(time, "Cycle time");
-            const start = requireFinite(origin, "Cycle origin");
+            const end = requireFinite(time, "Ring time");
+            const start = requireFinite(origin, "Ring origin");
             const node = nodeAt(index);
             if (!node) return Optional.empty();
             const base = intrinsic(index).toRadianValue() / FullTurn;
@@ -1002,7 +1002,7 @@ function createCycleConstructor(name: string, asynchronous: boolean) {
             return Optional.of(base * (end - start) + slip * (end * end - start * start) / 2);
         };
         const resultantValue = (time: number): Optional<number> => {
-            const seconds = requireFinite(time, "Cycle time");
+            const seconds = requireFinite(time, "Ring time");
             const ring = nodes();
             if (ring.length === 0) return Optional.empty();
             let real = 0;
@@ -1023,17 +1023,17 @@ function createCycleConstructor(name: string, asynchronous: boolean) {
          * Matches every observation back to the ring and measures it against
          * each ring element as a reference phase.
          */
-        const analyseData = (data: Iterable<unknown>, time: number): CycleAnalysis<unknown> => {
-            const seconds = requireFinite(time, "Cycle time");
+        const analyseData = (data: Iterable<unknown>, time: number): RingAnalysis<unknown> => {
+            const seconds = requireFinite(time, "Ring time");
             if (data === null || data === undefined || !(Symbol.iterator in Object(data))) {
-                throw new TypeError("Cycle analyse data must be iterable.");
+                throw new TypeError("Ring analyse data must be iterable.");
             }
             const ring = nodes();
             const positions = new Map<unknown, number>();
             for (let position = 0; position < ring.length; position++) {
                 positions.set(ring[position].element, position);
             }
-            const readings: CycleReading<unknown>[] = [];
+            const readings: RingReading<unknown>[] = [];
             const hits: number[] = ring.map((): number => 0);
             let total = 0;
             for (const element of data) {
@@ -1049,7 +1049,7 @@ function createCycleConstructor(name: string, asynchronous: boolean) {
                     relative: relativePhase(ring[position], index, seconds),
                 });
             }
-            const references: CycleReference<unknown>[] = [];
+            const references: RingReference<unknown>[] = [];
             for (let position = 0; position < ring.length; position++) {
                 const base = intrinsic(BigInt(position)).toRadianValue();
                 let real = 0;
@@ -1153,7 +1153,7 @@ function createCycleConstructor(name: string, asynchronous: boolean) {
             return result;
         };
         const balanced = (epsilon: number = 1E-9): boolean => {
-            const tolerance = Math.abs(requireFinite(epsilon, "Cycle epsilon"));
+            const tolerance = Math.abs(requireFinite(epsilon, "Ring epsilon"));
             if (count < 2) return false;
             return 1 - purityValue() <= tolerance;
         };
@@ -1173,7 +1173,7 @@ function createCycleConstructor(name: string, asynchronous: boolean) {
         };
         const scoredAll = (time: number, field: PhaseField): number[] => {
             requireField(field);
-            const seconds = requireFinite(time, "Cycle time");
+            const seconds = requireFinite(time, "Ring time");
             const offset = ambient(seconds);
             const values: number[] = [];
             const ring = nodes();
@@ -1219,11 +1219,11 @@ function createCycleConstructor(name: string, asynchronous: boolean) {
 }
 
 /**
- * Creates a cycle sampling one phasor per list position.
+ * Creates a ring sampling one phasor per list position.
  * Promise operations wait for source initialisation.
  */
-export const AsynchronousCycle: AsynchronousCycleConstructor =
-    createCycleConstructor("AsynchronousCycle", true) as unknown as AsynchronousCycleConstructor;
+export const AsynchronousRing: AsynchronousRingConstructor =
+    createRingConstructor("AsynchronousRing", true) as unknown as AsynchronousRingConstructor;
 /**
  * A two-dimensional spectrum over temporal frequency and spatial wavenumber.
  *
@@ -1254,31 +1254,31 @@ export interface AngularSpectrum {
 }
 
 /**
- * Builds an `(omega, n)` spectrum from a cycle sampled at several instants.
+ * Builds an `(omega, n)` spectrum from a ring sampled at several instants.
  *
  * Each instant contributes one frame of phasors, and frame `k` of mode `j` is
  * the `j`-th symmetric component of that frame. The plan must describe exactly
  * the supplied instants, one frame each, because it fixes the frequency axis
  * that the per-mode spectra are reported against.
  *
- * @param cycle the synchronous ring to sample
+ * @param ring the synchronous ring to sample
  * @param instants the elapsed times, in seconds, at which to sample it
  * @param plan the sampling plan describing those instants
  * @returns the two-dimensional spectrum
- * @throws {TypeError} if the cycle or plan is not of the expected type
+ * @throws {TypeError} if the ring or plan is not of the expected type
  * @throws {RangeError} if the plan does not match the number of instants
  */
 export const useAngularSpectrum: (
-    cycle: SynchronousCycle<unknown>,
+    ring: SynchronousRing<unknown>,
     instants: Iterable<number>,
     plan: Sample,
 ) => AngularSpectrum = (
-    cycle: SynchronousCycle<unknown>,
+    ring: SynchronousRing<unknown>,
     instants: Iterable<number>,
     plan: Sample,
 ): AngularSpectrum => {
-    if (!cycle || typeof cycle.viewsAt !== "function") {
-        throw new TypeError("AngularSpectrum cycle must be a SynchronousCycle.");
+    if (!ring || typeof ring.viewsAt !== "function") {
+        throw new TypeError("AngularSpectrum ring must be a SynchronousRing.");
     }
     if (!(plan instanceof Sample)) {
         throw new TypeError("AngularSpectrum plan must be a Sample.");
@@ -1288,7 +1288,7 @@ export const useAngularSpectrum: (
         if (!isNumber(instant)) {
             throw new TypeError("AngularSpectrum instants must be finite numbers.");
         }
-        const phasors = cycle.viewsAt(instant).map((view: CycleView<unknown>) => view.complex);
+        const phasors = ring.viewsAt(instant).map((view: RingView<unknown>) => view.complex);
         const length = phasors.length;
         const frame: Complex[] = [];
         for (let order = 0; order < length; order++) {
@@ -1335,7 +1335,7 @@ export const useAngularSpectrum: (
 };
 
 /**
- * The joint ring produced by combining two cycles.
+ * The joint ring produced by combining two rings.
  *
  * The combined period is the least common multiple of the two lengths, not
  * their product: a joint instant determines both readings, so only the pairs
@@ -1343,16 +1343,16 @@ export const useAngularSpectrum: (
  * The remaining pairs are the ones the combination never produces, which is why
  * the joint state space is a pullback rather than a product.
  *
- * @template A the element type of the left cycle
- * @template B the element type of the right cycle
+ * @template A the element type of the left ring
+ * @template B the element type of the right ring
  */
-export interface CycleCombination<A, B> {
+export interface RingCombination<A, B> {
     /** The joined period, the least common multiple of the two lengths. */
     readonly period: bigint;
     /** The greatest common divisor of the two lengths. */
     readonly divisor: bigint;
     /** The joint ring, one element per instant of the period. */
-    readonly cycle: SynchronousCycle<readonly [A, B]>;
+    readonly ring: SynchronousRing<readonly [A, B]>;
     /** Reports whether two positions can come from the same instant. */
     aligns(left: bigint, right: bigint): boolean;
 }
@@ -1369,41 +1369,41 @@ const gcdOf: (left: bigint, right: bigint) => bigint = (left: bigint, right: big
 }
 
 /**
- * Combines two synchronous cycles into their joint ring.
+ * Combines two synchronous rings into their joint ring.
  *
- * Instant `i` of the joint ring reads position `i mod m` of the left cycle and
- * position `i mod n` of the right cycle, so the joint ring closes after
+ * Instant `i` of the joint ring reads position `i mod m` of the left ring and
+ * position `i mod n` of the right ring, so the joint ring closes after
  * `lcm(m, n)` instants. The pairs that can never co-occur — those whose
  * positions disagree modulo `gcd(m, n)` — are simply absent, and `aligns`
  * reports whether a given pair is representable.
  *
- * Both sources must be non-empty. The combined ring is a fresh cycle with a
+ * Both sources must be non-empty. The combined ring is a fresh ring with a
  * full-turn span and no phase anchor; the phases of the sources describe their
  * own geometry and do not transfer to the joint ring.
  *
- * @param left the left cycle
- * @param right the right cycle
+ * @param left the left ring
+ * @param right the right ring
  * @returns the combination, carrying the joint ring and the compatibility test
- * @throws {TypeError} if either operand is not a synchronous cycle
+ * @throws {TypeError} if either operand is not a synchronous ring
  * @throws {RangeError} if either operand is empty
  */
-export const combineCycles: <A, B>(
-    left: SynchronousCycle<A>,
-    right: SynchronousCycle<B>,
-) => CycleCombination<A, B> = <A, B>(
-    left: SynchronousCycle<A>,
-    right: SynchronousCycle<B>,
-): CycleCombination<A, B> => {
+export const combineRings: <A, B>(
+    left: SynchronousRing<A>,
+    right: SynchronousRing<B>,
+) => RingCombination<A, B> = <A, B>(
+    left: SynchronousRing<A>,
+    right: SynchronousRing<B>,
+): RingCombination<A, B> => {
     if (!left || typeof left.get !== "function") {
-        throw new TypeError("CycleCombination left must be a SynchronousCycle.");
+        throw new TypeError("RingCombination left must be a SynchronousRing.");
     }
     if (!right || typeof right.get !== "function") {
-        throw new TypeError("CycleCombination right must be a SynchronousCycle.");
+        throw new TypeError("RingCombination right must be a SynchronousRing.");
     }
     const leftSize: bigint = left.size();
     const rightSize: bigint = right.size();
     if (leftSize === 0n || rightSize === 0n) {
-        throw new RangeError("CycleCombination requires two non-empty cycles.");
+        throw new RangeError("RingCombination requires two non-empty rings.");
     }
     const divisor: bigint = gcdOf(leftSize, rightSize);
     const period: bigint = leftSize / divisor * rightSize;
@@ -1411,14 +1411,14 @@ export const combineCycles: <A, B>(
     for (let index = 0n; index < period; index++) {
         pairs.push([left.get(index % leftSize), right.get(index % rightSize)] as const);
     }
-    const cycle = new SynchronousCycle<readonly [A, B]>(pairs);
+    const ring = new SynchronousRing<readonly [A, B]>(pairs);
     return {
         period,
         divisor,
-        cycle,
+        ring,
         aligns: (first: bigint, second: bigint): boolean => {
             if (typeof first !== "bigint" || typeof second !== "bigint") {
-                throw new TypeError("CycleCombination positions must be bigints.");
+                throw new TypeError("RingCombination positions must be bigints.");
             }
             return ((first - second) % divisor + divisor) % divisor === 0n;
         },
@@ -1426,8 +1426,8 @@ export const combineCycles: <A, B>(
 };
 
 /**
- * Creates a cycle sampling one phasor per list position.
+ * Creates a ring sampling one phasor per list position.
  * Operations return their results directly.
  */
-export const SynchronousCycle: SynchronousCycleConstructor =
-    createCycleConstructor("SynchronousCycle", false) as unknown as SynchronousCycleConstructor;
+export const SynchronousRing: SynchronousRingConstructor =
+    createRingConstructor("SynchronousRing", false) as unknown as SynchronousRingConstructor;

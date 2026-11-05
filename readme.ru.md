@@ -13,7 +13,7 @@ npm install semantic-typescript
 ```
 
 - Нулевые зависимости времени выполнения, чистый ESM, поставляется со своими типами.
-- 622 регрессионных тестов: `npm test`.
+- 684 регрессионных тестов: `npm test`.
 - Полная история изменений: [CHANGELOG.md](./CHANGELOG.md).
 
 ---
@@ -32,7 +32,9 @@ npm install semantic-typescript
 10. [Периодический анализ: кольца, поля и оценки](#10-periodic-analysis-rings-fields-and-scores)
 11. [Вспомогательные функции](#11-utility-helpers)
 12. [Производительность и подводные камни](#12-performance-and-pitfalls)
-13. [Лицензия](#13-license)
+13. [Фазовые кольца: точный цикл](#13-phase-rings)
+14. [Анализ сигналов: окна, спектры и время](#14-signal-analysis)
+15. [Лицензия](#15-license)
 
 ---
 
@@ -279,7 +281,7 @@ useFrom([1, 2, 3]).shuffle((_e, i) => -i - 1n).toOrdered().toArray();   // [3,2,
 | `toOrderedMap(key, value?)` | `SynchronousOrderedMap<K, V>` | порядок вставки; побеждает последняя запись | O(n) ожидаемо |
 | `toUnorderedMap(key, value?)` | `SynchronousUnorderedMap<K, V>` | не определён | O(n) ожидаемо |
 | `toList()` | `SynchronousList<E>` | порядок обхода, дубликаты сохраняются | O(n) |
-| `toCycle(span?)` | `SynchronousCycle<E>` | порядок обхода задаёт позиции на кольце | O(n) |
+| `toRing(span?)` | `SynchronousRing<E>` | порядок обхода задаёт позиции на кольце | O(n) |
 | `toLRUSet(capacity)` | `SynchronousUnorderedLRUSet<E>` | по давности; выживают только последние `capacity` | O(n²) в худшем случае |
 | `toLRUMap(capacity, key, value?)` | `SynchronousUnorderedLRUMap<K, V>` | по давности | O(n) ожидаемо |
 | `toSkipSet(comparator?)` | `SynchronousSkipSet<E>` | по возрастанию компаратора, с навигацией | O(n²) в худшем случае |
@@ -287,7 +289,7 @@ useFrom([1, 2, 3]).shuffle((_e, i) => -i - 1n).toOrdered().toArray();   // [3,2,
 | `toBinarySearchTree(comparator?)` | `SynchronousBinarySearchTree<E>` | по возрастанию компаратора, сбалансировано по высоте | O(n log n) |
 | `toRootedForest()` | `SynchronousRootedForest<E>` | порядок обхода становится структурой | O(n) |
 
-Тип результата следует за типом элемента самого коллекторабла, поэтому ни один терминал не принимает аргумент типа: `SynchronousCollectable<E>` сразу отдаёт `Array<E>`, `SynchronousList<E>` или `SynchronousOrderedSet<E>`. Остаются только деловые аргументы — компаратор `toOrderedSet` / `toSkipSet` / `toBinarySearchTree`, ёмкость пары LRU, диапазон `toCycle` и извлекатели ключа и значения семейства отображений.
+Тип результата следует за типом элемента самого коллекторабла, поэтому ни один терминал не принимает аргумент типа: `SynchronousCollectable<E>` сразу отдаёт `Array<E>`, `SynchronousList<E>` или `SynchronousOrderedSet<E>`. Остаются только деловые аргументы — компаратор `toOrderedSet` / `toSkipSet` / `toBinarySearchTree`, ёмкость пары LRU, диапазон `toRing` и извлекатели ключа и значения семейства отображений.
 
 Кольцо — это множество, поэтому повторяющиеся элементы сохраняют первую позицию; все остальные структуры выше сохраняют дубликаты, если их собственный контракт не говорит иного (`toOrderedSet`, `toUnorderedSet` и `toSkipSet` — множества; `toBinarySearchTree` и `toList` — нет).
 
@@ -300,7 +302,7 @@ numbers.toList().toArray();                              // [3,1,4,1,5]
 numbers.toSkipSet().first().get();                       // 1 — navigable by comparator
 numbers.toBinarySearchTree().size();                     // 5n — duplicates retained
 numbers.toRootedForest().getRoots().length;              // 1
-useOf(1, 2, 3).toCollectable().toCycle().phaseAt(3n).get().toDegreeValue();      // 0
+useOf(1, 2, 3).toCollectable().toRing().phaseAt(3n).get().toDegreeValue();      // 0
 useOf(3, 1, 3).toCollectable().toOrderedMap(n => n, n => `v${n}`).get(3).get();  // "v3"
 ```
 
@@ -402,9 +404,9 @@ useFrom([1, 2, 3, 4]).toWindow().tumble(2n).toUnordered().toArray()
 поэтому чтение, выданное после записи, всегда её наблюдает.
 
 ```typescript
-const cycle = new AsynchronousCycle([1, 2]);
-const added   = cycle.add(3);          // queued
-const sampled = cycle.elementAt(2n);   // observes the write above
+const ring = new AsynchronousRing([1, 2]);
+const added   = ring.add(3);          // queued
+const sampled = ring.elementAt(2n);   // observes the write above
 await added;
 (await sampled).get().element;         // 3
 ```
@@ -423,14 +425,14 @@ await added;
 
 ### 10.1 Кольцо — это одно целое число
 
-`Cycle` — это **n-кратное кольцо**: количество элементов, позиционный период и число различных
+`Ring` — это **n-кратное кольцо**: количество элементов, позиционный период и число различных
 фаз — одно и то же целое `n`. Фаза позиции вычисляется из её точного остатка, поэтому
 кольцо периодично до бита:
 
 ```typescript
-import { SynchronousCycle } from "semantic-typescript";
+import { SynchronousRing } from "semantic-typescript";
 
-const ring = new SynchronousCycle(["a", "b", "c", "d", "e", "f"]);
+const ring = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
 ring.phaseAt(0n).get().toDegreeValue();   // 0
 ring.phaseAt(1n).get().toDegreeValue();   // 60
 ring.phaseAt(6n).get().getValue() === ring.phaseAt(0n).get().getValue();   // true, exactly
@@ -477,7 +479,7 @@ cosine.sample(useRadian(Math.PI));         // -1
 измеряет его относительно каждой опоры:
 
 ```typescript
-const ring = new SynchronousCycle(["a", "b", "c", "d", "e"]);
+const ring = new SynchronousRing(["a", "b", "c", "d", "e"]);
 const report = ring.analyse(["a", "c", "c", "a", "zz", "e"]);
 
 report.matched;                              // 5
@@ -491,8 +493,8 @@ report.references.map(r => r.count);         // [2, 0, 2, 0, 1]
 различаются только счётчик и среднее.
 
 ```typescript
-const cycle = new SynchronousCycle(["a", "b", "c"]);
-cycle.scoresAt(0, cosine);                   // one score per position, in [-1, 1]
+const ring = new SynchronousRing(["a", "b", "c"]);
+ring.scoresAt(0, cosine);                   // one score per position, in [-1, 1]
 ```
 
 ### 10.4 Связанные инструменты
@@ -503,9 +505,9 @@ cycle.scoresAt(0, cosine);                   // one score per position, in [-1, 
 | `resultant(t?)` | насколько фазоры сконцентрированы прямо сейчас? | O(n) |
 | `analyse(data)` | как эти данные соотносятся с каждым элементом? | O(n · m) |
 | `toSpectrum()` | кольцо как спектр, волновое число на оси частот | O(n²) |
-| `useAngularSpectrum(cycle, instants, plan)` | плоскость `(ω, n)` во времени | O(n² · frames) |
+| `useAngularSpectrum(ring, instants, plan)` | плоскость `(ω, n)` во времени | O(n² · frames) |
 
-Модель дополняют ещё два примитива: `combineCycles(a, b)` соединяет два кольца по их наименьшему общему
+Модель дополняют ещё два примитива: `combineRings(a, b)` соединяет два кольца по их наименьшему общему
 кратному (обратный образ, pullback, а не произведение — пары, которые не могут разделить момент,
 просто отсутствуют), а `rate()` даёт каждому элементу свою внутреннюю частоту, чтобы кольцо могло
 дрейфовать относительно среды. `jetAt`, `windingAt` и `errorIntegralAt` показывают дифференциальное состояние дрейфа.
@@ -713,7 +715,7 @@ useAttribute({ a: 1, b: { c: 2 } }).toUnordered().toArray();
 **`useGenerate` без `interrupt` никогда не завершается.** Всегда передавайте останавливающий предикат или
 нижестоящий `limit` / `takeWhile`.
 
-**`Cycle` — это множество с порядком вставки.** Элементы уникальны и сохраняют порядок, в котором были
+**`Ring` — это множество с порядком вставки.** Элементы уникальны и сохраняют порядок, в котором были
 впервые добавлены. Повторный `add` возвращает `false`, а `set`, который ввёл бы дубликат, бросает
 исключение. Именно это позволяет фазе быть функцией *элемента*, а не той позиции, которую ему случилось
 занимать.
@@ -731,7 +733,646 @@ useAttribute({ a: 1, b: { c: 2 } }).toUnordered().toArray();
 
 ---
 
-<a id="13-license"></a>
-## 13. Лицензия
+<a id="13-phase-rings"></a>
+## 13. Фазовые кольца: точный цикл
+
+Глава 10 представила кольцо как модель цикла и использовала его, чтобы измерять набор данных
+относительно каждой фазы. Эта глава даёт полную поверхность: как позиция становится углом, что
+меняет и что не меняет частота среды, и инструменты, читающие кольцо относительно времени,
+данных и другого кольца.
+
+`SynchronousRing` — это позиционный список, под которым лежит круговое двусвязным кольцом, у которого
+голова и хвост соединены. Одновременно это *множество* с порядком вставки: ни один элемент не
+появляется дважды, а отклонённая запись не трогает ни связи, ни отсчёты. Кольцом, а не просто
+списком, его делает то, что фаза позиции — чистая функция её остатка по модулю текущей длины;
+поэтому кольцо периодично до бита, и его баланс не может дрейфовать.
+
+### 13.1 Кольцо — это одно целое, вычисленное точно
+
+Кольцо несёт `n` элементов, и число элементов, позиционный период и число различных фаз — одно
+и то же целое. Позиция `i` несёт
+
+`phase + span · 2π · (((i mod n) + n) mod n) / n`
+
+причём остаток сокращается в `bigint`, прежде чем стать `number`. Именно поэтому `phaseAt(i)` и
+`phaseAt(i + n)` *тождественны*, а не просто близки: второй вызов сокращается к тому же целому,
+вычисляет то же произведение и даёт тот же double. Индекс далеко за точным целым диапазоном
+`number` всё равно попадает в нужную позицию, а отрицательный индекс идёт по кольцу назад.
+
+| Вызов | Возвращает | Смысл |
+| :--- | :--- | :--- |
+| `new SynchronousRing(source, options?)` | кольцо | `source` — любой итерируемый объект, дубликаты отбрасываются |
+| `getPhase()` / `getFrequency()` / `getSpan()` | `Angle`, `Frequency`, `number` | три параметра конструкции |
+| `size()` | `bigint` | то самое `n`, оно же период |
+| `phaseAt(index)` | `Optional<Angle>` | только собственная фаза; время, скорость и частота игнорируются |
+| `elementAt(index)` | `Optional<RingElement>` | элемент, собственная фаза, частота среды, фазор |
+| `frequencyAt(index)` | `Optional<Frequency>` | скорость среды, пусто для пустого кольца |
+| `toComplex()` / `toComplex(index)` | `Complex[]` / `Optional<Complex>` | собственные фазоры |
+
+`RingOptions` добавляет две функции на элемент: `magnitude(element, index)` задаёт длину фазора
+и по умолчанию равна единице, а `rate(element, index)` даёт элементу собственную частоту и по
+умолчанию равна нулю, то есть фиксированному маркеру.
+
+```typescript
+import { SynchronousRing } from "semantic-typescript";
+
+const ring = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
+
+ring.size();                                                             // 6n
+ring.phaseAt(0n).get().toDegreeValue();                                  // 0
+ring.phaseAt(1n).get().toDegreeValue();                                  // 60
+ring.phaseAt(-1n).get().toDegreeValue();                                 // 300
+ring.phaseAt(6n).get().getValue() === ring.phaseAt(0n).get().getValue(); // true
+ring.phaseAt(10n ** 20n).get().toDegreeValue();                          // 240
+```
+
+`phaseAt(-1n)` на кольце из шести элементов равно `300`, а `10n ** 20n` по модулю шести даёт
+`4`, поэтому читается как `240`. Ни один случай не накапливает произведение с плавающей точкой —
+именно это сохраняет тождество точным при смене представления индекса.
+
+### 13.2 Частота среды и состояние в момент времени
+
+`frequency` — это **скорость вращения среды**, в которую кольцо погружено, а не шаг фазы между
+позициями. Среда сдвигает фазу каждого элемента на один и тот же угол, поэтому не может изменить
+собственный узор, не может сломать баланс и не может изменить ни один результат `phaseAt`. По
+умолчанию она равна `0 Hz`.
+
+`relativeAt(index, time)` вычитает этот общий угол, оставляя координату, по которой оценивается
+`PhaseField`. `viewAt` и `viewsAt` возвращают полное состояние в момент времени, включая
+собственную `rate` элемента, а дифференциальные аксессоры вскрывают дрейф:
+
+| Вызов | Формула | Читает |
+| :--- | :--- | :--- |
+| `relativeAt(index, time)` | `собственная + rate · t − среда · t` | фазу, которую видит среда |
+| `viewAt(index, time)` / `viewsAt(time)` | то же плюс элемент, индекс, время, rate, фазор | полное состояние |
+| `jetAt(index, time)` | фаза в `t`, своя rate, `slip = rate − среда` | дифференциальное состояние |
+| `windingAt(index, time)` | `trunc(slip · t)` | целые обороты скольжения, усечённые к нулю |
+| `errorIntegralAt(index, time, origin?)` | `∫ относительной фазы dt`, в оборотах · секундах | как долго элемент опережает |
+| `resultant(time?)` | `abs(Σ w · e^{iθ}) / Σ w` | концентрация фаз, не зависит от вращения среды |
+| `analyse(data, time?)` | счётчики и средние по каждой опоре | данные, измеренные относительно каждого элемента |
+| `scoreAt(index, time, field)` / `scoresAt(time, field)` | поле, выбранное по относительной фазе | ограниченная оценка на позицию |
+
+```typescript
+import { SynchronousRing, useHertz } from "semantic-typescript";
+
+const moving = new SynchronousRing(["a", "b", "c", "d", "e", "f"], {
+  frequency: useHertz(1),
+});
+
+moving.getFrequency().getHertz();                        // 1
+moving.phaseAt(1n).get().toDegreeValue();                // 60 — intrinsic
+moving.relativeAt(1n, 0.25).get().toDegreeValue();       // 330 — 60 − 90
+moving.viewAt(1n, 0.25).get().relative.toDegreeValue();  // 330
+moving.jetAt(1n, 0.25).get().slip;                       // -1
+moving.purity();                                         // 1 — rotation cannot break it
+```
+
+При `1 Hz` среда за `0.25 s` проходит четверть оборота, поэтому относительная фаза позиции один
+равна `60 − 90 = 330` градусам, а собственная фаза остаётся `60`. Джет сообщает `slip` `-1` герц,
+потому что сам элемент не движется, а `purity()` по-прежнему `1`: поворот всех фазоров на один
+угол не является деформацией.
+
+### 13.3 Чистота и баланс
+
+`purity()` — доля энергии кольца, которую несёт основная мода:
+
+`max(abs(c₁)², abs(c_{n−1})²) / (n · Σ abs(z)²)`
+
+Проверяются оба основных бина, потому что кольцо может обходить круг в любую сторону. Кольцо с
+`span: 5` на шести элементах шагает на `300` градусов, то есть на `−60`: оно идёт назад, кладёт
+всю энергию в `c₅`, и формула, смотрящая только на `c₁`, объявила бы его нечистым. Стоимость
+остаётся `O(n)`, потому что нужны лишь эти два бина и полная энергия.
+
+Граничные случаи — часть контракта. Кольцо из менее чем двух элементов не имеет основной моды и
+сообщает `purity() === 0` и `isBalanced() === false` независимо от содержимого. Кольцо, у
+которого все фазоры нулевой длины, не имеет энергии и тоже сообщает ноль. `isBalanced(epsilon?)`
+равно `1 − purity() <= epsilon` с допуском `1E-9` по умолчанию.
+
+```typescript
+import { SynchronousRing } from "semantic-typescript";
+
+const forward = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
+const backward = new SynchronousRing(["a", "b", "c", "d", "e", "f"], { span: 5 });
+const weighted = new SynchronousRing(["a", "b", "c", "d"], {
+  magnitude: element => element === "a" ? 1 : 0,
+});
+
+forward.purity();                             // 1
+backward.phaseAt(1n).get().toDegreeValue();   // 300 — it runs backwards
+backward.purity();                            // 1 — the energy sits in c₅
+new SynchronousRing(["only"]).purity();       // 0
+new SynchronousRing(["only"]).isBalanced();   // false
+weighted.purity();                            // 0.25
+```
+
+### 13.4 Результирующая длина и симметричные компоненты
+
+`resultant(time?)` — средняя результирующая длина: модуль суммы фазоров, делённый на сумму
+модулей. В отличие от `purity`, спрашивающей, является ли кольцо по-прежнему корнями `n`-й
+степени из единицы, `resultant` спрашивает, насколько фазоры сосредоточены сейчас. Сбалансированное
+кольцо сообщает `0`; кольцо, все элементы которого имеют один угол, сообщило бы `1`, но семантика
+множества запрещает дубликаты, поэтому на практике `1` появляется, когда `magnitude` обнуляет все
+элементы, кроме одного.
+
+`zeroSequence()` — средний фазор, то есть `c₀ / n`. `sequences()` возвращает все `n` симметричных
+компонент, начиная с низшего порядка, прямым преобразованием. `toSpectrum()` упаковывает их в
+`Spectrum`, бин `j` которого сообщает `j` циклов на оборот кольца, так что ось частот — это ось
+волновых чисел.
+
+```typescript
+import { SynchronousRing } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const ring = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
+
+round(ring.resultant().get());                                        // 0
+round(ring.zeroSequence().get().magnitude());                         // 0
+ring.sequences().map(component => round(component.magnitude()));      // [0, 6, 0, 0, 0, 0]
+ring.toSpectrum().get().size();                                       // 6
+ring.toSpectrum().get().getResolution().getHertz();                   // 1
+```
+
+Компоненты комплексны и вообще **не сопряжённо-симметричны**: сбалансированное кольцо кладёт всю
+энергию в бин один, а идущее назад — в бин `n − 1`. Односторонние помощники `Spectrum`
+предполагают вещественный сигнал; читайте бины напрямую, а не сворачивайте их.
+
+### 13.5 Анализ данных относительно каждого элемента
+
+`analyse(data, time?)` сопоставляет каждое наблюдение кольцу по тождеству и измеряет его
+относительно каждого элемента как опорной фазы. Наблюдения, которых кольцо не содержит,
+считаются `missed`, а не угадываются, потому что кольцо — единственный источник фаз. Каждая
+строка опоры сообщает `count`, среднюю относительную фазу `mean` и среднюю результирующую длину
+`resultant`.
+
+Одно тождество стоит запомнить: **`resultant` одинаков для каждой опоры**. Смена базовой линии
+поворачивает все относительные фазы на константу, а поворот не может изменить результирующую
+длину. От опоры к опоре различаются счётчик и среднее.
+
+```typescript
+import { SynchronousRing } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const ring = new SynchronousRing(["a", "b", "c", "d", "e"]);
+const report = ring.analyse(["a", "c", "c", "a", "zz", "e"]);
+
+report.matched;                                                  // 5
+report.missed;                                                   // 1
+report.references.map(row => row.count);                         // [2, 0, 2, 0, 1]
+report.references.map(row => round(row.resultant));              // [0.1453, 0.1453, 0.1453, 0.1453, 0.1453]
+```
+
+Оценка — обратная сторона той же монеты. `PhaseField` — ограниченный ряд косинусов (раздел
+10.2), и `scoreAt`/`scoresAt` выбирают его по относительной фазе, так что одно и то же кольцо
+можно оценивать относительно выравнивания, гармонического узора или любого другого поля, не
+меняя само кольцо.
+
+```typescript
+import { SynchronousRing, useField } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const ring = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
+const cosine = useField([1]);
+
+round(ring.scoreAt(0n, 0, cosine).get());                                  // 1
+round(ring.scoreAt(1n, 0, cosine).get());                                  // 0.5
+ring.scoresAt(0, cosine).map(score => round(score));                       // [1, 0.5, -0.5, -1, -0.5, 0.5]
+```
+
+### 13.6 Объединение колец и угловой спектр
+
+`combineRings(left, right)` соединяет два кольца по наименьшему общему кратному, а не по
+произведению. Момент `i` объединённого кольца читает `i mod m` левого кольца и `i mod n` правого,
+поэтому объединённое кольцо замыкается через `lcm(m, n)` моментов. Пары, которые никогда не могут
+встретиться — те, чьи позиции расходятся по модулю `gcd(m, n)`, — просто отсутствуют; поэтому
+результат является обратным образом, а не произведением, и `aligns(left, right)` сообщает,
+представима ли данная пара.
+
+`useAngularSpectrum(ring, instants, plan)` строит плоскость `(ω, n)`: каждый момент даёт кадр
+фазоров, кадр `k` моды `j` — это `j`-я симметричная компонента этого кадра, а `cells[frame][order]`
+— коэффициент. Взять один столбец — получить временной ряд одной пространственной моды, а
+`spectrum(order)` — её временной спектр.
+
+```typescript
+import { Sample, SynchronousRing, combineRings, useAngularSpectrum } from "semantic-typescript";
+
+const left = new SynchronousRing(["a", "b", "c", "d"]);
+const right = new SynchronousRing(["x", "y", "z", "w", "v", "u"]);
+const joined = combineRings(left, right);
+
+joined.period;                                     // 12n
+joined.divisor;                                    // 2n
+joined.ring.size();                                // 12n
+joined.aligns(0n, 0n);                             // true
+joined.aligns(1n, 0n);                             // false
+joined.ring.get(0n).join("-");                     // a-x
+
+const angular = useAngularSpectrum(left, [0, 0.25, 0.5, 0.75], new Sample(4, 1));
+angular.order;                                     // 4
+angular.frameCount;                                // 4
+angular.cells[0][1].magnitude();                   // 4
+angular.spectrum(1).get().size();                  // 4
+```
+
+### 13.7 Ловушки
+
+**Точность есть точность.** `phaseAt(i)` и `phaseAt(i + n)` — один и тот же double, а не два
+значения в пределах допуска. Кольцо, накапливающее `2π / n` на элемент, этого не выполнит; это
+сначала сокращает индекс в `bigint`.
+
+**`frequency` — не шаг фазы.** Это скорость вращения среды, по умолчанию ноль, и поворот всех
+фазоров на один угол не может сломать собственный узор. Если нужно, чтобы позиции смещались
+относительно друг друга, используйте `rate`, а не `frequency`.
+
+**`purity()` обязана смотреть оба основных бина.** Кольцо, идущее назад, всё ещё остаётся корнями
+`n`-й степени из единицы; только по `c₁` оно выглядело бы нечистым.
+
+**`n < 2` — определённый граничный случай.** `purity()` возвращает `0`, а `isBalanced()` —
+`false`; пустое кольцо возвращает пустые `Optional` из методов выборки.
+
+**Span, делящий множитель с `n`, схлопывает орбиту.** Шесть элементов с `span: 2` посещают лишь
+три различные фазы, и кольцо перестаёт быть сбалансированным.
+
+**`resultant` инвариантен к вращению, но не ко времени.** Вращение среды его не меняет; `rate`
+каждого элемента меняет его по мере расфазировки.
+
+**Кольцо — множество, а `analyse` сопоставляет по тождеству.** Дубликаты отбрасываются при
+создании, а объект, структурно равный элементу кольца, но не являющийся той же ссылкой,
+считается пропущенным.
+
+**`toSpectrum()` комплексен.** Его бины не сопряжённо-симметричны, поэтому односторонние
+помощники `Spectrum` неприменимы. Читайте бины.
+
+**`windingAt` усекает к нулю, а `errorIntegralAt` интегрирует фазу.** Половина оборота скольжения
+сообщается как `0n`; интеграл ошибки — в оборотах · секундах, а не скорость.
+
+```typescript
+import { SynchronousRing, useHertz } from "semantic-typescript";
+
+const collapsed = new SynchronousRing(["a", "b", "c", "d", "e", "f"], { span: 2 });
+collapsed.phaseAt(1n).get().toDegreeValue();   // 120
+collapsed.phaseAt(3n).get().toDegreeValue();   // 0
+Number(collapsed.purity().toFixed(4));         // 0
+
+const falling = new SynchronousRing(["a", "b", "c", "d"], {
+  frequency: useHertz(2),
+  rate: () => useHertz(0.5),
+});
+falling.jetAt(0n, 2).get().slip;               // -1.5
+falling.windingAt(0n, 1).get();                // -1n
+falling.windingAt(0n, 0.5).get();              // 0n
+
+const objects = new SynchronousRing([{ key: 1 }, { key: 2 }]);
+objects.analyse([{ key: 1 }]).missed;          // 1 — identity, not structure
+```
+
+---
+
+<a id="14-signal-analysis"></a>
+## 14. Анализ сигналов: окна, спектры и время
+
+Глава 10 рассматривала кольцо как цикл фаз. Эта глава — его временной аналог: вещественная
+запись, которая несёт, помимо отсчётов, два контекста, нужных любой спектральной формуле, —
+план дискретизации, превращающий номер бина в герцы, и окно, задающее одновременно
+когерентное усиление и эквивалентную шумовую полосу.
+
+Объект-значение — `SynchronousSignalCollectable`, его очередь-двойник —
+`AsynchronousSignalCollectable`. Оба предоставляют одну и ту же поверхность `SignalCollectable`:
+двадцать три метода, каждый делегирует ровно одной фабрике `useSynchronous<Method>` в
+`synchronous/collectors`. Разделение намеренно. Класс — документированный фасад, фабрика
+владеет накоплением, а конструктор один раз при данной длине вычисляет `sum(w) / count` и
+`count * sum(w^2) / sum(w)^2`. Тот, кому нужно помнить «разделить на когерентное усиление»,
+рано или поздно забудет, и полученные 6,02 децибела выглядят как правдоподобное измерение.
+
+### 14.1 Сигнал несёт собственную калибровку
+
+Сигнал строится из итерируемого объекта и частоты, из существующего `Frame` или из конструктора
+с явным `Sample`. Окно по умолчанию — периодическое окно Ханна; любой анализ, не назвавший окно,
+использует его, и любой анализ принимает замену. Аксессоры метаданных читают зафиксированное при
+создании состояние за постоянное время, поэтому сигнал можно передавать, не теряя контекст.
+
+| Вызов | Возвращает | Смысл |
+| :--- | :--- | :--- |
+| `SynchronousSignalCollectable.useRate(values, rate, window?)` | сигнал | длительность `count / rate` |
+| `SynchronousSignalCollectable.useFrame(frame, window?)` | сигнал | сохраняет план кадра |
+| `new SynchronousSignalCollectable(plan, values, window?)` | сигнал | число кадров должно совпадать с числом отсчётов |
+| `getSample()` / `getValues()` / `getWindow()` | план, отсчёты, окно | замороженный контекст |
+| `getRate()` | `number` | отсчётов в секунду |
+| `getNyquist()` / `getResolution()` | `Frequency` | `rate / 2` и `rate / count` |
+| `getCoherentGain()` / `getNoiseBandwidth()` | `number` | пересчитываются при этой длине |
+| `size()` / `at(index)` / `toFrame()` / `equals(other)` / `toString()` | — | семантика значения |
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const signal = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 64 }, (_unused, index) => Math.cos(2 * Math.PI * 8 * index / 64)),
+  64,
+);
+
+signal.size();                       // 64n
+signal.getRate();                    // 64
+signal.getNyquist().getHertz();      // 32
+signal.getResolution().getHertz();   // 1
+signal.getCoherentGain();            // 0.5
+signal.getNoiseBandwidth();          // 1.5
+```
+
+`getResolution()` — это шаг между бинами, а не разрешающая способность: он равен `rate / count`,
+потому что в преобразовании `count` бинов, а дополнение нулями меняет шаг, но не то, что окно
+способно разделить (раздел 14.8).
+
+### 14.2 Двадцать три метода
+
+Методы образуют шесть семейств. Семь — спектральные отсчёты, два — время-частотные
+преобразования, четыре — аналитические величины, три — статистики последовательности, пять —
+дескрипторы формы, и два возвращают другой сигнал.
+
+| Метод | Возвращает | Соглашение |
+| :--- | :--- | :--- |
+| `spectrum(size?, window?)` | `Spectrum` | сырое и ненормированное, полная комплексная сетка |
+| `oneSided(size?, window?)` | `Bin[]` | сопряжённая половина свёрнута, DC и Найквист не удваиваются |
+| `amplitude(window?)` | `number[]` | `2·abs(X) / (count · CG)`, DC и Найквист один раз |
+| `power(window?)` | `number[]` | `A² / 2` для внутреннего бина, `A²` при DC и Найквисте |
+| `decibel(window?)` | `number[]` | `20·log10(амплитуда)` |
+| `powerDecibel(window?)` | `number[]` | `10·log10(мощность)` |
+| `powerSpectralDensity(frameSize?, hopSize?, window?)` | `SpectralDensity` | среднее Уэлча, `abs(X)² / (rate · Σw²)` |
+| `shortTimeFourierTransform(frameSize, hopSize, window?)` | `Spectrum[]` | расширенные края, время по центрам кадров |
+| `spectrogram(frameSize, hopSize, window?)` | `Spectrogram` | те же столбцы с осью времени |
+| `analyticSignal()` | `Complex[]` | пара Гильберта `x + i·H(x)` |
+| `instantaneousPhase()` | `Angle[]` | свёрнута в `[0, 2π)` |
+| `instantaneousFrequency(rate?, gate?)` | `number[]` | развёрнутая разность фаз с порогом по огибающей |
+| `envelope()` | `number[]` | `abs(z[n])`, на краях циклическая |
+| `zeroCrossingRate(perSecond?)` | `number` | переходов через ноль на пару соседних отсчётов |
+| `spectralFlux(frameSize?, hopSize?, window?)` | `number[]` | расстояние нормированных по норме кадров |
+| `autocorrelation(maximumLag?, normalization?)` | `number[]` | по умолчанию коэффициент, `ρ[0] = 1` |
+| `spectralCentroid(window?)` | `Optional<Frequency>` | средняя частота, взвешенная мощностью |
+| `spectralBandwidth(window?)` | `Optional<Frequency>` | стандартное отклонение, взвешенное мощностью |
+| `spectralRolloff(ratio?, window?)` | `Optional<Frequency>` | первый бин, достигающий `ratio` мощности |
+| `spectralFlatness(window?)` | `number` | геометрическое среднее к арифметическому по мощности |
+| `signalToNoiseRatio(frameSize?, hopSize?, window?, floorQuantile?)` | `Optional<number>` | медианный шумовой пол, `10·log10` |
+| `detrended(mode?)` | сигнал | `"none"`, `"constant"` (по умолчанию), `"linear"` |
+| `windowed(window?)` | сигнал | применяет окно и принимает его |
+
+Необязательные аргументы — не украшение. `frameSize` по умолчанию `min(256, size)`, шаг —
+половина кадра с округлением вниз, `instantaneousFrequency` ставит порог `1E-3` от пиковой
+огибающей, а `spectralRolloff` использует `0.85`. Каждое значение по умолчанию — то, что
+выбирает эталонная реализация, когда параметр назван, но не передан.
+
+### 14.3 Амплитуда, мощность и плотность
+
+Нужны три нормировки, потому что задаются три разных вопроса.
+
+`amplitude()` отвечает «как велик синус на этом бине»: `2·abs(X[k]) / (count · CG)` для
+внутреннего бина и `abs(X[k]) / (count · CG)` при DC и Найквисте. Множитель два сворачивает
+сопряжённую половину; когерентное усиление убирает окно. Если опустить любое из двух, синус
+единичной амплитуды прочитается как `0.5`, то есть минус 6,02 децибела.
+
+`power()` отвечает «какой средний квадрат имел бы синус на этом бине»: `A² / 2` для внутреннего
+бина и `A²` при DC и Найквисте, потому что эти два не колеблются. Это пиковая конвенция, и она
+намеренно не удовлетворяет теореме Парсеваля: окно размазывает каждую линию по главному
+лепестку, поэтому сумма всех бинов превышает средний квадрат на эквивалентную шумовую полосу —
+`1.5` для Ханна.
+
+`powerSpectralDensity()` отвечает «сколько мощности на герц»: `abs(X)² / (rate · Σw²)`, усредняя
+по перекрывающимся сегментам. Только сумма квадратов весов оставляет пол белого шума
+несмещённым; деление на `count` даёт `0.375` для единичного шума, деление на `count · CG²` даёт
+`1.5`.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const tone = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 256 }, (_unused, index) => Math.cos(2 * Math.PI * 32 * index / 256)),
+  256,
+);
+
+round(tone.amplitude()[32]);                                 // 1
+round(tone.power()[32]);                                     // 0.5
+round(tone.power().reduce((sum, power) => sum + power, 0));  // 0.75
+round(tone.powerSpectralDensity(64n, 32n).totalPower());     // 0.5
+tone.powerSpectralDensity(64n, 32n).getSegments();           // 7n
+```
+
+Пара итогов — та проверка, которую стоит запомнить: сумма в пиковой конвенции равна `0.75`, а
+плотность интегрируется в `0.5`, и отношение равно ровно шумовой полосе. К тому же плотность —
+единственная из трёх, кто выживает при смене длины кадра.
+
+### 14.4 Уровни: две конвенции децибела
+
+Амплитуда и мощность не делят множитель, значит, не делят и логарифм. `amplitudeDecibel`
+применяет `20·log10` и годится для напряжения, смещения или звукового давления;
+`powerDecibel` применяет `10·log10` и годится для мощности, энергии, среднего квадрата или
+плотности. Имена методов сигнала следуют тому же разделению.
+
+```typescript
+import { amplitudeDecibel, powerDecibel, SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const tone = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 256 }, (_unused, index) => Math.cos(2 * Math.PI * 32 * index / 256)),
+  256,
+);
+
+amplitudeDecibel(0.25);           // -12.0412
+powerDecibel(0.25);               // -6.0206
+round(tone.decibel()[32]);        // 0
+round(tone.powerDecibel()[32]);   // -3.0103
+```
+
+Оба отсчёта одного тона верны: его амплитуда равна единице (ноль децибел), а средний квадрат —
+половине (минус 3,01 децибела). Если подать мощность в амплитудную конвенцию, уровень в
+децибелах удвоится, и правильные минус 6,02 станут минус 12,04.
+
+### 14.5 Одностороннее свёртывание
+
+Вещественный сигнал удовлетворяет `X[count − k] = conj(X[k])`, поэтому половина отрицательных
+частот не несёт независимой информации. Свёртывание удваивает каждый внутренний бин и оставляет
+два самосопряжённых бина — DC и, при чётной длине, Найквиста — ровно такими, какими их создало
+преобразование. Эти два — собственное зеркало; удвоение изобретает энергию и даёт ровно на 6,02
+децибела больше.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const edge = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 16 }, (_unused, index) => 2 + Math.cos(Math.PI * index)),
+  16,
+);
+const bins = edge.oneSided();
+
+bins.length;                  // 9
+round(bins[0].magnitude());   // 16
+round(bins[8].magnitude());   // 8
+round(edge.amplitude()[0]);   // 2
+round(edge.amplitude()[8]);   // 1
+```
+
+Сырые величины равны `16` и `8`, потому что веса окна суммируются в восемь; деление на
+`count · CG = 8` превращает их в калиброванные амплитуды `2` и `1`. Удвоение краевых бинов дало
+бы `4` и `2`, и эта ошибка никогда не вызвала бы исключения.
+
+### 14.6 Время-частотные представления
+
+`shortTimeFourierTransform` и `spectrogram` нарезают запись так же, как эталонное
+кратковременное преобразование: по половине кадра нулей с каждого конца, затем хвост,
+дополненный нулями до целого числа шагов. Первый кадр центрирован на первом отсчёте, последний
+достигает последнего отсчёта, а кадр `m` центрирован на `m · hop / rate` секундах. Сохранение
+только полных кадров выбросило бы до `frameSize − 1` отсчётов — для 1000 отсчётов, кадра 256 и
+шага 128 это 104 отсчёта, около десятой части записи.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const tone = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 64 }, (_unused, index) => Math.cos(2 * Math.PI * 4 * index / 64)),
+  64,
+);
+const spectrogram = tone.spectrogram(16n, 8n);
+
+spectrogram.size();                               // 9
+spectrogram.getFrameSize();                       // 16
+spectrogram.getBoundary();                        // "zeros"
+spectrogram.getTime(0);                           // 0
+spectrogram.getTime(6);                           // 0.75
+tone.shortTimeFourierTransform(16n, 8n).length;   // 9
+tone.spectralFlux(16n, 8n).length;                // 8
+```
+
+Каждый столбец — это `Spectrum` на `frameSize` бинов, ровно то, что дал бы `spectrum()` для того
+же кадра, а `getTime()` сообщает центры кадров, а не их начала.
+
+### 14.7 Окна, когерентное усиление и COLA
+
+У каждой формы две версии. Симметричная делит на `count − 1`; периодическая (чётная по ДПФ) делит
+на `count`, на один отсчёт меньше полного периода, поэтому окно непрерывно при периодическом
+продолжении, которое предполагает ДПФ. Анализу и суммированию с перекрытием нужна
+периодическая форма; проектирование фильтров сохраняет симметричную.
+
+Разница измерима и никогда не вызывает ошибки. При пятидесяти процентах перекрытия
+периодическое окно Ханна суммируется в единицу в каждой позиции; симметричная форма пульсирует:
+`0.84` децибела при шестнадцати отсчётах, `0.21` при шестидесяти четырёх и всё ещё `0.013` при
+тысяче двадцати четырёх. Класс предоставляет когерентное усиление и эквивалентную шумовую полосу
+своего окна, поэтому поправка никогда не зашита: симметричный Ханн при восьми отсчётах читается
+как `0.4375`, а не `0.5`.
+
+```typescript
+import {
+  coherentGain, equivalentNoiseBandwidth, useFlatTopWindow,
+  useHannPeriodicWindow, useHannWindow,
+} from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+
+round(useHannWindow(1, 4));                           // 0.75
+round(useHannPeriodicWindow(1, 4));                   // 0.5
+coherentGain(useHannPeriodicWindow, 16);              // 0.5
+equivalentNoiseBandwidth(useHannPeriodicWindow, 16);  // 1.5
+useFlatTopWindow(0, 1024);                            // -0.000421
+Array.from({ length: 1024 }, (_unused, i) => useFlatTopWindow(i, 1024)).filter(w => w < 0).length;  // 578
+```
+
+Строка flat-top — не ошибка таблицы. Окно flat-top по определению частично отрицательно — здесь
+578 из 1024 весов, — и обрезание этих весов до нуля исказило бы главный лепесток и уничтожило
+бы малые потери scalloping, ради которых окно существует. Библиотека возвращает ряд без
+изменений.
+
+### 14.8 Ловушки
+
+**Дополнение нулями интерполирует, но никогда не разрешает.** Длина преобразования больше числа
+отсчётов лишь плотнее дискретизирует ту же ДПФ-непрерывную функцию: *положение* пика уточняется,
+а шаг бинов становится `rate / size`, но способность разделить две компоненты по-прежнему
+определяется длиной и формой окна. Тон ровно между двумя бинами читается как `82.1093` и
+`80.8598` на сетке без дополнения и как `128` на своей частоте на дополненной сетке.
+
+```typescript
+import { SynchronousSignalCollectable, useRectangularWindow } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const tone = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 256 }, (_unused, index) => Math.cos(2 * Math.PI * 100.5 * index / 256)),
+  256,
+);
+const flat = tone.spectrum(256n, useRectangularWindow);
+const padded = tone.spectrum(1024n, useRectangularWindow);
+
+flat.getResolution().getHertz();           // 1
+padded.getResolution().getHertz();         // 0.25
+round(flat.magnitudeAt(100).get());        // 82.1093
+round(flat.magnitudeAt(101).get());        // 80.8598
+round(padded.magnitudeAt(402).get());      // 128
+padded.frequencyAt(402).get().getHertz();  // 100.5
+```
+
+Два равных тона с разносом `0.4` бина остаются слитыми при любом дополнении: при записи из 256
+точек и окне Ханна дополнение до 8192 даёт один локальный максимум, а не два.
+
+**Преобразование Гильберта циклично.** `analyticSignal`, `envelope` и `instantaneousPhase`
+считают первый и последний отсчёты соседями, поэтому запись, период которой не делит её длину,
+загрязнена на обоих концах. Середина записи надёжна, края — нет.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const edge = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 512 }, (_unused, index) => Math.cos(2 * Math.PI * 8.3 * index / 512)),
+  512,
+);
+const envelope = edge.envelope();
+
+round(envelope.slice(8, -8).reduce((sum, value) => sum + value, 0) / 496);  // 1.0025
+round(Math.max(...envelope.slice(0, 8)));                                   // 1.2592
+round(Math.min(...envelope.slice(-8)));                                     // 0.1314
+```
+
+**Исчезающая огибающая не определяет фазу.** Там, где огибающая рушится, разность двух углов
+шума округления может достигать пол-оборота, что читается как половина частоты дискретизации.
+Порог — именно то, что сохраняет числу смысл, и по умолчанию он равен `1E-3` от пиковой
+огибающей.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const beat = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 4096 }, (_unused, index) =>
+    Math.cos(2 * Math.PI * 100 * index / 2048) + Math.cos(2 * Math.PI * 102 * index / 2048)),
+  2048,
+);
+
+round(Math.max(...beat.instantaneousFrequency(2048, 0).map(Math.abs)));  // 920.218
+round(Math.max(...beat.instantaneousFrequency().map(Math.abs)));         // 101
+```
+
+**Ненормированная корреляция — не мера сходства.** Сырая сумма `r[k]` растёт с длиной записи,
+поэтому две длины несравнимы. Правило по умолчанию `"coefficient"` делит на `r[0]` и держит все
+значения в `[-1, 1]`; `"unbiased"` делит на `count − k` и платит дисперсией, растущей с задержкой.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const periodic = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 1024 }, (_unused, index) => Math.cos(2 * Math.PI * 8 * index / 1024)),
+  1024,
+);
+const rho = periodic.autocorrelation(200n);
+
+round(rho[0]);                                     // 1
+round(rho[128]);                                   // 0.875
+round(rho[64]);                                    // -0.9375
+round(periodic.autocorrelation(200n, "none")[0]);  // 512
+```
+
+Ещё один отсчёт заслуживает предупреждения: `spectralFlux` нормирует каждый кадр перед
+сравнением, поэтому чистое изменение уровня даёт нулевой поток. Его первое и последнее значения —
+краевые артефакты нулевой границы, а не атаки.
+
+---
+
+<a id="15-license"></a>
+## 15. Лицензия
 
 MIT © Eloy Kim

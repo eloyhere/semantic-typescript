@@ -1,36 +1,34 @@
 /**
- * The synchronous window collectable: a buffered ordered source whose primary
- * operations split the buffered sequence into sliding, tumbling and partitioned
- * views.
+ * The synchronous window API: buffered ordered sources whose primary operations
+ * split the buffered sequence into sliding, tumbling and partitioned views.
  *
- * This module is the transitional home of the synchronous window API and
- * intentionally duplicates `SynchronousWindowCollectable` from
- * `#semantic/synchronous/semantic`. The class hierarchy, the buffered order and
- * the window boundaries are preserved. The one behavioural difference is that
- * `slide` and `tumble` return materialised window arrays instead of a lazy
- * `SynchronousSemantic<SynchronousSemantic<E>>` pipeline: constructing that
- * pipeline here would require a runtime import of
- * `#semantic/synchronous/semantic`, and the pipeline itself constructs the
- * window collectable in its `toWindow()` terminal, so the runtime edge would
- * close a module cycle once this file is wired into the package. Keeping the
- * duplicate free of that edge leaves the lazy pipeline to the pipeline layer;
- * callers that need one can pass the buffered generator to the inherited
- * `pipe()` with their own `SynchronousSemantic` constructor, and
- * {@link WindowPipeline} names the shape that `slide` and `tumble` used to
- * return.
+ * Two window collectables live here. {@link SynchronousWindowCollectable}
+ * re-exposes every window as a lazy `SynchronousSemantic` pipeline, so a window
+ * can be consumed without materialising it first; this is the form `toWindow()`
+ * returns and the form the README documents.
+ * {@link SynchronousWindowArrayCollectable} materialises every window into an
+ * array instead, which is the cheapest form when the caller consumes the
+ * windows immediately and discards them.
  *
  * Ordering semantics: construction buffers the source in comparator order, or
  * in normalised encounter-index order when no comparator is supplied, exactly
- * as {@link OrderedCollectable} does. Every window is a contiguous run of that
- * buffered sequence, windows are reported in ascending start position, and the
- * elements inside a window keep the buffered order. The inherited `partition`
- * is not a contiguous split: it distributes elements by buffered position
- * modulo the requested count.
+ * as {@link SynchronousOrderedCollectable} does. Every window is a contiguous
+ * run of that buffered sequence, windows are reported in ascending start
+ * position, and the elements inside a window keep the buffered order. The
+ * inherited `partition` is not a contiguous split: it distributes elements by
+ * buffered position modulo the requested count.
  *
  * Complexity: buffering costs O(n) memory and O(n log n) time. `slide` and
- * `tumble` copy O(w * s) elements for w windows of at most s elements (O(n)
- * when the step is at least the window size), and `partition` is O(n). Every
- * inherited terminal operation keeps its own documented cost.
+ * `tumble` copy O(w * s) elements on the materialised class for w windows of at
+ * most s elements (O(n) when the step is at least the window size) and copy no
+ * elements on the pipeline class; `partition` is O(n). Every inherited terminal
+ * operation keeps its own documented cost.
+ *
+ * The pipeline class references `SynchronousSemantic` at runtime while
+ * `#semantic/synchronous/semantic` references the class back, so the two modules
+ * form a cycle. The cycle is safe: the class body only reads
+ * `SynchronousOrderedCollectable`, and the `SynchronousSemantic` binding is read
+ * inside methods, after both modules have been evaluated.
  *
  * @module
  */
@@ -38,23 +36,29 @@
 import { isBigInt } from "#semantic/guard";
 import { useCompare } from "#semantic/hook";
 import { SynchronousWindowCollectableSymbol } from "#semantic/symbol";
-import { validate, type Comparator, type SynchronousGenerator } from "#semantic/utility";
-import { OrderedCollectable } from "#semantic/synchronous/collectable";
-import type { SynchronousSemantic } from "#semantic/synchronous/semantic";
+import {
+    invalidate,
+    validate,
+    type BiConsumer,
+    type BiPredicate,
+    type Comparator,
+    type Consumer,
+    type Indexed,
+    type Predicate,
+    type SynchronousGenerator
+} from "#semantic/utility";
+import { SynchronousOrderedCollectable } from "#semantic/synchronous/collectable";
+import { SynchronousSemantic } from "#semantic/synchronous/semantic";
 
 /**
- * The lazy pipeline shape that `slide` and `tumble` produced before the module
- * split.
+ * The lazy pipeline shape that a window split produces.
  *
- * The window methods of this module materialise their windows, so the lazy
- * form is no longer constructed here. The alias keeps that shape documented and
- * lets a caller annotate the value of the inherited `pipe()` conversion without
- * importing the pipeline class into this module at runtime.
+ * The outer pipeline emits one inner pipeline per window in ascending start
+ * position; each inner pipeline replays its window in buffered order and reports
+ * the buffered position as the bigint index.
  *
- * Ordering: the outer pipeline emits one inner pipeline per window in ascending
- * start position; each inner pipeline replays its window in buffered order.
  * Complexity: naming the type is free; building the pipeline is O(1) and
- * iterating it copies the windows lazily.
+ * iterating it reads the already buffered elements.
  *
  * @template E - The source element type.
  */
@@ -62,7 +66,7 @@ export type WindowPipeline<E> = SynchronousSemantic<SynchronousSemantic<E>>;
 
 /**
  * A buffered ordered source supporting sliding, tumbling and partitioned
- * windows.
+ * windows materialised as arrays.
  *
  * Responsibility: exposes the window splits over the ordered buffer while
  * keeping every inherited collectable terminal available on the same object.
@@ -81,7 +85,7 @@ export type WindowPipeline<E> = SynchronousSemantic<SynchronousSemantic<E>>;
  *
  * @template E - The source element type.
  */
-export class WindowCollectable<E> extends OrderedCollectable<E> {
+export class SynchronousWindowArrayCollectable<E> extends SynchronousOrderedCollectable<E> {
     protected readonly WindowCollectable: symbol = SynchronousWindowCollectableSymbol;
     /**
      * The built-in object tag identifying this API implementation.
@@ -94,10 +98,10 @@ export class WindowCollectable<E> extends OrderedCollectable<E> {
     /**
      * Drains the source into an ordered buffer and installs the window brand.
      *
-     * The element order is whatever {@link OrderedCollectable} establishes:
-     * comparator order when a comparator is supplied, otherwise ascending
-     * normalised encounter index. The window methods later read this fixed
-     * buffer, so they never re-run the generator.
+     * The element order is whatever {@link SynchronousOrderedCollectable}
+     * establishes: comparator order when a comparator is supplied, otherwise
+     * ascending normalised encounter index. The window methods later read this
+     * fixed buffer, so they never re-run the generator.
      *
      * Ordering: comparator order, or ascending normalised encounter index when
      * no comparator is supplied.
@@ -145,7 +149,7 @@ export class WindowCollectable<E> extends OrderedCollectable<E> {
      *
      * @returns This collectable as a window view.
      */
-    public toWindow(): WindowCollectable<E> {
+    public toWindow(): SynchronousWindowArrayCollectable<E> {
         return this;
     }
     /**
@@ -156,8 +160,8 @@ export class WindowCollectable<E> extends OrderedCollectable<E> {
      * window is partial, and a step larger than the size skips the elements
      * between windows. An empty buffer produces no windows. Because the result
      * is materialised, it holds `O(w * s)` elements for `w` windows of at most
-     * `s` elements; the old pipeline handed the same bounds to a lazy iterator
-     * instead.
+     * `s` elements; {@link SynchronousWindowCollectable} hands the same bounds
+     * to a lazy iterator instead.
      *
      * Ordering: windows are reported by ascending start position, and the
      * elements inside a window keep the buffered order. Positions are the
@@ -227,5 +231,148 @@ export class WindowCollectable<E> extends OrderedCollectable<E> {
      */
     public override partition(count: bigint): Array<Array<E>> {
         return super.partition(count);
+    }
+};
+
+/**
+ * A buffered ordered source that re-exposes its windows as lazy pipelines.
+ *
+ * Responsibility: the object `toWindow()` returns. Each window is a
+ * `SynchronousSemantic` that replays a contiguous run of the buffer, so a caller
+ * can transform, filter or consume a window without materialising it into an
+ * array. Construction buffers the source once, exactly like
+ * {@link SynchronousWindowArrayCollectable}.
+ *
+ * Ordering semantics: elements are held in comparator order, or in normalised
+ * encounter-index order when no comparator is supplied. Windows are reported in
+ * ascending start position and each inner pipeline replays its window in
+ * buffered order, reporting the buffered position as the bigint index.
+ *
+ * Complexity: construction is O(n) buffering plus O(n log n) sorting; `slide`
+ * and `tumble` are O(1) to build and read the buffered elements lazily while the
+ * outer pipeline is iterated.
+ *
+ * @template E - The source element type.
+ */
+export class SynchronousWindowCollectable<E> extends SynchronousOrderedCollectable<E> {
+    protected readonly WindowCollectable: symbol = SynchronousWindowCollectableSymbol;
+    /**
+     * The built-in object tag identifying this API implementation.
+     */
+    [Symbol.toStringTag]: string = "SynchronousWindowCollectable";
+    /**
+     * Starts buffering the generator for this collectable.
+     *
+     * @param generator - The callback-based source to consume.
+     */
+    public constructor(generator: SynchronousGenerator<E>);
+    /**
+     * Starts buffering the generator for this collectable.
+     *
+     * @param generator - The callback-based source to consume.
+     * @param comparator - The comparison function; defaults to the library comparator.
+     */
+    public constructor(generator: SynchronousGenerator<E>, comparator: Comparator<E>);
+    /**
+     * Starts buffering the generator for this collectable.
+     *
+     * @param parameter - The callback-based source to buffer.
+     * @param comparator - The comparison function; defaults to the library comparator.
+     */
+    public constructor(parameter: SynchronousGenerator<E>, comparator: Comparator<E> = useCompare) {
+        super(parameter, comparator);
+        Object.defineProperties(this, {
+            "SynchronousWindowCollectable": {
+                value: SynchronousWindowCollectableSymbol,
+                writable: false,
+                enumerable: false,
+                configurable: false
+            }
+        });
+    }
+    /**
+     * Iterates over the elements in this collectable traversal order.
+     *
+     * @returns An iterator over the collected elements.
+     */
+    public *[Symbol.iterator](): globalThis.Generator<E, void, undefined> {
+        for (let { element } of this.buffer) {
+            yield element;
+        }
+    }
+    /**
+     * Creates windows over the buffered order, including a final partial window.
+     *
+     * Window `k` covers the half-open buffered position range
+     * `[k * step, k * step + size)`, clipped to the buffer length, so the last
+     * window is partial and a step larger than the size skips the elements
+     * between windows. An empty buffer produces no windows. Every window is
+     * returned as a lazy pipeline, so no elements are copied until the caller
+     * iterates it.
+     *
+     * Ordering: the outer pipeline emits one inner pipeline per window in
+     * ascending start position, and each inner pipeline replays its window in
+     * buffered order.
+     * Complexity: O(1) to build; iterating copies nothing beyond the buffered
+     * elements.
+     *
+     * @param size - The positive maximum window size.
+     * @param step - The positive distance between window starts; defaults to one.
+     * @returns A pipeline of windows retaining the buffered element positions.
+     * @throws {RangeError} If `size` or `step` is not a positive bigint.
+     */
+    public slide(size: bigint, step: bigint = 1n): WindowPipeline<E> {
+        if (size > 0n && step > 0n) {
+            return new SynchronousSemantic<SynchronousSemantic<E>>((accept: Consumer<SynchronousSemantic<E>> | BiConsumer<SynchronousSemantic<E>, bigint>, interrupt: Predicate<SynchronousSemantic<E>> | BiPredicate<SynchronousSemantic<E>, bigint>): void => {
+                try {
+                    let index: bigint = 0n;
+                    for (let start: bigint = 0n; start < BigInt(this.buffer.length); start += step) {
+                        let end: bigint = start + size;
+                        let inner: SynchronousSemantic<E> = new SynchronousSemantic<E>((accept: Consumer<E> | BiConsumer<E, bigint>, interrupt: Predicate<E> | BiPredicate<E, bigint>): void => {
+                            for (let index: bigint = start; index < end && index < BigInt(this.buffer.length); index++) {
+                                let indexed: Indexed<E> = this.buffer[Number(index)];
+                                if (invalidate(indexed)) {
+                                    continue;
+                                }
+                                if (interrupt(indexed.element, index)) {
+                                    break;
+                                }
+                                accept(indexed.element, index);
+                            }
+                        });
+                        if (interrupt(inner, index)) {
+                            break;
+                        }
+                        accept(inner, index);
+                        index++;
+                    }
+                }
+                catch (error) {
+                    throw new Error("Uncaught error on slide.");
+                }
+            });
+        }
+        throw new RangeError("Invalid arguments.");
+    }
+    /**
+     * Creates non-overlapping windows by using the size as the step.
+     *
+     * This is `slide(size, size)`: only the final window may be partial and no
+     * element appears in two windows.
+     *
+     * @param size - The positive maximum window size.
+     * @returns A pipeline of windows, including a final partial window.
+     * @throws {RangeError} If `size` is not a positive bigint.
+     */
+    public tumble(size: bigint): WindowPipeline<E> {
+        if (isBigInt(size) && size > 0n) {
+            try {
+                return this.slide(size, size);
+            }
+            catch (error) {
+                throw new Error("Uncaught error on tumble.");
+            }
+        }
+        throw new RangeError("Invalid arguments.");
     }
 };

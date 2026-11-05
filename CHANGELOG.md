@@ -8,12 +8,13 @@ A Simplified Chinese edition is kept in [`CHANGELOG.cn.md`](./CHANGELOG.cn.md).
 
 ---
 
-## [Unreleased]
+## [2.0.0] - 2026-11-05
 
-This entry covers the work merged after 1.2.0 and not yet released. It is a
-large change: the collection families were split, the phase-ring API was
-reworked, and several asynchronous lifecycle defects were fixed. Read the
-"Breaking", "Changed" and "Removed" sections before upgrading.
+This release covers the work merged after 1.2.0. It is a large change: the
+collection families were split, the phase-ring API was reworked, the statistics,
+window, signal and distribution modules became public entry points, and several
+asynchronous lifecycle defects were fixed. Read the "Breaking", "Changed" and
+"Removed" sections before upgrading.
 
 ### Breaking
 
@@ -211,6 +212,32 @@ systematically biased levels and time-frequency frames.
 - **`Spectrogram.getBoundary()`** and **`Sampler.spectrogram(..., options)`**,
   so a spectrogram retains the extension mode and trims it during `toFrame`.
 
+**Public modules**
+
+- **`statistics.ts`, `window.ts`, `signal.ts` and `distribution.ts` are now the
+  home of their API**, in both `synchronous/` and `asynchronous/`. The classes
+  and value objects they own are re-exported by `semantic.ts`, so the historical
+  import path `#semantic/synchronous/semantic` (and its asynchronous twin) keeps
+  exposing them while the duplicate definitions are gone.
+- **New named exports**: `SynchronousStatistics`, `SynchronousBigIntStatistics`,
+  `SynchronousNumericStatistics`, `SynchronousWindowCollectable`,
+  `SynchronousWindowArrayCollectable`, `SynchronousSignalCollectable`,
+  `SynchronousDistributionCollectable` and their `Asynchronous*` counterparts,
+  plus the distribution value objects (`Histogram`, `HistogramBin`,
+  `EmpiricalDistribution`, `MomentSummary`, `RobustSummary`, `DensityEstimate`)
+  and `SpectralDensity`. Every class carries the synchronous/asynchronous prefix
+  the rest of the library uses, because an unprefixed pair would collide in the
+  package barrel.
+- **Deep imports**: `package.json` now maps `semantic-typescript/signal`,
+  `semantic-typescript/statistics`, `semantic-typescript/window` and
+  `semantic-typescript/distribution` to the synchronous module of the same name,
+  with its declaration file, so a consumer can import one analysis module
+  without loading the whole barrel.
+- **`SynchronousWindowArrayCollectable`** (and its asynchronous twin) materialises
+  `slide` / `tumble` into arrays. `toWindow()` keeps returning
+  `SynchronousWindowCollectable`, the lazy pipeline form the README documents, so
+  a window can still be transformed before it is consumed.
+
 **Project**
 
 - README rewritten in nine languages on a shared thirteen-section outline, with a
@@ -310,9 +337,9 @@ systematically biased levels and time-frequency frames.
 
 ### Tests
 
-- 622 assertions, all passing, with `tsc` reporting no diagnostics. New files
+- 684 assertions, all passing, with `tsc` reporting no diagnostics. New files
   cover the ordered and unordered sets, the error hierarchy, forest
-  construction, and the 1.3.0 statistics definitions: all nine Hyndman–Fan
+  construction, and the 2.0.0 statistics definitions: all nine Hyndman–Fan
   quantile types, `G1`/`G2` against `g1`/`g2`, `ddof`, the closed-form
   standard errors, and the small-sample empty optionals across the
   synchronous, asynchronous, numeric and bigint views.
@@ -532,7 +559,7 @@ described in section four of `FIXES.md`.
 ## Earlier versions
 
 - **[1.0.0] - 2026-04-07**: the latest version previously on npm. It carries the
-  sixteen blocking defects listed above, so **upgrading straight to 1.1.0 is
+  sixteen blocking defects listed above, so **upgrading straight to 2.0.0 is
   recommended**. The repository `package.json` was still at `0.7.1` when it was
   published, so the repository and the published artefact were briefly out of
   step.
@@ -541,5 +568,7 @@ described in section four of `FIXES.md`.
 - The repository had no git tags; `.github/workflows/publish.yml` triggers on
   `v*` tags, and the `v1.1.0` tag was added with that release.
 
+[2.0.0]: https://github.com/eloyhere/semantic-typescript/releases/tag/v2.0.0
+[1.2.0]: https://github.com/eloyhere/semantic-typescript/releases/tag/v1.2.0
 [1.1.0]: https://github.com/eloyhere/semantic-typescript/releases/tag/v1.1.0
 [1.0.0]: https://www.npmjs.com/package/semantic-typescript/v/1.0.0

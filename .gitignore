@@ -32,3 +32,5 @@ dist
 .tmp/
 .baseline-dist/
 .readme-verify/
+.tmp-probe/
+.doc-tmp/

@@ -2,7 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-    DistributionCollectable,
+    SynchronousDistributionCollectable,
     DensityEstimate,
     EmpiricalDistribution,
     Histogram,
@@ -10,7 +10,7 @@ import {
     MomentSummary,
     RobustSummary
 } from "../dist/synchronous/distribution.js";
-import { DistributionCollectable as AsynchronousDistributionCollectable } from "../dist/asynchronous/distribution.js";
+import { AsynchronousDistributionCollectable } from "../dist/asynchronous/distribution.js";
 import {
     useSynchronousDensity,
     useSynchronousEmpiricalDistribution,
@@ -41,7 +41,7 @@ const absent = (optional, label = "") => {
     assert.equal(optional.isEmpty(), true, `expected an empty optional ${label}`);
 };
 
-const distribution = (...values) => new DistributionCollectable(values);
+const distribution = (...values) => new SynchronousDistributionCollectable(values);
 
 const closeDensity = (left, right, epsilon = 1e-9) => {
     const expected = right.getDensities();
@@ -540,7 +540,7 @@ describe("collector factories", () => {
         assert.throws(() => useSynchronousQuantile(-1), RangeError);
         assert.throws(() => useSynchronousSkewness({ estimator: "nope" }), TypeError);
         assert.throws(() => useSynchronousDensity({ boundary: "reflection" }), RangeError);
-        assert.throws(() => new DistributionCollectable([1, Number.NaN]), TypeError);
+        assert.throws(() => new SynchronousDistributionCollectable([1, Number.NaN]), TypeError);
     });
 
     test("moment and robust value objects round-trip their plain data", () => {

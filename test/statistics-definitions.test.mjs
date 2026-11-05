@@ -16,7 +16,7 @@ const present = (optional) => {
     return optional.get();
 };
 
-describe("统计量的主流默认定义（1.2.0 → 1.3.0）", () => {
+describe("统计量的主流默认定义（1.2.0 → 2.0.0）", () => {
     test("quantile 默认使用 Hyndman–Fan 类型 7，并支持全部九种类型", () => {
         // 调研文档 §2.2.2 的对照表：x = [2,4,4,4,5,5,7,9]，n = 8。
         const statistics = numeric(2, 4, 4, 4, 5, 5, 7, 9);

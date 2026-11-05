@@ -171,17 +171,17 @@ describe("统计", () => {
         assert.equal(statistics.average(), 2.5);
         assert.equal(statistics.mean(), 2.5);
         assert.equal(statistics.median(), 2.5);
-        // 此处因 1.2.0→1.3.0 的定义变更而更新：variance 默认改为样本方差（n-1），旧值 1.25。
+        // 此处因 1.2.0 → 2.0.0 的定义变更而更新：variance 默认改为样本方差（n-1），旧值 1.25。
         assert.equal(statistics.variance().get(), 5 / 3);
         assert.equal(Math.round(statistics.standardDeviation().get() * 1000) / 1000, 1.291);
         assert.equal(statistics.skewness().get(), 0);
         assert.equal(statistics.range(), 3);
-        // 此处因 1.2.0→1.3.0 的定义变更而更新：quantile 默认改为 H&F 类型 7，旧 IQR 为 2。
+        // 此处因 1.2.0 → 2.0.0 的定义变更而更新：quantile 默认改为 H&F 类型 7，旧 IQR 为 2。
         assert.equal(statistics.interquartileRange().get(), 1.5);
     });
     test("P0-11 峰度使用 n 而不是 n^2", () => {
         const statistics = ST.useOf(1, 2, 3, 4).toNumericStatistics();
-        // 此处因 1.2.0→1.3.0 的定义变更而更新：默认 G2（无偏）为 -1.2，旧默认 g2 为 -1.36。
+        // 此处因 1.2.0 → 2.0.0 的定义变更而更新：默认 G2（无偏）为 -1.2，旧默认 g2 为 -1.36。
         assert.equal(Math.round(statistics.kurtosis().get() * 100) / 100, -1.2);
         assert.equal(Math.round(statistics.kurtosis({ estimator: "g2" }).get() * 100) / 100, -1.36);
     });
@@ -195,7 +195,7 @@ describe("统计", () => {
         assert.equal(statistics.summate(), 10n);
         assert.equal(statistics.average(), 2n);
         assert.equal(statistics.median(), 2n);
-        // 此处因 1.2.0→1.3.0 的定义变更而更新：样本方差 5/3 四舍五入为 2n，旧总体方差为 1n。
+        // 此处因 1.2.0 → 2.0.0 的定义变更而更新：样本方差 5/3 四舍五入为 2n，旧总体方差为 1n。
         assert.equal(statistics.variance().get(), 2n);
         assert.equal(statistics.standardDeviation().get(), 1n);
         assert.equal(statistics.skewness().get(), 0n);

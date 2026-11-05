@@ -13,7 +13,7 @@ npm install semantic-typescript
 ```
 
 - Zero runtime dependencies, pure ESM, ships its own types.
-- 622 regression tests: `npm test`.
+- 684 regression tests: `npm test`.
 - Full change history: [CHANGELOG.md](./CHANGELOG.md).
 
 ---
@@ -32,7 +32,9 @@ npm install semantic-typescript
 10. [Periodic Analysis: Rings, Fields and Scores](#10-periodic-analysis-rings-fields-and-scores)
 11. [Utility Helpers](#11-utility-helpers)
 12. [Performance and Pitfalls](#12-performance-and-pitfalls)
-13. [License](#13-license)
+13. [Phase Rings: An Exact Cycle of Positions](#13-phase-rings)
+14. [Signal Analysis: Windows, Spectra and Time](#14-signal-analysis)
+15. [License](#15-license)
 
 ---
 
@@ -287,7 +289,7 @@ including the bare one from `toCollectable()`.
 | `toOrderedMap(key, value?)` | `SynchronousOrderedMap<K, V>` | insertion; the last write wins | O(n) expected |
 | `toUnorderedMap(key, value?)` | `SynchronousUnorderedMap<K, V>` | unspecified | O(n) expected |
 | `toList()` | `SynchronousList<E>` | traversal, duplicates kept | O(n) |
-| `toCycle(span?)` | `SynchronousCycle<E>` | traversal fixes ring positions | O(n) |
+| `toRing(span?)` | `SynchronousRing<E>` | traversal fixes ring positions | O(n) |
 | `toLRUSet(capacity)` | `SynchronousUnorderedLRUSet<E>` | recency; the last `capacity` survive | O(n²) worst case |
 | `toLRUMap(capacity, key, value?)` | `SynchronousUnorderedLRUMap<K, V>` | recency | O(n) expected |
 | `toSkipSet(comparator?)` | `SynchronousSkipSet<E>` | comparator-ascending, navigable | O(n²) worst case |
@@ -298,10 +300,10 @@ including the bare one from `toCollectable()`.
 The result type follows the collectable's own element type, so no terminal needs a type argument: a
 `SynchronousCollectable<E>` hands you `Array<E>`, `SynchronousList<E>` or `SynchronousOrderedSet<E>`
 directly. Only the business arguments remain — the comparator of `toOrderedSet` / `toSkipSet` /
-`toBinarySearchTree`, the capacity of the LRU pair, the span of `toCycle`, and the key and value
+`toBinarySearchTree`, the capacity of the LRU pair, the span of `toRing`, and the key and value
 extractors of the map family.
 
-A cycle is a set, so repeated elements keep their first position; every other structure above keeps
+A ring is a set, so repeated elements keep their first position; every other structure above keeps
 duplicates unless its own contract says otherwise (`toOrderedSet`, `toUnorderedSet`, `toSkipSet` are
 sets; `toBinarySearchTree` and `toList` are not).
 
@@ -314,7 +316,7 @@ numbers.toList().toArray();                              // [3,1,4,1,5]
 numbers.toSkipSet().first().get();                       // 1 — navigable by comparator
 numbers.toBinarySearchTree().size();                     // 5n — duplicates retained
 numbers.toRootedForest().getRoots().length;              // 1
-useOf(1, 2, 3).toCollectable().toCycle().phaseAt(3n).get().toDegreeValue();      // 0
+useOf(1, 2, 3).toCollectable().toRing().phaseAt(3n).get().toDegreeValue();      // 0
 useOf(3, 1, 3).toCollectable().toOrderedMap(n => n, n => `v${n}`).get(3).get();  // "v3"
 ```
 
@@ -428,9 +430,9 @@ order. Negative indices are legal and simply sort before non-negative ones once 
 read issued after a write always observes it.
 
 ```typescript
-const cycle = new AsynchronousCycle([1, 2]);
-const added   = cycle.add(3);          // queued
-const sampled = cycle.elementAt(2n);   // observes the write above
+const ring = new AsynchronousRing([1, 2]);
+const added   = ring.add(3);          // queued
+const sampled = ring.elementAt(2n);   // observes the write above
 await added;
 (await sampled).get().element;         // 3
 ```
@@ -449,14 +451,14 @@ table. Three constructions work together.
 
 ### 10.1 A ring is one integer
 
-A `Cycle` is an **n-fold ring**: the element count, the positional period and the number of distinct
+A `Ring` is an **n-fold cycle**: the element count, the positional period and the number of distinct
 phases are the same integer `n`. The phase of a position is computed from its exact residue, so the
 ring is periodic to the bit:
 
 ```typescript
-import { SynchronousCycle } from "semantic-typescript";
+import { SynchronousRing } from "semantic-typescript";
 
-const ring = new SynchronousCycle(["a", "b", "c", "d", "e", "f"]);
+const ring = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
 ring.phaseAt(0n).get().toDegreeValue();   // 0
 ring.phaseAt(1n).get().toDegreeValue();   // 60
 ring.phaseAt(6n).get().getValue() === ring.phaseAt(0n).get().getValue();   // true, exactly
@@ -503,7 +505,7 @@ Each ring element is a reference phase. `analyse` locates every observation back
 measures it against each reference:
 
 ```typescript
-const ring = new SynchronousCycle(["a", "b", "c", "d", "e"]);
+const ring = new SynchronousRing(["a", "b", "c", "d", "e"]);
 const report = ring.analyse(["a", "c", "c", "a", "zz", "e"]);
 
 report.matched;                              // 5
@@ -517,8 +519,8 @@ because changing the baseline only rotates all relative phases by a constant. Wh
 reference is the count and the mean.
 
 ```typescript
-const cycle = new SynchronousCycle(["a", "b", "c"]);
-cycle.scoresAt(0, cosine);                   // one score per position, in [-1, 1]
+const ring = new SynchronousRing(["a", "b", "c"]);
+ring.scoresAt(0, cosine);                   // one score per position, in [-1, 1]
 ```
 
 ### 10.4 Related instruments
@@ -529,9 +531,9 @@ cycle.scoresAt(0, cosine);                   // one score per position, in [-1, 
 | `resultant(t?)` | how concentrated are the phasors right now? | O(n) |
 | `analyse(data)` | how does this data sit against every element? | O(n · m) |
 | `toSpectrum()` | the ring as a spectrum, wavenumber on the frequency axis | O(n²) |
-| `useAngularSpectrum(cycle, instants, plan)` | the `(ω, n)` plane over time | O(n² · frames) |
+| `useAngularSpectrum(ring, instants, plan)` | the `(ω, n)` plane over time | O(n² · frames) |
 
-Two more primitives round out the model: `combineCycles(a, b)` joins two rings on their least common
+Two more primitives round out the model: `combineRings(a, b)` joins two rings on their least common
 multiple (a pullback, not a product — the pairs that cannot share an instant are simply absent), and
 `rate()` gives each element its own intrinsic frequency so that a ring can drift against the
 environment. `jetAt`, `windingAt` and `errorIntegralAt` expose the differential state of that drift.
@@ -773,7 +775,7 @@ collector was unordered — index rewriting only becomes an order when indices a
 **`useGenerate` without an `interrupt` never ends.** Always supply a stopping predicate or a
 downstream `limit` / `takeWhile`.
 
-**`Cycle` is an insertion-ordered set.** Elements are unique and keep the order in which they were
+**`Ring` is an insertion-ordered set.** Elements are unique and keep the order in which they were
 first added. A duplicate `add` returns `false`, and a `set` that would introduce one throws. This is
 what lets a phase be a function of the *element* rather than of whichever position it happens to
 occupy.
@@ -798,7 +800,643 @@ overlap-add sum will ripple wherever the frames meet.
 
 ---
 
-<a id="13-license"></a>
-## 13. License
+<a id="13-phase-rings"></a>
+## 13. Phase Rings: An Exact Cycle of Positions
+
+Chapter 10 introduced the ring as the library's model of a cycle and used it to measure a data
+set against every phase. This chapter is the complete surface: how a position becomes an angle,
+what the ambient frequency does and does not change, and the instruments that read the ring
+against time, against data and against another ring.
+
+A `SynchronousRing` is a positional list backed by a circular doubly linked ring whose head and
+tail are joined. It is also an insertion-ordered *set*: no element appears twice, and a rejected
+write leaves both the links and the samples untouched. What makes it a ring rather than a list is
+that the phase of a position is a pure function of its residue modulo the current length, so the
+ring is periodic to the bit and its balance cannot drift.
+
+### 13.1 A ring is one integer, computed exactly
+
+A ring carries `n` elements, and the element count, the positional period and the number of
+distinct phases are the same integer. Position `i` carries
+
+`phase + span · 2π · (((i mod n) + n) mod n) / n`
+
+with the residue reduced in `bigint` before it ever becomes a `number`. That is the whole reason
+`phaseAt(i)` and `phaseAt(i + n)` are *identical* rather than merely close: the second call
+reduces to the same integer, evaluates the same product and produces the same double. An index
+far beyond the exact integer range of `number` still lands on the right position, and a negative
+index walks the ring backwards.
+
+| Call | Returns | Meaning |
+| :--- | :--- | :--- |
+| `new SynchronousRing(source, options?)` | ring | `source` is any iterable, duplicates dropped |
+| `getPhase()` / `getFrequency()` / `getSpan()` | `Angle`, `Frequency`, `number` | the three construction parameters |
+| `size()` | `bigint` | the `n` that is also the period |
+| `phaseAt(index)` | `Optional<Angle>` | intrinsic phase only; ignores time, rate and frequency |
+| `elementAt(index)` | `Optional<RingElement>` | element, intrinsic phase, ambient frequency, phasor |
+| `frequencyAt(index)` | `Optional<Frequency>` | the ambient rate, empty for an empty ring |
+| `toComplex()` / `toComplex(index)` | `Complex[]` / `Optional<Complex>` | intrinsic phasors |
+
+`RingOptions` adds two per-element functions: `magnitude(element, index)` gives the phasor length
+and defaults to one, and `rate(element, index)` gives the element its own intrinsic frequency and
+defaults to zero, a fixed marker.
+
+```typescript
+import { SynchronousRing } from "semantic-typescript";
+
+const ring = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
+
+ring.size();                                                             // 6n
+ring.phaseAt(0n).get().toDegreeValue();                                  // 0
+ring.phaseAt(1n).get().toDegreeValue();                                  // 60
+ring.phaseAt(-1n).get().toDegreeValue();                                 // 300
+ring.phaseAt(6n).get().getValue() === ring.phaseAt(0n).get().getValue(); // true
+ring.phaseAt(10n ** 20n).get().toDegreeValue();                          // 240
+```
+
+`phaseAt(-1n)` is `300` on a six-element ring, and `10n ** 20n` reduces to `4` modulo six, so it
+reads `240`. Neither case accumulates a floating-point product, which is what keeps the identity
+exact under a change of index representation.
+
+### 13.2 The ambient frequency and the state at an instant
+
+`frequency` is the **ambient rotation rate** of the environment the ring is embedded in, not a
+phase step between positions. The environment advances the phase of every element by the same
+angle, so it cannot change the intrinsic pattern, cannot break the balance and cannot change any
+`phaseAt` result. It defaults to `0 Hz`.
+
+`relativeAt(index, time)` subtracts that common angle, leaving the coordinate a `PhaseField` is
+scored against. `viewAt` and `viewsAt` return the full state at an instant, including the
+element's own `rate`, and the differential accessors expose the drift:
+
+| Call | Formula | Reads |
+| :--- | :--- | :--- |
+| `relativeAt(index, time)` | `intrinsic + ownRate · t − ambient · t` | the phase the environment sees |
+| `viewAt(index, time)` / `viewsAt(time)` | the same, plus element, index, time, rate, phasor | the full state |
+| `jetAt(index, time)` | phase at `t`, own rate, `slip = ownRate − ambient` | the differential state |
+| `windingAt(index, time)` | `trunc(slip · t)` | whole turns slipped, truncated toward zero |
+| `errorIntegralAt(index, time, origin?)` | `∫ relative phase dt`, in turns · seconds | how long an element has been ahead |
+| `resultant(time?)` | `abs(Σ w · e^{iθ}) / Σ w` | phase concentration, unaffected by ambient rotation |
+| `analyse(data, time?)` | counts and means per reference | data measured against every element |
+| `scoreAt(index, time, field)` / `scoresAt(time, field)` | the field sampled at the relative phase | a bounded score per position |
+
+```typescript
+import { SynchronousRing, useHertz } from "semantic-typescript";
+
+const moving = new SynchronousRing(["a", "b", "c", "d", "e", "f"], {
+  frequency: useHertz(1),
+});
+
+moving.getFrequency().getHertz();                        // 1
+moving.phaseAt(1n).get().toDegreeValue();                // 60 — intrinsic
+moving.relativeAt(1n, 0.25).get().toDegreeValue();       // 330 — 60 − 90
+moving.viewAt(1n, 0.25).get().relative.toDegreeValue();  // 330
+moving.jetAt(1n, 0.25).get().slip;                       // -1
+moving.purity();                                         // 1 — rotation cannot break it
+```
+
+At `1 Hz` the environment advances a quarter turn in `0.25 s`, so the relative phase of position
+one is `60 − 90 = 330` degrees while its intrinsic phase stays `60`. The jet reports `slip` of
+`-1` hertz because the element itself does not move, and `purity()` is still `1`: rotating every
+phasor by the same angle is not a deformation.
+
+### 13.3 Purity and balance
+
+`purity()` is the share of the ring's energy carried by the fundamental mode:
+
+`max(abs(c₁)², abs(c_{n−1})²) / (n · Σ abs(z)²)`
+
+Both fundamental bins are tested because a ring may traverse the circle in either direction. A
+ring built with `span: 5` over six elements steps by `300` degrees, which is `−60` degrees: it
+runs backwards, puts all of its energy in `c₅`, and would be reported as impure by a formula that
+only looked at `c₁`. The cost stays `O(n)` because only those two bins and the total energy are
+needed.
+
+The edge cases are part of the contract. A ring of fewer than two elements has no fundamental
+mode and reports `purity() === 0` and `isBalanced() === false`, whatever its content. A ring whose
+phasors all have zero length has no energy and also reports zero. `isBalanced(epsilon?)` is
+`1 − purity() <= epsilon`, with `1E-9` as the default tolerance.
+
+```typescript
+import { SynchronousRing } from "semantic-typescript";
+
+const forward = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
+const backward = new SynchronousRing(["a", "b", "c", "d", "e", "f"], { span: 5 });
+const weighted = new SynchronousRing(["a", "b", "c", "d"], {
+  magnitude: element => element === "a" ? 1 : 0,
+});
+
+forward.purity();                             // 1
+backward.phaseAt(1n).get().toDegreeValue();   // 300 — it runs backwards
+backward.purity();                            // 1 — the energy sits in c₅
+new SynchronousRing(["only"]).purity();       // 0
+new SynchronousRing(["only"]).isBalanced();   // false
+weighted.purity();                            // 0.25
+```
+
+### 13.4 Resultant and the symmetric components
+
+`resultant(time?)` is the mean resultant length: the magnitude of the phasor sum divided by the
+sum of the magnitudes. Unlike `purity`, which asks whether the ring is still the `n`-th roots of
+unity, `resultant` asks how concentrated the phasors are right now. A balanced ring reports `0`;
+a ring whose elements all share one angle would report `1`, but the set semantics forbid duplicate
+elements, so in practice `1` appears when `magnitude` zeroes all but one element.
+
+`zeroSequence()` is the mean phasor, that is `c₀ / n`. `sequences()` returns all `n` symmetric
+components, lowest order first, by a direct transform. `toSpectrum()` wraps them in a `Spectrum`
+whose bin `j` reports `j` cycles per ring revolution, so the frequency axis is the wavenumber
+axis.
+
+```typescript
+import { SynchronousRing } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const ring = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
+
+round(ring.resultant().get());                                        // 0
+round(ring.zeroSequence().get().magnitude());                         // 0
+ring.sequences().map(component => round(component.magnitude()));      // [0, 6, 0, 0, 0, 0]
+ring.toSpectrum().get().size();                                       // 6
+ring.toSpectrum().get().getResolution().getHertz();                   // 1
+```
+
+The components are complex and in general **not conjugate-symmetric**: a balanced ring puts all
+of its energy in bin one, and a backwards ring puts it in bin `n − 1`. The one-sided helpers of
+`Spectrum` assume a real signal, so read the bins directly instead of folding them.
+
+### 13.5 Analysing data against every element
+
+`analyse(data, time?)` matches every observation back to the ring by identity and measures it
+against each element as a reference phase. Observations the ring does not hold are counted as
+`missed` rather than guessed at, because the ring is the only source of phases. Each reference
+row reports `count`, the mean relative phase `mean`, and the mean resultant length `resultant`.
+
+One identity is worth remembering: **`resultant` is the same for every reference**. Changing the
+baseline rotates all relative phases by a constant, and a rotation cannot change a resultant
+length. What differs per reference is the count and the mean.
+
+```typescript
+import { SynchronousRing } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const ring = new SynchronousRing(["a", "b", "c", "d", "e"]);
+const report = ring.analyse(["a", "c", "c", "a", "zz", "e"]);
+
+report.matched;                                                  // 5
+report.missed;                                                   // 1
+report.references.map(row => row.count);                         // [2, 0, 2, 0, 1]
+report.references.map(row => round(row.resultant));              // [0.1453, 0.1453, 0.1453, 0.1453, 0.1453]
+```
+
+Scoring is the other side of the same coin. A `PhaseField` is a bounded cosine series (chapter
+10.2), and `scoreAt`/`scoresAt` sample it at the relative phase, so the same ring can be scored
+against alignment, against a harmonic pattern, or against any other field without changing the
+ring.
+
+```typescript
+import { SynchronousRing, useField } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const ring = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
+const cosine = useField([1]);
+
+round(ring.scoreAt(0n, 0, cosine).get());                                  // 1
+round(ring.scoreAt(1n, 0, cosine).get());                                  // 0.5
+ring.scoresAt(0, cosine).map(score => round(score));                       // [1, 0.5, -0.5, -1, -0.5, 0.5]
+```
+
+### 13.6 Combining rings and the angular spectrum
+
+`combineRings(left, right)` joins two rings on their least common multiple, not their product.
+Instant `i` of the joint ring reads `i mod m` of the left ring and `i mod n` of the right ring,
+so the joint ring closes after `lcm(m, n)` instants. The pairs that can never co-occur — those
+whose positions disagree modulo `gcd(m, n)` — are simply absent, which is why the result is a
+pullback rather than a product; `aligns(left, right)` reports whether a given pair is
+representable.
+
+`useAngularSpectrum(ring, instants, plan)` builds the `(ω, n)` plane: each instant contributes a
+frame of phasors, frame `k` of mode `j` is the `j`-th symmetric component of that frame, and
+`cells[frame][order]` is the coefficient. Taking one column gives the time series of a single
+spatial mode, and `spectrum(order)` is its temporal spectrum.
+
+```typescript
+import { Sample, SynchronousRing, combineRings, useAngularSpectrum } from "semantic-typescript";
+
+const left = new SynchronousRing(["a", "b", "c", "d"]);
+const right = new SynchronousRing(["x", "y", "z", "w", "v", "u"]);
+const joined = combineRings(left, right);
+
+joined.period;                                     // 12n
+joined.divisor;                                    // 2n
+joined.ring.size();                                // 12n
+joined.aligns(0n, 0n);                             // true
+joined.aligns(1n, 0n);                             // false
+joined.ring.get(0n).join("-");                     // a-x
+
+const angular = useAngularSpectrum(left, [0, 0.25, 0.5, 0.75], new Sample(4, 1));
+angular.order;                                     // 4
+angular.frameCount;                                // 4
+angular.cells[0][1].magnitude();                   // 4
+angular.spectrum(1).get().size();                  // 4
+```
+
+### 13.7 Pitfalls
+
+**Exactness is exact.** `phaseAt(i)` and `phaseAt(i + n)` are the same double, not two values
+within a tolerance. A ring built by accumulating `2π / n` per element would fail this; this one
+reduces the index in `bigint` first.
+
+**`frequency` is not a phase step.** It is the ambient rotation rate, it defaults to zero, and
+rotating every phasor by the same angle cannot break the intrinsic pattern. If you want positions
+to advance relative to each other, use `rate`, not `frequency`.
+
+**`purity()` must look at both fundamental bins.** A backwards ring is still the `n`-th roots of
+unity; only `c₁` would call it impure.
+
+**`n < 2` is a defined edge case.** `purity()` returns `0` and `isBalanced()` returns `false`; an
+empty ring returns empty optionals from the sampling methods.
+
+**A span that shares a factor with `n` collapses the orbit.** Six elements with `span: 2` visit
+only three distinct phases, and the ring is no longer balanced.
+
+**`resultant` is rotation-invariant, not time-invariant.** Ambient rotation leaves it unchanged;
+per-element `rate`s change it as the ring de-phases.
+
+**The ring is a set, and `analyse` matches by identity.** Duplicate elements are dropped at
+construction, and an object that is structurally equal to a ring element but not the same
+reference is counted as missed.
+
+**`toSpectrum()` is complex.** Its bins are not conjugate-symmetric, so the one-sided helpers of
+`Spectrum` do not apply. Read the bins.
+
+**`windingAt` truncates toward zero, and `errorIntegralAt` integrates phase.** Half a turn of slip
+reports `0n`; the error integral is in turns · seconds, not a rate.
+
+```typescript
+import { SynchronousRing, useHertz } from "semantic-typescript";
+
+const collapsed = new SynchronousRing(["a", "b", "c", "d", "e", "f"], { span: 2 });
+collapsed.phaseAt(1n).get().toDegreeValue();   // 120
+collapsed.phaseAt(3n).get().toDegreeValue();   // 0
+Number(collapsed.purity().toFixed(4));         // 0
+
+const falling = new SynchronousRing(["a", "b", "c", "d"], {
+  frequency: useHertz(2),
+  rate: () => useHertz(0.5),
+});
+falling.jetAt(0n, 2).get().slip;               // -1.5
+falling.windingAt(0n, 1).get();                // -1n
+falling.windingAt(0n, 0.5).get();              // 0n
+
+const objects = new SynchronousRing([{ key: 1 }, { key: 2 }]);
+objects.analyse([{ key: 1 }]).missed;          // 1 — identity, not structure
+```
+
+---
+
+<a id="14-signal-analysis"></a>
+## 14. Signal Analysis: Windows, Spectra and Time
+
+Chapter 10 treated a ring as a cycle of phases. This chapter is the temporal counterpart: a
+real-valued record that carries, besides its samples, the two pieces of context every spectral
+formula needs — the sampling plan that turns a bin index into hertz, and the taper that fixes both
+the coherent gain and the noise bandwidth.
+
+The value object is `SynchronousSignalCollectable`, with `AsynchronousSignalCollectable` as its
+queued twin. Both expose the same `SignalCollectable` surface: twenty-three methods, each delegating
+to exactly one `useSynchronous<Method>` factory in `synchronous/collectors`. The split is
+deliberate. The class is a documented facade, the factory owns the accumulation, and the constructor
+caches `sum(w) / count` and `count * sum(w^2) / sum(w)^2` once, at this length. A caller who has to
+remember "divide by the coherent gain" will eventually forget, and the resulting 6.02 decibels look
+like a plausible measurement.
+
+### 14.1 A signal carries its own calibration
+
+A signal is built from an iterable and a rate, from an existing `Frame`, or from the constructor
+with an explicit `Sample`. The default taper is the periodic Hann window; every analysis that does
+not name a window uses it, and every analysis accepts an override. The metadata accessors are
+constant-time reads of state fixed at construction, so a signal can be handed around without the
+context drifting.
+
+| Call | Returns | Meaning |
+| :--- | :--- | :--- |
+| `SynchronousSignalCollectable.useRate(values, rate, window?)` | signal | duration `count / rate` |
+| `SynchronousSignalCollectable.useFrame(frame, window?)` | signal | keeps the frame's plan |
+| `new SynchronousSignalCollectable(plan, values, window?)` | signal | plan count must equal the sample count |
+| `getSample()` / `getValues()` / `getWindow()` | plan, samples, taper | the frozen context |
+| `getRate()` | `number` | samples per second |
+| `getNyquist()` / `getResolution()` | `Frequency` | `rate / 2` and `rate / count` |
+| `getCoherentGain()` / `getNoiseBandwidth()` | `number` | recomputed at this exact length |
+| `size()` / `at(index)` / `toFrame()` / `equals(other)` / `toString()` | — | value semantics |
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const signal = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 64 }, (_unused, index) => Math.cos(2 * Math.PI * 8 * index / 64)),
+  64,
+);
+
+signal.size();                       // 64n
+signal.getRate();                    // 64
+signal.getNyquist().getHertz();      // 32
+signal.getResolution().getHertz();   // 1
+signal.getCoherentGain();            // 0.5
+signal.getNoiseBandwidth();          // 1.5
+```
+
+`getResolution()` is the bin spacing, not the resolving power: it is `rate / count` because the
+transform has `count` bins, and padding the transform changes the spacing without changing what the
+window can separate (section 14.8).
+
+### 14.2 The twenty-three methods
+
+The methods fall into six families. Seven are spectral readings, two are time–frequency transforms,
+four are analytic quantities, three are sequence statistics, five are shape descriptors, and two
+return another signal.
+
+| Method | Returns | Convention |
+| :--- | :--- | :--- |
+| `spectrum(size?, window?)` | `Spectrum` | raw and unnormalised, full complex grid |
+| `oneSided(size?, window?)` | `Bin[]` | conjugate half folded, DC and Nyquist not doubled |
+| `amplitude(window?)` | `number[]` | `2·abs(X) / (count · CG)`, once at DC and Nyquist |
+| `power(window?)` | `number[]` | `A² / 2` per interior bin, `A²` at DC and Nyquist |
+| `decibel(window?)` | `number[]` | `20·log10(amplitude)` |
+| `powerDecibel(window?)` | `number[]` | `10·log10(power)` |
+| `powerSpectralDensity(frameSize?, hopSize?, window?)` | `SpectralDensity` | Welch average, `abs(X)² / (rate · Σw²)` |
+| `shortTimeFourierTransform(frameSize, hopSize, window?)` | `Spectrum[]` | extended boundaries, centre times |
+| `spectrogram(frameSize, hopSize, window?)` | `Spectrogram` | the same columns with a time axis |
+| `analyticSignal()` | `Complex[]` | the Hilbert pair `x + i·H(x)` |
+| `instantaneousPhase()` | `Angle[]` | folded into `[0, 2π)` |
+| `instantaneousFrequency(rate?, gate?)` | `number[]` | unwrapped phase difference, gated on the envelope |
+| `envelope()` | `number[]` | `abs(z[n])`, circular at the edges |
+| `zeroCrossingRate(perSecond?)` | `number` | crossings per adjacent sample pair |
+| `spectralFlux(frameSize?, hopSize?, window?)` | `number[]` | unit-norm magnitude distance between frames |
+| `autocorrelation(maximumLag?, normalization?)` | `number[]` | coefficient by default, `ρ[0] = 1` |
+| `spectralCentroid(window?)` | `Optional<Frequency>` | power-weighted mean frequency |
+| `spectralBandwidth(window?)` | `Optional<Frequency>` | power-weighted standard deviation |
+| `spectralRolloff(ratio?, window?)` | `Optional<Frequency>` | first bin reaching `ratio` of the power |
+| `spectralFlatness(window?)` | `number` | geometric over arithmetic mean of power |
+| `signalToNoiseRatio(frameSize?, hopSize?, window?, floorQuantile?)` | `Optional<number>` | median noise floor, `10·log10` |
+| `detrended(mode?)` | signal | `"none"`, `"constant"` (default), `"linear"` |
+| `windowed(window?)` | signal | applies a taper and adopts it |
+
+The optional arguments are not decoration. `frameSize` defaults to `min(256, size)`, the hop to
+half a frame rounded down, `instantaneousFrequency` gates at `1E-3` of the peak envelope, and
+`spectralRolloff` uses `0.85`. Each default is the value a reference implementation picks when the
+parameter is named rather than supplied.
+
+### 14.3 Amplitude, power and density
+
+Three normalisations are needed because three different questions are being asked.
+
+`amplitude()` answers "how large is the sinusoid on this bin": `2·abs(X[k]) / (count · CG)` for an
+interior bin and `abs(X[k]) / (count · CG)` at DC and Nyquist. The factor of two folds the
+conjugate half; the coherent gain removes the taper. Omit either and a unit tone reads `0.5`,
+which is minus 6.02 decibels.
+
+`power()` answers "what mean square would a sinusoid on this bin have": `A² / 2` for an interior
+bin and `A²` at DC and Nyquist, because those two do not oscillate. This is the peak convention,
+and it deliberately does not satisfy Parseval: a window spreads each line over its main lobe, so
+the sum of every bin exceeds the mean square by the equivalent noise bandwidth — `1.5` for Hann.
+
+`powerSpectralDensity()` answers "how much power per hertz": `abs(X)² / (rate · Σw²)`, averaged
+over overlapping segments. Only the sum of the squared weights keeps a white-noise floor unbiased;
+dividing by `count` reads `0.375` for unit noise and dividing by `count · CG²` reads `1.5`.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const tone = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 256 }, (_unused, index) => Math.cos(2 * Math.PI * 32 * index / 256)),
+  256,
+);
+
+round(tone.amplitude()[32]);                                 // 1
+round(tone.power()[32]);                                     // 0.5
+round(tone.power().reduce((sum, power) => sum + power, 0));  // 0.75
+round(tone.powerSpectralDensity(64n, 32n).totalPower());     // 0.5
+tone.powerSpectralDensity(64n, 32n).getSegments();           // 7n
+```
+
+The pair of totals is the check worth remembering: the peak-convention sum is `0.75` while the
+density integrates to `0.5`, and the ratio is exactly the noise bandwidth. The density is also the
+only one of the three that survives a change of frame length.
+
+### 14.4 Levels: the two decibel conventions
+
+An amplitude and a power do not share a factor, so they do not share a logarithm. `amplitudeDecibel`
+applies `20·log10` and is correct for a voltage, a displacement or a sound pressure; `powerDecibel`
+applies `10·log10` and is correct for a power, an energy, a mean square or a density. The method
+names on the signal follow the same split.
+
+```typescript
+import { amplitudeDecibel, powerDecibel, SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const tone = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 256 }, (_unused, index) => Math.cos(2 * Math.PI * 32 * index / 256)),
+  256,
+);
+
+amplitudeDecibel(0.25);           // -12.0412
+powerDecibel(0.25);               // -6.0206
+round(tone.decibel()[32]);        // 0
+round(tone.powerDecibel()[32]);   // -3.0103
+```
+
+Both readings of the same tone are correct: its amplitude is one (zero decibels), and its mean
+square is one half (minus 3.01 decibels). Feeding a power to the amplitude convention would double
+the level in decibels, turning the correct minus 6.02 into minus 12.04.
+
+### 14.5 The one-sided fold
+
+A real signal satisfies `X[count − k] = conj(X[k])`, so the negative-frequency half carries no
+independent information. The fold doubles every interior bin and keeps the two self-conjugate bins
+— DC and, for an even length, Nyquist — exactly as the transform produced them. Those two are their
+own mirror image; doubling them invents energy and reports exactly 6.02 decibels too high.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const edge = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 16 }, (_unused, index) => 2 + Math.cos(Math.PI * index)),
+  16,
+);
+const bins = edge.oneSided();
+
+bins.length;                  // 9
+round(bins[0].magnitude());   // 16
+round(bins[8].magnitude());   // 8
+round(edge.amplitude()[0]);   // 2
+round(edge.amplitude()[8]);   // 1
+```
+
+The raw magnitudes are `16` and `8` because the taper's weights sum to eight; dividing by
+`count · CG = 8` turns them into the calibrated amplitudes `2` and `1`. Doubling the edge bins
+would read `4` and `2`, and the error would never raise an exception.
+
+### 14.6 Time–frequency views
+
+`shortTimeFourierTransform` and `spectrogram` frame the record the way the reference short-time
+transform does: half a frame of zeros at each end, then a zero-padded tail so that a whole number
+of hops remains. The first frame is centred on the first sample, the last frame reaches the last
+sample, and frame `m` is centred at `m · hop / rate` seconds. Retaining only complete frames would
+discard up to `frameSize − 1` samples — for 1000 samples at frame 256 and hop 128, that is 104
+samples, about a tenth of the record.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const tone = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 64 }, (_unused, index) => Math.cos(2 * Math.PI * 4 * index / 64)),
+  64,
+);
+const spectrogram = tone.spectrogram(16n, 8n);
+
+spectrogram.size();                               // 9
+spectrogram.getFrameSize();                       // 16
+spectrogram.getBoundary();                        // "zeros"
+spectrogram.getTime(0);                           // 0
+spectrogram.getTime(6);                           // 0.75
+tone.shortTimeFourierTransform(16n, 8n).length;   // 9
+tone.spectralFlux(16n, 8n).length;                // 8
+```
+
+Every column is a `Spectrum` over `frameSize` bins, exactly as `spectrum()` would produce for the
+same frame, and `getTime()` reports frame centres rather than frame starts.
+
+### 14.7 Windows, coherent gain and COLA
+
+Every shape has two forms. The symmetric form divides the frame by `count − 1`; the periodic
+(DFT-even) form divides it by `count`, one sample short of a full period, so the taper is continuous
+under the periodic extension the DFT assumes. Analysis and overlap-add need the periodic form;
+filter design keeps the symmetric one.
+
+The difference is measurable and never raises an error. At fifty per cent overlap the periodic Hann
+window sums to one at every position; the symmetric form ripples, by `0.84` decibels at sixteen
+samples, `0.21` at sixty-four and still `0.013` at one thousand and twenty-four. The class exposes
+the coherent gain and the equivalent noise bandwidth of whichever taper it holds, so the correction
+is never hard-coded: a symmetric Hann reads `0.4375` at eight samples, not `0.5`.
+
+```typescript
+import {
+  coherentGain, equivalentNoiseBandwidth, useFlatTopWindow,
+  useHannPeriodicWindow, useHannWindow,
+} from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+
+round(useHannWindow(1, 4));                           // 0.75
+round(useHannPeriodicWindow(1, 4));                   // 0.5
+coherentGain(useHannPeriodicWindow, 16);              // 0.5
+equivalentNoiseBandwidth(useHannPeriodicWindow, 16);  // 1.5
+useFlatTopWindow(0, 1024);                            // -0.000421
+Array.from({ length: 1024 }, (_unused, i) => useFlatTopWindow(i, 1024)).filter(w => w < 0).length;  // 578
+```
+
+The flat-top row is not a mistake in the table. A flat-top window is partially negative by
+definition — 578 of 1024 weights here — and clamping those weights to zero would perturb the main
+lobe and destroy the low scalloping loss the window exists for. The library returns the series
+unchanged.
+
+### 14.8 Pitfalls
+
+**Zero padding interpolates, it never resolves.** A transform length above the sample count samples
+the same underlying DTFT more densely: the peak *location* becomes finer and the bin spacing
+becomes `rate / size`, but the ability to separate two components is still governed by the window
+length and shape. A tone exactly between two bins reads `82.1093` and `80.8598` on the unpadded
+grid, and `128` at its own frequency on the padded grid.
+
+```typescript
+import { SynchronousSignalCollectable, useRectangularWindow } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const tone = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 256 }, (_unused, index) => Math.cos(2 * Math.PI * 100.5 * index / 256)),
+  256,
+);
+const flat = tone.spectrum(256n, useRectangularWindow);
+const padded = tone.spectrum(1024n, useRectangularWindow);
+
+flat.getResolution().getHertz();           // 1
+padded.getResolution().getHertz();         // 0.25
+round(flat.magnitudeAt(100).get());        // 82.1093
+round(flat.magnitudeAt(101).get());        // 80.8598
+round(padded.magnitudeAt(402).get());      // 128
+padded.frequencyAt(402).get().getHertz();  // 100.5
+```
+
+Two equal tones `0.4` bins apart stay merged at any padding: with a 256-point record and a Hann
+window, padding to 8192 produces a single local maximum, not two.
+
+**The Hilbert transform is circular.** `analyticSignal`, `envelope` and `instantaneousPhase` treat
+the first and last samples as neighbours, so a record whose period does not divide its length is
+contaminated at both ends. The middle of the record is trustworthy; the ends are not.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const edge = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 512 }, (_unused, index) => Math.cos(2 * Math.PI * 8.3 * index / 512)),
+  512,
+);
+const envelope = edge.envelope();
+
+round(envelope.slice(8, -8).reduce((sum, value) => sum + value, 0) / 496);  // 1.0025
+round(Math.max(...envelope.slice(0, 8)));                                   // 1.2592
+round(Math.min(...envelope.slice(-8)));                                     // 0.1314
+```
+
+**A vanishing envelope does not define a phase.** Where the envelope collapses, the difference of
+two rounding-noise angles can be half a turn, which reads as half the sampling rate. The gate is
+what keeps the number meaningful, and the default is `1E-3` of the peak envelope.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const beat = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 4096 }, (_unused, index) =>
+    Math.cos(2 * Math.PI * 100 * index / 2048) + Math.cos(2 * Math.PI * 102 * index / 2048)),
+  2048,
+);
+
+round(Math.max(...beat.instantaneousFrequency(2048, 0).map(Math.abs)));  // 920.218
+round(Math.max(...beat.instantaneousFrequency().map(Math.abs)));         // 101
+```
+
+**An unnormalised correlation is not a similarity.** The raw sum `r[k]` grows with the record
+length, so two lengths cannot be compared. The default `"coefficient"` rule divides by `r[0]` and
+keeps every value in `[-1, 1]`; `"unbiased"` divides by `count − k` and pays with a variance that
+grows with the lag.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const periodic = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 1024 }, (_unused, index) => Math.cos(2 * Math.PI * 8 * index / 1024)),
+  1024,
+);
+const rho = periodic.autocorrelation(200n);
+
+round(rho[0]);                                     // 1
+round(rho[128]);                                   // 0.875
+round(rho[64]);                                    // -0.9375
+round(periodic.autocorrelation(200n, "none")[0]);  // 512
+```
+
+One more reading deserves a warning: `spectralFlux` normalises each frame before comparing, so a
+level change alone produces zero flux. Its first and last values are edge artefacts of the zero
+boundary, not onsets.
+
+---
+
+<a id="15-license"></a>
+## 15. License
 
 MIT © Eloy Kim

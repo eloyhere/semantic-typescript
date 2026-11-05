@@ -76,7 +76,7 @@ test("concat obeys limits across iterable and semantic boundaries", () => {
 
 test("numeric statistics always apply an explicit mapper", () => {
   const statistics = ST.useOf(1, 2, 2).toNumericStatistics();
-  // 此处因 1.2.0→1.3.0 的定义变更而更新：variance / standardDeviation 改为样本定义（n-1）并返回 Optional。
+  // 此处因 1.2.0 → 2.0.0 的定义变更而更新：variance / standardDeviation 改为样本定义（n-1）并返回 Optional。
   for (const [method, expected, optional] of [["summate", 50], ["average", 50 / 3], ["mean", 50 / 3],
     ["median", 20], ["mode", 20], ["variance", 100 / 3, true], ["standardDeviation", Math.sqrt(100 / 3), true]]) {
     let calls = 0;
@@ -89,7 +89,7 @@ test("numeric statistics always apply an explicit mapper", () => {
 
 test("bigint statistics always apply an explicit mapper", () => {
   const statistics = ST.useOf(1n, 2n, 2n).toBigintStatistics();
-  // 此处因 1.2.0→1.3.0 的定义变更而更新：样本方差 100/3 四舍五入为 33n（旧总体方差 22n），标准差 6n（旧 5n）。
+  // 此处因 1.2.0 → 2.0.0 的定义变更而更新：样本方差 100/3 四舍五入为 33n（旧总体方差 22n），标准差 6n（旧 5n）。
   for (const [method, expected, optional] of [["summate", 50n], ["average", 16n], ["mean", 16n],
     ["median", 20n], ["mode", 20n], ["variance", 33n, true], ["standardDeviation", 6n, true]]) {
     let calls = 0;
@@ -117,7 +117,7 @@ test("range and quantile operate on projected values", () => {
   const big = ST.useOf(-2n, 0n, 2n).toBigintStatistics();
   assert.equal(numeric.range((x) => x * x), 4);
   assert.equal(big.range((x) => x * x), 4n);
-  // 此处因 1.2.0→1.3.0 的定义变更而更新：quantile 返回 Optional。
+  // 此处因 1.2.0 → 2.0.0 的定义变更而更新：quantile 返回 Optional。
   assert.equal(numeric.quantile(0, (x) => x * x).get(), 0);
   assert.equal(big.quantile(0, (x) => x * x).get(), 0n);
   assert.equal(numeric.quantile(1, (x) => -x).get(), 2);
@@ -127,7 +127,7 @@ test("range and quantile operate on projected values", () => {
 test("quantiles follow Hyndman–Fan type 7 by default and expose earlier types", () => {
   const numeric = ST.useOf(1, 2, 3, 4).toNumericStatistics();
   const big = ST.useOf(1n, 2n, 3n, 4n).toBigintStatistics();
-  // 此处因 1.2.0→1.3.0 的定义变更而更新：默认由类型 1 改为类型 7，旧值为 [1, 1, 2, 2, 3, 4]。
+  // 此处因 1.2.0 → 2.0.0 的定义变更而更新：默认由类型 1 改为类型 7，旧值为 [1, 1, 2, 2, 3, 4]。
   for (const [q, expected] of [[0, 1], [0.25, 1.75], [0.26, 1.78], [0.5, 2.5], [0.75, 3.25], [1, 4]]) {
     assert.ok(Math.abs(numeric.quantile(q).get() - expected) < 1e-12, `${q}`);
     assert.equal(big.quantile(q).get(), BigInt(Math.round(expected)), `${q}`);
@@ -152,7 +152,7 @@ test("quantiles follow Hyndman–Fan type 7 by default and expose earlier types"
 
 test("bigint variance and standard deviation retain translation invariance and rounding", () => {
   for (const offset of [0n, 2n ** 60n, -(2n ** 60n)]) {
-    // 此处因 1.2.0→1.3.0 的定义变更而更新：统计类改为样本定义（n-1），收集器仍是总体定义。
+    // 此处因 1.2.0 → 2.0.0 的定义变更而更新：统计类改为样本定义（n-1），收集器仍是总体定义。
     for (const [values, sampleVariance, sampleDeviation, populationVariance, populationDeviation] of [
       [[0n, 2n], 2n, 1n, 1n, 1n], [[0n, 1n, 2n, 3n], 2n, 1n, 1n, 1n], [[0n, 3n], 5n, 2n, 2n, 2n],
     ]) {

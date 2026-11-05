@@ -36,7 +36,7 @@ import {
     useAsynchronousRobust,
     useAsynchronousSkewness
 } from "#semantic/asynchronous/collectors";
-import { OrderedCollectable } from "#semantic/asynchronous/collectable";
+import { AsynchronousOrderedCollectable } from "#semantic/asynchronous/collectable";
 import { Optional } from "#semantic/optional";
 import { DistributionAccumulator } from "#semantic/synchronous/collectors";
 import {
@@ -102,7 +102,7 @@ export type {
  * re-consume the source. `quantile` is O(1) after the sample is ready and the
  * ECDF queries are O(log n); only methods that document otherwise cost a pass.
  *
- * The class extends the asynchronous `OrderedCollectable`, so every inherited
+ * The class extends the asynchronous `AsynchronousOrderedCollectable`, so every inherited
  * terminal operation traverses the same ascending buffer and reports the sorted
  * position as the bigint index. Unlike the synchronous collectable the instance
  * is not frozen: the base class assigns its buffer when the source settles.
@@ -114,7 +114,7 @@ export type {
  *
  * @template E - The numeric source element type.
  */
-export class DistributionCollectable<E extends number> extends OrderedCollectable<E> {
+export class AsynchronousDistributionCollectable<E extends number> extends AsynchronousOrderedCollectable<E> {
     /**
      * The ascending sample, resolved once the inherited buffer settles.
      */
@@ -160,7 +160,7 @@ export class DistributionCollectable<E extends number> extends OrderedCollectabl
      * @returns A promise resolving to the materialised distribution.
      * @throws {TypeError} If an element is not a finite number.
      */
-    public static async use<E extends number>(values: AsyncIterable<E>): Promise<DistributionCollectable<E>> {
+    public static async use<E extends number>(values: AsyncIterable<E>): Promise<AsynchronousDistributionCollectable<E>> {
         let collected: Array<E> = [];
         for await (let value of values) {
             collected.push(value);
@@ -174,7 +174,7 @@ export class DistributionCollectable<E extends number> extends OrderedCollectabl
                 accept(element, BigInt(index));
             }
         };
-        return new DistributionCollectable<E>(source);
+        return new AsynchronousDistributionCollectable<E>(source);
     }
     /**
      * Returns the sample size.
@@ -352,11 +352,11 @@ export class DistributionCollectable<E extends number> extends OrderedCollectabl
      *
      * @param other - The distribution to compare with.
      * @returns A promise resolving to whether the order statistics match.
-     * @throws {TypeError} If the operand is not a `DistributionCollectable`.
+     * @throws {TypeError} If the operand is not an `AsynchronousDistributionCollectable`.
      */
-    public async equals(other: DistributionCollectable<E>): Promise<boolean> {
-        if (!(other instanceof DistributionCollectable)) {
-            throw new TypeError("Distribution operand must be a DistributionCollectable.");
+    public async equals(other: AsynchronousDistributionCollectable<E>): Promise<boolean> {
+        if (!(other instanceof AsynchronousDistributionCollectable)) {
+            throw new TypeError("Distribution operand must be an AsynchronousDistributionCollectable.");
         }
         let left: ReadonlyArray<number> = (await this.sample).ascendingValues();
         let right: ReadonlyArray<number> = (await other.sample).ascendingValues();

@@ -13,7 +13,7 @@ npm install semantic-typescript
 ```
 
 - Zéro dépendance au runtime, pur ESM, fournit ses propres types.
-- 622 tests de non-régression : `npm test`.
+- 684 tests de non-régression : `npm test`.
 - Historique des changements complet : [CHANGELOG.md](./CHANGELOG.md).
 
 ---
@@ -32,7 +32,9 @@ npm install semantic-typescript
 10. [Analyse périodique : anneaux, champs et scores](#10-periodic-analysis-rings-fields-and-scores)
 11. [Fonctions utilitaires](#11-utility-helpers)
 12. [Performance et pièges](#12-performance-and-pitfalls)
-13. [Licence](#13-license)
+13. [Anneaux de phase : un cycle exact](#13-phase-rings)
+14. [Analyse du signal : fenêtres, spectres et temps](#14-signal-analysis)
+15. [Licence](#15-license)
 
 ---
 
@@ -279,7 +281,7 @@ Chaque terminal vit sur le **collectable**, pas sur le `Semantic`. C'est ce que 
 | `toOrderedMap(key, value?)` | `SynchronousOrderedMap<K, V>` | ordre d'insertion ; la dernière écriture l'emporte | O(n) attendu |
 | `toUnorderedMap(key, value?)` | `SynchronousUnorderedMap<K, V>` | non spécifié | O(n) attendu |
 | `toList()` | `SynchronousList<E>` | ordre de parcours, doublons conservés | O(n) |
-| `toCycle(span?)` | `SynchronousCycle<E>` | l'ordre de parcours fixe les positions sur l'anneau | O(n) |
+| `toRing(span?)` | `SynchronousRing<E>` | l'ordre de parcours fixe les positions sur l'anneau | O(n) |
 | `toLRUSet(capacity)` | `SynchronousUnorderedLRUSet<E>` | par récence ; seuls les `capacity` derniers survivent | O(n²) au pire |
 | `toLRUMap(capacity, key, value?)` | `SynchronousUnorderedLRUMap<K, V>` | par récence | O(n) attendu |
 | `toSkipSet(comparator?)` | `SynchronousSkipSet<E>` | croissant selon le comparateur, navigable | O(n²) au pire |
@@ -287,9 +289,9 @@ Chaque terminal vit sur le **collectable**, pas sur le `Semantic`. C'est ce que 
 | `toBinarySearchTree(comparator?)` | `SynchronousBinarySearchTree<E>` | croissant selon le comparateur, équilibré en hauteur | O(n log n) |
 | `toRootedForest()` | `SynchronousRootedForest<E>` | l'ordre de parcours devient la structure | O(n) |
 
-Le type du résultat suit le type d'élément du collectable lui-même, donc aucun terminal ne prend d'argument de type : un `SynchronousCollectable<E>` vous remet directement `Array<E>`, `SynchronousList<E>` ou `SynchronousOrderedSet<E>`. Seuls restent les arguments métier — le comparateur de `toOrderedSet` / `toSkipSet` / `toBinarySearchTree`, la capacité de la paire LRU, l'étendue de `toCycle`, et les extracteurs de clé et de valeur de la famille des tables.
+Le type du résultat suit le type d'élément du collectable lui-même, donc aucun terminal ne prend d'argument de type : un `SynchronousCollectable<E>` vous remet directement `Array<E>`, `SynchronousList<E>` ou `SynchronousOrderedSet<E>`. Seuls restent les arguments métier — le comparateur de `toOrderedSet` / `toSkipSet` / `toBinarySearchTree`, la capacité de la paire LRU, l'étendue de `toRing`, et les extracteurs de clé et de valeur de la famille des tables.
 
-Un cycle est un ensemble, donc les éléments répétés gardent leur première position ; toutes les autres structures ci-dessus conservent les doublons sauf si leur propre contrat en décide autrement (`toOrderedSet`, `toUnorderedSet` et `toSkipSet` sont des ensembles ; `toBinarySearchTree` et `toList` n'en sont pas).
+Un anneau est un ensemble, donc les éléments répétés gardent leur première position ; toutes les autres structures ci-dessus conservent les doublons sauf si leur propre contrat en décide autrement (`toOrderedSet`, `toUnorderedSet` et `toSkipSet` sont des ensembles ; `toBinarySearchTree` et `toList` n'en sont pas).
 
 ```typescript
 const numbers = useOf(3, 1, 4, 1, 5).toCollectable();
@@ -300,7 +302,7 @@ numbers.toList().toArray();                              // [3,1,4,1,5]
 numbers.toSkipSet().first().get();                       // 1 — navigable by comparator
 numbers.toBinarySearchTree().size();                     // 5n — duplicates retained
 numbers.toRootedForest().getRoots().length;              // 1
-useOf(1, 2, 3).toCollectable().toCycle().phaseAt(3n).get().toDegreeValue();      // 0
+useOf(1, 2, 3).toCollectable().toRing().phaseAt(3n).get().toDegreeValue();      // 0
 useOf(3, 1, 3).toCollectable().toOrderedMap(n => n, n => `v${n}`).get(3).get();  // "v3"
 ```
 
@@ -402,9 +404,9 @@ d'arrivée. Les index négatifs sont légaux et se trient simplement avant les n
 d'attente, si bien qu'une lecture émise après une écriture l'observe toujours.
 
 ```typescript
-const cycle = new AsynchronousCycle([1, 2]);
-const added   = cycle.add(3);          // queued
-const sampled = cycle.elementAt(2n);   // observes the write above
+const ring = new AsynchronousRing([1, 2]);
+const added   = ring.add(3);          // queued
+const sampled = ring.elementAt(2n);   // observes the write above
 await added;
 (await sampled).get().element;         // 3
 ```
@@ -423,14 +425,14 @@ table de correspondance. Trois constructions travaillent ensemble.
 
 ### 10.1 Un anneau est un entier
 
-Un `Cycle` est un **anneau n-fois** : le nombre d'éléments, la période positionnelle et le nombre de phases
+Un `Ring` est un **anneau n-fois** : le nombre d'éléments, la période positionnelle et le nombre de phases
 distinctes sont le même entier `n`. La phase d'une position est calculée à partir de son résidu exact, si bien que
 l'anneau est périodique au bit près :
 
 ```typescript
-import { SynchronousCycle } from "semantic-typescript";
+import { SynchronousRing } from "semantic-typescript";
 
-const ring = new SynchronousCycle(["a", "b", "c", "d", "e", "f"]);
+const ring = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
 ring.phaseAt(0n).get().toDegreeValue();   // 0
 ring.phaseAt(1n).get().toDegreeValue();   // 60
 ring.phaseAt(6n).get().getValue() === ring.phaseAt(0n).get().getValue();   // true, exactly
@@ -477,7 +479,7 @@ Chaque élément de l'anneau est une phase de référence. `analyse` replace cha
 mesure par rapport à chaque référence :
 
 ```typescript
-const ring = new SynchronousCycle(["a", "b", "c", "d", "e"]);
+const ring = new SynchronousRing(["a", "b", "c", "d", "e"]);
 const report = ring.analyse(["a", "c", "c", "a", "zz", "e"]);
 
 report.matched;                              // 5
@@ -491,8 +493,8 @@ car changer la ligne de base ne fait que faire tourner toutes les phases relativ
 d'une référence à l'autre, c'est le compte et la moyenne.
 
 ```typescript
-const cycle = new SynchronousCycle(["a", "b", "c"]);
-cycle.scoresAt(0, cosine);                   // one score per position, in [-1, 1]
+const ring = new SynchronousRing(["a", "b", "c"]);
+ring.scoresAt(0, cosine);                   // one score per position, in [-1, 1]
 ```
 
 ### 10.4 Instruments associés
@@ -503,9 +505,9 @@ cycle.scoresAt(0, cosine);                   // one score per position, in [-1, 
 | `resultant(t?)` | à quel point les phaseurs sont-ils concentrés maintenant ? | O(n) |
 | `analyse(data)` | comment ces données se situent-elles par rapport à chaque élément ? | O(n · m) |
 | `toSpectrum()` | l'anneau comme spectre, nombre d'onde sur l'axe des fréquences | O(n²) |
-| `useAngularSpectrum(cycle, instants, plan)` | le plan `(ω, n)` au fil du temps | O(n² · frames) |
+| `useAngularSpectrum(ring, instants, plan)` | le plan `(ω, n)` au fil du temps | O(n² · frames) |
 
-Deux primitives supplémentaires complètent le modèle : `combineCycles(a, b)` joint deux anneaux sur leur plus petit
+Deux primitives supplémentaires complètent le modèle : `combineRings(a, b)` joint deux anneaux sur leur plus petit
 commun multiple (un pullback, pas un produit — les paires qui ne peuvent pas partager un instant sont simplement
 absentes), et `rate()` donne à chaque élément sa propre fréquence intrinsèque, afin qu'un anneau puisse dériver par
 rapport à l'environnement. `jetAt`, `windingAt` et `errorIntegralAt` exposent l'état différentiel de cette dérive.
@@ -713,7 +715,7 @@ collecteur était non ordonné — une réécriture d'index ne devient un ordre 
 **`useGenerate` sans `interrupt` ne se termine jamais.** Fournissez toujours un prédicat d'arrêt ou un
 `limit` / `takeWhile` en aval.
 
-**`Cycle` est un ensemble à ordre d'insertion.** Les éléments sont uniques et conservent l'ordre dans lequel ils ont
+**`Ring` est un ensemble à ordre d'insertion.** Les éléments sont uniques et conservent l'ordre dans lequel ils ont
 été ajoutés pour la première fois. Un `add` en double renvoie `false`, et un `set` qui en introduirait un lève une
 exception. C'est ce qui permet à une phase d'être une fonction de l'*élément* plutôt que de la position
 qu'il occupe par hasard.
@@ -731,7 +733,658 @@ général non symétrique — un anneau qui parcourt le cercle à rebours place 
 
 ---
 
-<a id="13-license"></a>
-## 13. Licence
+<a id="13-phase-rings"></a>
+## 13. Anneaux de phase : un cycle exact
+
+Le chapitre 10 a introduit l'anneau comme modèle du cycle et l'a utilisé pour mesurer un jeu de
+données contre chaque phase. Ce chapitre en donne la surface complète : comment une position devient
+un angle, ce que la fréquence ambiante change et ne change pas, et les instruments qui lisent
+l'anneau contre le temps, contre les données et contre un autre anneau.
+
+Un `SynchronousRing` est une liste positionnelle adossée à un anneau circulaire doublement chaîné
+dont la tête et la queue sont jointes. C'est aussi un *ensemble* ordonné par insertion : aucun
+élément n'apparaît deux fois, et une écriture refusée laisse intacts à la fois les liens et les
+échantillons. Ce qui en fait un anneau plutôt qu'une liste, c'est que la phase d'une position est
+une fonction pure de son reste modulo la longueur courante ; l'anneau est donc périodique au bit
+près et son équilibre ne peut pas dériver.
+
+### 13.1 Un anneau est un entier, calculé exactement
+
+Un anneau porte `n` éléments, et le nombre d'éléments, la période positionnelle et le nombre de
+phases distinctes sont le même entier. La position `i` porte
+
+`phase + span · 2π · (((i mod n) + n) mod n) / n`
+
+le reste étant réduit en `bigint` avant de devenir un `number`. C'est toute la raison pour laquelle
+`phaseAt(i)` et `phaseAt(i + n)` sont *identiques* et pas seulement proches : le second appel se
+réduit au même entier, évalue le même produit et produit le même double. Un indice bien au-delà de
+la plage entière exacte de `number` retombe sur la bonne position, et un indice négatif parcourt
+l'anneau à l'envers.
+
+| Appel | Retour | Signification |
+| :--- | :--- | :--- |
+| `new SynchronousRing(source, options?)` | anneau | `source` est un itérable quelconque, doublons écartés |
+| `getPhase()` / `getFrequency()` / `getSpan()` | `Angle`, `Frequency`, `number` | les trois paramètres de construction |
+| `size()` | `bigint` | le `n` qui est aussi la période |
+| `phaseAt(index)` | `Optional<Angle>` | phase intrinsèque seule ; ignore temps, taux et fréquence |
+| `elementAt(index)` | `Optional<RingElement>` | élément, phase intrinsèque, fréquence ambiante, phaseur |
+| `frequencyAt(index)` | `Optional<Frequency>` | le taux ambiant, vide pour un anneau vide |
+| `toComplex()` / `toComplex(index)` | `Complex[]` / `Optional<Complex>` | phaseurs intrinsèques |
+
+`RingOptions` ajoute deux fonctions par élément : `magnitude(element, index)` donne la longueur du
+phaseur et vaut un par défaut, `rate(element, index)` donne à l'élément sa propre fréquence
+intrinsèque et vaut zéro par défaut, soit un marqueur fixe.
+
+```typescript
+import { SynchronousRing } from "semantic-typescript";
+
+const ring = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
+
+ring.size();                                                             // 6n
+ring.phaseAt(0n).get().toDegreeValue();                                  // 0
+ring.phaseAt(1n).get().toDegreeValue();                                  // 60
+ring.phaseAt(-1n).get().toDegreeValue();                                 // 300
+ring.phaseAt(6n).get().getValue() === ring.phaseAt(0n).get().getValue(); // true
+ring.phaseAt(10n ** 20n).get().toDegreeValue();                          // 240
+```
+
+`phaseAt(-1n)` vaut `300` sur un anneau de six éléments, et `10n ** 20n` se réduit à `4` modulo six,
+donc se lit `240`. Aucun des deux cas n'accumule de produit flottant, ce qui garde l'identité exacte
+quand la représentation de l'indice change.
+
+### 13.2 La fréquence ambiante et l'état à un instant
+
+`frequency` est la **vitesse de rotation ambiante** de l'environnement dans lequel l'anneau est
+plongé, pas un pas de phase entre positions. L'environnement avance la phase de chaque élément du
+même angle : il ne peut donc pas changer le motif intrinsèque, ni briser l'équilibre, ni modifier
+un résultat de `phaseAt`. La valeur par défaut est `0 Hz`.
+
+`relativeAt(index, time)` soustrait cet angle commun et laisse la coordonnée contre laquelle un
+`PhaseField` est évalué. `viewAt` et `viewsAt` renvoient l'état complet à un instant, y compris le
+`rate` propre de l'élément, et les accesseurs différentiels exposent la dérive :
+
+| Appel | Formule | Lit |
+| :--- | :--- | :--- |
+| `relativeAt(index, time)` | `intrinsèque + tauxPropre · t − ambiant · t` | la phase que voit l'environnement |
+| `viewAt(index, time)` / `viewsAt(time)` | idem, plus élément, indice, temps, taux, phaseur | l'état complet |
+| `jetAt(index, time)` | phase à `t`, taux propre, `slip = tauxPropre − ambiant` | l'état différentiel |
+| `windingAt(index, time)` | `trunc(slip · t)` | tours entiers glissés, tronqués vers zéro |
+| `errorIntegralAt(index, time, origin?)` | `∫ phase relative dt`, en tours · secondes | depuis combien de temps un élément avance |
+| `resultant(time?)` | `abs(Σ w · e^{iθ}) / Σ w` | concentration de phase, insensible à la rotation ambiante |
+| `analyse(data, time?)` | comptes et moyennes par référence | les données mesurées contre chaque élément |
+| `scoreAt(index, time, field)` / `scoresAt(time, field)` | le champ échantillonné à la phase relative | un score borné par position |
+
+```typescript
+import { SynchronousRing, useHertz } from "semantic-typescript";
+
+const moving = new SynchronousRing(["a", "b", "c", "d", "e", "f"], {
+  frequency: useHertz(1),
+});
+
+moving.getFrequency().getHertz();                        // 1
+moving.phaseAt(1n).get().toDegreeValue();                // 60 — intrinsic
+moving.relativeAt(1n, 0.25).get().toDegreeValue();       // 330 — 60 − 90
+moving.viewAt(1n, 0.25).get().relative.toDegreeValue();  // 330
+moving.jetAt(1n, 0.25).get().slip;                       // -1
+moving.purity();                                         // 1 — rotation cannot break it
+```
+
+À `1 Hz`, l'environnement avance d'un quart de tour en `0.25 s` : la phase relative de la position
+un vaut donc `60 − 90 = 330` degrés, tandis que sa phase intrinsèque reste `60`. Le jet rapporte un
+`slip` de `-1` hertz parce que l'élément lui-même ne bouge pas, et `purity()` vaut toujours `1` :
+faire tourner tous les phaseurs du même angle n'est pas une déformation.
+
+### 13.3 Pureté et équilibre
+
+`purity()` est la part de l'énergie de l'anneau portée par le mode fondamental :
+
+`max(abs(c₁)², abs(c_{n−1})²) / (n · Σ abs(z)²)`
+
+Les deux bins fondamentaux sont testés parce qu'un anneau peut parcourir le cercle dans les deux
+sens. Un anneau construit avec `span: 5` sur six éléments avance de `300` degrés, soit `−60`
+degrés : il tourne à l'envers, place toute son énergie dans `c₅` et serait déclaré impur par une
+formule qui ne regarderait que `c₁`. Le coût reste `O(n)` puisque seuls ces deux bins et l'énergie
+totale sont nécessaires.
+
+Les cas limites font partie du contrat. Un anneau de moins de deux éléments n'a pas de mode
+fondamental et rapporte `purity() === 0` et `isBalanced() === false`, quel que soit son contenu. Un
+anneau dont tous les phaseurs ont une longueur nulle n'a pas d'énergie et rapporte aussi zéro.
+`isBalanced(epsilon?)` vaut `1 − purity() <= epsilon`, avec `1E-9` comme tolérance par défaut.
+
+```typescript
+import { SynchronousRing } from "semantic-typescript";
+
+const forward = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
+const backward = new SynchronousRing(["a", "b", "c", "d", "e", "f"], { span: 5 });
+const weighted = new SynchronousRing(["a", "b", "c", "d"], {
+  magnitude: element => element === "a" ? 1 : 0,
+});
+
+forward.purity();                             // 1
+backward.phaseAt(1n).get().toDegreeValue();   // 300 — it runs backwards
+backward.purity();                            // 1 — the energy sits in c₅
+new SynchronousRing(["only"]).purity();       // 0
+new SynchronousRing(["only"]).isBalanced();   // false
+weighted.purity();                            // 0.25
+```
+
+### 13.4 Longueur résultante et composantes symétriques
+
+`resultant(time?)` est la longueur résultante moyenne : le module de la somme des phaseurs divisé
+par la somme des modules. Contrairement à `purity`, qui demande si l'anneau est encore les racines
+`n`-ièmes de l'unité, `resultant` demande à quel point les phaseurs sont concentrés maintenant. Un
+anneau équilibré rapporte `0` ; un anneau dont tous les éléments partagent un angle rapporterait
+`1`, mais la sémantique d'ensemble interdit les doublons, si bien que `1` apparaît en pratique
+lorsque `magnitude` annule tous les éléments sauf un.
+
+`zeroSequence()` est le phaseur moyen, c'est-à-dire `c₀ / n`. `sequences()` renvoie les `n`
+composantes symétriques, ordre croissant, par une transformée directe. `toSpectrum()` les enveloppe
+dans un `Spectrum` dont le bin `j` rapporte `j` cycles par tour d'anneau : l'axe des fréquences est
+donc l'axe des nombres d'onde.
+
+```typescript
+import { SynchronousRing } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const ring = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
+
+round(ring.resultant().get());                                        // 0
+round(ring.zeroSequence().get().magnitude());                         // 0
+ring.sequences().map(component => round(component.magnitude()));      // [0, 6, 0, 0, 0, 0]
+ring.toSpectrum().get().size();                                       // 6
+ring.toSpectrum().get().getResolution().getHertz();                   // 1
+```
+
+Les composantes sont complexes et en général **pas conjuguées-symétriques** : un anneau équilibré
+met toute son énergie dans le bin un, un anneau qui tourne à l'envers dans le bin `n − 1`. Les
+helpers unilatéraux de `Spectrum` supposent un signal réel ; lisez les bins directement au lieu de
+les replier.
+
+### 13.5 Analyser des données contre chaque élément
+
+`analyse(data, time?)` rattache chaque observation à l'anneau par identité et la mesure contre
+chaque élément comme phase de référence. Les observations que l'anneau ne détient pas sont comptées
+comme `missed` plutôt que devinées, car l'anneau est la seule source de phases. Chaque ligne de
+référence rapporte `count`, la phase relative moyenne `mean` et la longueur résultante moyenne
+`resultant`.
+
+Une identité vaut la peine d'être retenue : **`resultant` est le même pour chaque référence**.
+Changer la base ne fait que faire tourner toutes les phases relatives d'une constante, et une
+rotation ne peut pas changer une longueur résultante. Ce qui diffère par référence, c'est le compte
+et la moyenne.
+
+```typescript
+import { SynchronousRing } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const ring = new SynchronousRing(["a", "b", "c", "d", "e"]);
+const report = ring.analyse(["a", "c", "c", "a", "zz", "e"]);
+
+report.matched;                                                  // 5
+report.missed;                                                   // 1
+report.references.map(row => row.count);                         // [2, 0, 2, 0, 1]
+report.references.map(row => round(row.resultant));              // [0.1453, 0.1453, 0.1453, 0.1453, 0.1453]
+```
+
+L'évaluation est l'autre face de la même pièce. Un `PhaseField` est une série de cosinus bornée
+(chapitre 10.2), et `scoreAt`/`scoresAt` l'échantillonnent à la phase relative : le même anneau peut
+donc être évalué contre un alignement, contre un motif harmonique ou contre n'importe quel champ
+sans que l'anneau change.
+
+```typescript
+import { SynchronousRing, useField } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const ring = new SynchronousRing(["a", "b", "c", "d", "e", "f"]);
+const cosine = useField([1]);
+
+round(ring.scoreAt(0n, 0, cosine).get());                                  // 1
+round(ring.scoreAt(1n, 0, cosine).get());                                  // 0.5
+ring.scoresAt(0, cosine).map(score => round(score));                       // [1, 0.5, -0.5, -1, -0.5, 0.5]
+```
+
+### 13.6 Combiner des anneaux et le spectre angulaire
+
+`combineRings(left, right)` joint deux anneaux sur leur plus petit commun multiple, pas sur leur
+produit. L'instant `i` de l'anneau joint lit `i mod m` de l'anneau gauche et `i mod n` de l'anneau
+droit ; l'anneau joint se referme donc après `lcm(m, n)` instants. Les paires qui ne peuvent jamais
+coexister — celles dont les positions diffèrent modulo `gcd(m, n)` — sont simplement absentes :
+c'est pourquoi le résultat est un pullback et non un produit, et `aligns(left, right)` indique si
+une paire donnée est représentable.
+
+`useAngularSpectrum(ring, instants, plan)` construit le plan `(ω, n)` : chaque instant apporte une
+trame de phaseurs, la trame `k` du mode `j` est la `j`-ième composante symétrique de cette trame, et
+`cells[frame][order]` est le coefficient. Prendre une colonne donne la série temporelle d'un seul
+mode spatial, et `spectrum(order)` en est le spectre temporel.
+
+```typescript
+import { Sample, SynchronousRing, combineRings, useAngularSpectrum } from "semantic-typescript";
+
+const left = new SynchronousRing(["a", "b", "c", "d"]);
+const right = new SynchronousRing(["x", "y", "z", "w", "v", "u"]);
+const joined = combineRings(left, right);
+
+joined.period;                                     // 12n
+joined.divisor;                                    // 2n
+joined.ring.size();                                // 12n
+joined.aligns(0n, 0n);                             // true
+joined.aligns(1n, 0n);                             // false
+joined.ring.get(0n).join("-");                     // a-x
+
+const angular = useAngularSpectrum(left, [0, 0.25, 0.5, 0.75], new Sample(4, 1));
+angular.order;                                     // 4
+angular.frameCount;                                // 4
+angular.cells[0][1].magnitude();                   // 4
+angular.spectrum(1).get().size();                  // 4
+```
+
+### 13.7 Pièges
+
+**L'exactitude est exacte.** `phaseAt(i)` et `phaseAt(i + n)` sont le même double, pas deux valeurs
+à une tolérance près. Un anneau construit en accumulant `2π / n` par élément échouerait à cela ;
+celui-ci réduit d'abord l'indice en `bigint`.
+
+**`frequency` n'est pas un pas de phase.** C'est la vitesse de rotation ambiante, nulle par défaut,
+et faire tourner tous les phaseurs du même angle ne peut pas briser le motif intrinsèque. Pour faire
+avancer les positions les unes par rapport aux autres, utilisez `rate`, pas `frequency`.
+
+**`purity()` doit regarder les deux bins fondamentaux.** Un anneau qui tourne à l'envers reste les
+racines `n`-ièmes de l'unité ; `c₁` seul le déclarerait impur.
+
+**`n < 2` est un cas limite défini.** `purity()` renvoie `0` et `isBalanced()` `false` ; un anneau
+vide renvoie des optionnels vides depuis les méthodes d'échantillonnage.
+
+**Un span qui partage un facteur avec `n` effondre l'orbite.** Six éléments avec `span: 2` ne
+visitent que trois phases distinctes, et l'anneau n'est plus équilibré.
+
+**`resultant` est invariant par rotation, pas par le temps.** La rotation ambiante le laisse
+inchangé ; les `rate` par élément le changent à mesure que l'anneau se déphase.
+
+**L'anneau est un ensemble, et `analyse` apparie par identité.** Les doublons sont écartés à la
+construction, et un objet structurellement égal à un élément de l'anneau mais qui n'est pas la même
+référence est compté comme manqué.
+
+**`toSpectrum()` est complexe.** Ses bins ne sont pas conjugués-symétriques ; les helpers
+unilatéraux de `Spectrum` ne s'appliquent pas. Lisez les bins.
+
+**`windingAt` tronque vers zéro, et `errorIntegralAt` intègre la phase.** Un demi-tour de glissement
+rapporte `0n` ; l'intégrale d'erreur est en tours · secondes, pas un taux.
+
+```typescript
+import { SynchronousRing, useHertz } from "semantic-typescript";
+
+const collapsed = new SynchronousRing(["a", "b", "c", "d", "e", "f"], { span: 2 });
+collapsed.phaseAt(1n).get().toDegreeValue();   // 120
+collapsed.phaseAt(3n).get().toDegreeValue();   // 0
+Number(collapsed.purity().toFixed(4));         // 0
+
+const falling = new SynchronousRing(["a", "b", "c", "d"], {
+  frequency: useHertz(2),
+  rate: () => useHertz(0.5),
+});
+falling.jetAt(0n, 2).get().slip;               // -1.5
+falling.windingAt(0n, 1).get();                // -1n
+falling.windingAt(0n, 0.5).get();              // 0n
+
+const objects = new SynchronousRing([{ key: 1 }, { key: 2 }]);
+objects.analyse([{ key: 1 }]).missed;          // 1 — identity, not structure
+```
+
+---
+
+<a id="14-signal-analysis"></a>
+## 14. Analyse du signal : fenêtres, spectres et temps
+
+Le chapitre 10 traitait un anneau comme un cycle de phases. Ce chapitre en est le pendant temporel :
+un enregistrement réel qui porte, outre ses échantillons, les deux contextes dont toute formule
+spectrale a besoin — le plan d'échantillonnage qui transforme un indice de bin en hertz, et la
+fenêtre qui fixe à la fois le gain cohérent et la bande de bruit équivalente.
+
+L'objet-valeur est `SynchronousSignalCollectable`, son jumeau mis en file est
+`AsynchronousSignalCollectable`. Tous deux exposent la même surface `SignalCollectable` :
+vingt-trois méthodes, chacune déléguant à exactement une fabrique `useSynchronous<Method>` dans
+`synchronous/collectors`. La séparation est délibérée. La classe est une façade documentée, la
+fabrique possède l'accumulation, et le constructeur calcule une fois, à cette longueur,
+`sum(w) / count` et `count * sum(w^2) / sum(w)^2`. Un appelant qui doit se souvenir de « diviser
+par le gain cohérent » finira par l'oublier, et les 6,02 décibels qui en résultent ressemblent à
+une mesure plausible.
+
+### 14.1 Un signal porte sa propre calibration
+
+Un signal se construit à partir d'un itérable et d'un taux, d'un `Frame` existant, ou du
+constructeur avec un `Sample` explicite. La fenêtre par défaut est la fenêtre de Hann
+périodique ; toute analyse qui n'en nomme pas une l'utilise, et toute analyse accepte un
+remplacement. Les accesseurs de métadonnées lisent en temps constant un état figé à la
+construction, de sorte qu'un signal peut circuler sans que le contexte dérive.
+
+| Appel | Retour | Signification |
+| :--- | :--- | :--- |
+| `SynchronousSignalCollectable.useRate(values, rate, window?)` | signal | durée `count / rate` |
+| `SynchronousSignalCollectable.useFrame(frame, window?)` | signal | conserve le plan du frame |
+| `new SynchronousSignalCollectable(plan, values, window?)` | signal | le nombre de trames doit égaler le nombre d'échantillons |
+| `getSample()` / `getValues()` / `getWindow()` | plan, échantillons, fenêtre | le contexte figé |
+| `getRate()` | `number` | échantillons par seconde |
+| `getNyquist()` / `getResolution()` | `Frequency` | `rate / 2` et `rate / count` |
+| `getCoherentGain()` / `getNoiseBandwidth()` | `number` | recalculés à cette longueur exacte |
+| `size()` / `at(index)` / `toFrame()` / `equals(other)` / `toString()` | — | sémantique de valeur |
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const signal = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 64 }, (_unused, index) => Math.cos(2 * Math.PI * 8 * index / 64)),
+  64,
+);
+
+signal.size();                       // 64n
+signal.getRate();                    // 64
+signal.getNyquist().getHertz();      // 32
+signal.getResolution().getHertz();   // 1
+signal.getCoherentGain();            // 0.5
+signal.getNoiseBandwidth();          // 1.5
+```
+
+`getResolution()` est l'espacement des bins, non le pouvoir de résolution : il vaut `rate / count`
+parce que la transformée a `count` bins, et le remplissage par des zéros change l'espacement sans
+changer ce que la fenêtre peut séparer (section 14.8).
+
+### 14.2 Les vingt-trois méthodes
+
+Les méthodes forment six familles. Sept sont des lectures spectrales, deux des transformées
+temps–fréquence, quatre des grandeurs analytiques, trois des statistiques de séquence, cinq des
+descripteurs de forme, et deux renvoient un autre signal.
+
+| Méthode | Retour | Convention |
+| :--- | :--- | :--- |
+| `spectrum(size?, window?)` | `Spectrum` | brut et non normalisé, grille complexe complète |
+| `oneSided(size?, window?)` | `Bin[]` | moitié conjuguée repliée, DC et Nyquist non doublés |
+| `amplitude(window?)` | `number[]` | `2·abs(X) / (count · CG)`, DC et Nyquist une seule fois |
+| `power(window?)` | `number[]` | `A² / 2` par bin intérieur, `A²` en DC et Nyquist |
+| `decibel(window?)` | `number[]` | `20·log10(amplitude)` |
+| `powerDecibel(window?)` | `number[]` | `10·log10(puissance)` |
+| `powerSpectralDensity(frameSize?, hopSize?, window?)` | `SpectralDensity` | moyenne de Welch, `abs(X)² / (rate · Σw²)` |
+| `shortTimeFourierTransform(frameSize, hopSize, window?)` | `Spectrum[]` | bords étendus, temps au centre des trames |
+| `spectrogram(frameSize, hopSize, window?)` | `Spectrogram` | les mêmes colonnes avec un axe de temps |
+| `analyticSignal()` | `Complex[]` | paire de Hilbert `x + i·H(x)` |
+| `instantaneousPhase()` | `Angle[]` | repliée dans `[0, 2π)` |
+| `instantaneousFrequency(rate?, gate?)` | `number[]` | différence de phase déroulée, filtrée par l'enveloppe |
+| `envelope()` | `number[]` | `abs(z[n])`, circulaire aux bords |
+| `zeroCrossingRate(perSecond?)` | `number` | passages par zéro par paire d'échantillons |
+| `spectralFlux(frameSize?, hopSize?, window?)` | `number[]` | distance de norme unitaire entre trames |
+| `autocorrelation(maximumLag?, normalization?)` | `number[]` | coefficient par défaut, `ρ[0] = 1` |
+| `spectralCentroid(window?)` | `Optional<Frequency>` | fréquence moyenne pondérée par la puissance |
+| `spectralBandwidth(window?)` | `Optional<Frequency>` | écart-type pondéré par la puissance |
+| `spectralRolloff(ratio?, window?)` | `Optional<Frequency>` | premier bin atteignant `ratio` de la puissance |
+| `spectralFlatness(window?)` | `number` | moyenne géométrique sur arithmétique de la puissance |
+| `signalToNoiseRatio(frameSize?, hopSize?, window?, floorQuantile?)` | `Optional<number>` | plancher médian, `10·log10` |
+| `detrended(mode?)` | signal | `"none"`, `"constant"` (défaut), `"linear"` |
+| `windowed(window?)` | signal | applique une fenêtre et l'adopte |
+
+Les arguments optionnels ne sont pas décoratifs. `frameSize` vaut `min(256, size)` par défaut, le
+saut une demi-trame arrondie vers le bas, `instantaneousFrequency` filtre à `1E-3` de l'enveloppe
+de crête, et `spectralRolloff` utilise `0.85`. Chaque défaut est la valeur qu'une implémentation de
+référence choisit lorsque le paramètre est nommé sans être fourni.
+
+### 14.3 Amplitude, puissance et densité
+
+Trois normalisations sont nécessaires parce que trois questions différentes sont posées.
+
+`amplitude()` répond « quelle est la taille du sinus sur ce bin » :
+`2·abs(X[k]) / (count · CG)` pour un bin intérieur et `abs(X[k]) / (count · CG)` en DC et à
+Nyquist. Le facteur deux replie la moitié conjuguée ; le gain cohérent retire la fenêtre. Omettre
+l'un ou l'autre fait lire `0.5` à un sinus d'amplitude unité, soit moins 6,02 décibels.
+
+`power()` répond « quel carré moyen aurait un sinus sur ce bin » : `A² / 2` pour un bin intérieur
+et `A²` en DC et à Nyquist, car ces deux-là n'oscillent pas. C'est la convention de crête, et elle
+ne satisfait délibérément pas Parseval : la fenêtre étale chaque raie sur son lobe principal, donc
+la somme de tous les bins dépasse le carré moyen de la bande de bruit équivalente — `1.5` pour
+Hann.
+
+`powerSpectralDensity()` répond « quelle puissance par hertz » : `abs(X)² / (rate · Σw²)`, moyenné
+sur des segments recouvrants. Seule la somme des poids au carré rend un plancher de bruit blanc
+non biaisé ; diviser par `count` lit `0.375` pour un bruit unité, diviser par `count · CG²` lit
+`1.5`.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const tone = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 256 }, (_unused, index) => Math.cos(2 * Math.PI * 32 * index / 256)),
+  256,
+);
+
+round(tone.amplitude()[32]);                                 // 1
+round(tone.power()[32]);                                     // 0.5
+round(tone.power().reduce((sum, power) => sum + power, 0));  // 0.75
+round(tone.powerSpectralDensity(64n, 32n).totalPower());     // 0.5
+tone.powerSpectralDensity(64n, 32n).getSegments();           // 7n
+```
+
+Le couple de totaux est le contrôle à retenir : la somme en convention de crête vaut `0.75` tandis
+que la densité s'intègre à `0.5`, et le rapport est exactement la bande de bruit. La densité est
+aussi la seule des trois qui survive à un changement de longueur de trame.
+
+### 14.4 Niveaux : les deux conventions de décibel
+
+Une amplitude et une puissance ne partagent pas de facteur, donc pas de logarithme.
+`amplitudeDecibel` applique `20·log10` et convient à une tension, un déplacement ou une pression
+acoustique ; `powerDecibel` applique `10·log10` et convient à une puissance, une énergie, un carré
+moyen ou une densité. Les noms de méthodes du signal suivent la même séparation.
+
+```typescript
+import { amplitudeDecibel, powerDecibel, SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const tone = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 256 }, (_unused, index) => Math.cos(2 * Math.PI * 32 * index / 256)),
+  256,
+);
+
+amplitudeDecibel(0.25);           // -12.0412
+powerDecibel(0.25);               // -6.0206
+round(tone.decibel()[32]);        // 0
+round(tone.powerDecibel()[32]);   // -3.0103
+```
+
+Les deux lectures du même son sont correctes : son amplitude vaut un (zéro décibel) et son carré
+moyen vaut un demi (moins 3,01 décibels). Faire passer une puissance par la convention d'amplitude
+double le niveau en décibels, transformant le moins 6,02 correct en moins 12,04.
+
+### 14.5 Le repli unilatéral
+
+Un signal réel vérifie `X[count − k] = conj(X[k])`, la moitié des fréquences négatives ne porte
+donc aucune information indépendante. Le repli double chaque bin intérieur et laisse les deux bins
+auto-conjugués — DC et, pour une longueur paire, Nyquist — exactement tels que la transformée les a
+produits. Ces deux-là sont leur propre miroir ; les doubler invente de l'énergie et rapporte
+exactement 6,02 décibels de trop.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const edge = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 16 }, (_unused, index) => 2 + Math.cos(Math.PI * index)),
+  16,
+);
+const bins = edge.oneSided();
+
+bins.length;                  // 9
+round(bins[0].magnitude());   // 16
+round(bins[8].magnitude());   // 8
+round(edge.amplitude()[0]);   // 2
+round(edge.amplitude()[8]);   // 1
+```
+
+Les magnitudes brutes valent `16` et `8` parce que les poids de la fenêtre somment à huit ; diviser
+par `count · CG = 8` en fait les amplitudes calibrées `2` et `1`. Doubler les bins de bord lirait
+`4` et `2`, et l'erreur ne lèverait jamais d'exception.
+
+### 14.6 Vues temps–fréquence
+
+`shortTimeFourierTransform` et `spectrogram` découpent l'enregistrement comme la transformée à
+court terme de référence : une demi-trame de zéros à chaque extrémité, puis une queue complétée par
+des zéros afin qu'il reste un nombre entier de sauts. La première trame est centrée sur le premier
+échantillon, la dernière atteint le dernier échantillon, et la trame `m` est centrée à
+`m · hop / rate` secondes. Ne garder que les trames complètes jetterait jusqu'à `frameSize − 1`
+échantillons — pour 1000 échantillons, une trame de 256 et un saut de 128, cela fait 104
+échantillons, environ un dixième de l'enregistrement.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const tone = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 64 }, (_unused, index) => Math.cos(2 * Math.PI * 4 * index / 64)),
+  64,
+);
+const spectrogram = tone.spectrogram(16n, 8n);
+
+spectrogram.size();                               // 9
+spectrogram.getFrameSize();                       // 16
+spectrogram.getBoundary();                        // "zeros"
+spectrogram.getTime(0);                           // 0
+spectrogram.getTime(6);                           // 0.75
+tone.shortTimeFourierTransform(16n, 8n).length;   // 9
+tone.spectralFlux(16n, 8n).length;                // 8
+```
+
+Chaque colonne est un `Spectrum` de `frameSize` bins, exactement ce que `spectrum()` produirait
+pour la même trame, et `getTime()` rapporte des centres de trame, non des débuts.
+
+### 14.7 Fenêtres, gain cohérent et COLA
+
+Chaque forme a deux variantes. La variante symétrique divise par `count − 1` ; la variante
+périodique (DFT paire) divise par `count`, un échantillon de moins qu'une période complète, de
+sorte que la fenêtre est continue sous l'extension périodique que la DFT suppose. L'analyse et
+l'addition-recouvrement exigent la forme périodique ; la conception de filtres garde la symétrique.
+
+La différence est mesurable et ne lève jamais d'erreur. À cinquante pour cent de recouvrement, la
+fenêtre de Hann périodique somme à un en toute position ; la forme symétrique ondule, de `0.84`
+décibel à seize échantillons, `0.21` à soixante-quatre et encore `0.013` à mille vingt-quatre. La
+classe expose le gain cohérent et la bande de bruit équivalente de la fenêtre qu'elle détient, si
+bien que la correction n'est jamais codée en dur : un Hann symétrique lit `0.4375` à huit
+échantillons, pas `0.5`.
+
+```typescript
+import {
+  coherentGain, equivalentNoiseBandwidth, useFlatTopWindow,
+  useHannPeriodicWindow, useHannWindow,
+} from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+
+round(useHannWindow(1, 4));                           // 0.75
+round(useHannPeriodicWindow(1, 4));                   // 0.5
+coherentGain(useHannPeriodicWindow, 16);              // 0.5
+equivalentNoiseBandwidth(useHannPeriodicWindow, 16);  // 1.5
+useFlatTopWindow(0, 1024);                            // -0.000421
+Array.from({ length: 1024 }, (_unused, i) => useFlatTopWindow(i, 1024)).filter(w => w < 0).length;  // 578
+```
+
+La ligne du flat-top n'est pas une erreur du tableau. Une fenêtre flat-top est partiellement
+négative par définition — ici 578 poids sur 1024 — et ramener ces poids à zéro perturberait le
+lobe principal et détruirait la faible perte de scalloping pour laquelle la fenêtre existe. La
+bibliothèque renvoie la série inchangée.
+
+### 14.8 Pièges
+
+**Le remplissage par des zéros interpole, il ne résout jamais.** Une longueur de transformée
+supérieure au nombre d'échantillons échantillonne la même DTFT plus densément : la *position* du
+pic s'affine et l'espacement des bins devient `rate / size`, mais la capacité à séparer deux
+composantes reste gouvernée par la longueur et la forme de la fenêtre. Un son exactement entre deux
+bins lit `82.1093` et `80.8598` sur la grille non complétée, et `128` à sa propre fréquence sur la
+grille complétée.
+
+```typescript
+import { SynchronousSignalCollectable, useRectangularWindow } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const tone = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 256 }, (_unused, index) => Math.cos(2 * Math.PI * 100.5 * index / 256)),
+  256,
+);
+const flat = tone.spectrum(256n, useRectangularWindow);
+const padded = tone.spectrum(1024n, useRectangularWindow);
+
+flat.getResolution().getHertz();           // 1
+padded.getResolution().getHertz();         // 0.25
+round(flat.magnitudeAt(100).get());        // 82.1093
+round(flat.magnitudeAt(101).get());        // 80.8598
+round(padded.magnitudeAt(402).get());      // 128
+padded.frequencyAt(402).get().getHertz();  // 100.5
+```
+
+Deux sons égaux espacés de `0.4` bin restent fusionnés quel que soit le remplissage : avec un
+enregistrement de 256 points et une fenêtre de Hann, compléter à 8192 ne produit qu'un seul maximum
+local, pas deux.
+
+**La transformée de Hilbert est circulaire.** `analyticSignal`, `envelope` et
+`instantaneousPhase` traitent le premier et le dernier échantillon comme voisins, si bien qu'un
+enregistrement dont la période ne divise pas la longueur est contaminé aux deux bords. Le milieu de
+l'enregistrement est fiable, les bords non.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const edge = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 512 }, (_unused, index) => Math.cos(2 * Math.PI * 8.3 * index / 512)),
+  512,
+);
+const envelope = edge.envelope();
+
+round(envelope.slice(8, -8).reduce((sum, value) => sum + value, 0) / 496);  // 1.0025
+round(Math.max(...envelope.slice(0, 8)));                                   // 1.2592
+round(Math.min(...envelope.slice(-8)));                                     // 0.1314
+```
+
+**Une enveloppe qui s'annule ne définit pas de phase.** Là où l'enveloppe s'effondre, la différence
+de deux angles de bruit d'arrondi peut atteindre un demi-tour, ce qui se lit comme la moitié du
+taux d'échantillonnage. Le seuil est ce qui garde ce nombre significatif, et le défaut est `1E-3`
+de l'enveloppe de crête.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const beat = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 4096 }, (_unused, index) =>
+    Math.cos(2 * Math.PI * 100 * index / 2048) + Math.cos(2 * Math.PI * 102 * index / 2048)),
+  2048,
+);
+
+round(Math.max(...beat.instantaneousFrequency(2048, 0).map(Math.abs)));  // 920.218
+round(Math.max(...beat.instantaneousFrequency().map(Math.abs)));         // 101
+```
+
+**Une corrélation non normalisée n'est pas une similarité.** La somme brute `r[k]` croît avec la
+longueur de l'enregistrement, deux longueurs ne sont donc pas comparables. La règle par défaut
+`"coefficient"` divise par `r[0]` et garde chaque valeur dans `[-1, 1]` ; `"unbiased"` divise par
+`count − k` et paie d'une variance qui croît avec le décalage.
+
+```typescript
+import { SynchronousSignalCollectable } from "semantic-typescript";
+
+const round = (value: number): number => Number(value.toFixed(4));
+const periodic = SynchronousSignalCollectable.useRate(
+  Array.from({ length: 1024 }, (_unused, index) => Math.cos(2 * Math.PI * 8 * index / 1024)),
+  1024,
+);
+const rho = periodic.autocorrelation(200n);
+
+round(rho[0]);                                     // 1
+round(rho[128]);                                   // 0.875
+round(rho[64]);                                    // -0.9375
+round(periodic.autocorrelation(200n, "none")[0]);  // 512
+```
+
+Une dernière lecture mérite un avertissement : `spectralFlux` normalise chaque trame avant de la
+comparer, un simple changement de niveau produit donc un flux nul. Sa première et sa dernière
+valeur sont des artefacts de bord de la frontière de zéros, pas des attaques.
+
+---
+
+<a id="15-license"></a>
+## 15. Licence
 
 MIT © Eloy Kim

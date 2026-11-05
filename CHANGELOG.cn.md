@@ -5,10 +5,11 @@
 
 ---
 
-## [未发布]（Unreleased）
+## [2.0.0] - 2026-11-05
 
-本节涵盖 1.2.0 之后合入、尚未发布的改动。这是一次较大的变更：集合族被拆分、相位环 API 重做，
-并修复了若干异步生命周期缺陷。升级前请先阅读「破坏性变更」「变更」与「移除」三节。
+本节涵盖 1.2.0 之后合入的改动。这是一次较大的变更：集合族被拆分、相位环 API 重做、
+统计/窗口/信号/分布四个模块成为公开入口，并修复了若干异步生命周期缺陷。升级前请先阅读
+「破坏性变更」「变更」与「移除」三节。
 
 ### 破坏性变更（Breaking）
 
@@ -150,6 +151,25 @@
 - **`Spectrogram.getBoundary()`** 与 **`Sampler.spectrogram(..., options)`**：谱图保留扩展模式，
   并在 `toFrame` 时裁掉扩展。
 
+**公开模块**
+
+- **`statistics.ts`、`window.ts`、`signal.ts` 与 `distribution.ts` 成为各自 API 的归属模块**，
+  同步与异步两侧都是如此。这些模块里的类与值对象由 `semantic.ts` 再导出，因此
+  `#semantic/synchronous/semantic`（及其异步版本）这一历史导入路径仍然可用，而重复定义已经删除。
+- **新增具名导出**：`SynchronousStatistics`、`SynchronousBigIntStatistics`、
+  `SynchronousNumericStatistics`、`SynchronousWindowCollectable`、
+  `SynchronousWindowArrayCollectable`、`SynchronousSignalCollectable`、
+  `SynchronousDistributionCollectable` 及对应的 `Asynchronous*` 版本，另有分布值对象
+  （`Histogram`、`HistogramBin`、`EmpiricalDistribution`、`MomentSummary`、`RobustSummary`、
+  `DensityEstimate`）与 `SpectralDensity`。每个类都带同步/异步前缀，因为不带前缀的同名对
+  在包桶里会相互冲突（TS2308）。
+- **深导入**：`package.json` 现将 `semantic-typescript/signal`、`semantic-typescript/statistics`、
+  `semantic-typescript/window` 与 `semantic-typescript/distribution` 映射到同名的同步模块
+  （含声明文件），消费者可以只加载一个分析模块而不必加载整个桶文件。
+- **`SynchronousWindowArrayCollectable`**（及异步版本）把 `slide` / `tumble` 物化为数组。
+  `toWindow()` 仍返回 `SynchronousWindowCollectable`，即 README 记录的惰性管道形式，
+  窗口依旧可以先变换再消费。
+
 **工程**
 
 - README 按共享的十三节大纲重写为九种语言，并新增「周期分析」一节。
@@ -217,8 +237,8 @@
 
 ### 测试（Tests）
 
-- 622 项断言，全部通过，`tsc` 无任何诊断信息。新增测试文件覆盖有序/无序集合、错误层级、
-  森林构造，以及 1.3.0 的统计量定义：九种 Hyndman–Fan 分位数类型、`G1`/`G2` 与
+- 684 项断言，全部通过，`tsc` 无任何诊断信息。新增测试文件覆盖有序/无序集合、错误层级、
+  森林构造，以及 2.0.0 的统计量定义：九种 Hyndman–Fan 分位数类型、`G1`/`G2` 与
   `g1`/`g2` 的对照、`ddof`、闭式标准误，以及同步/异步/数值/大整数四套视图的小样本空 Optional。
 
 ---
@@ -372,10 +392,12 @@
 ## 历史版本说明
 
 - **[1.0.0] - 2026-04-07**：npm 上此前的最新版本。需要说明的是，该版本存在文中列出的 16 项阻断级缺陷，
-  **建议直接升级到 1.1.0**。此外该版本发布时仓库 `package.json` 停留在 `0.7.1`，仓库状态与线上产物一度脱节。
+  **建议直接升级到 2.0.0**。此外该版本发布时仓库 `package.json` 停留在 `0.7.1`，仓库状态与线上产物一度脱节。
 - **0.6.0 及更早**：`0.6.0` 之前的全部版本已在 npm 上标记 deprecated
   （`< 0.5.0` 缺事件流 API，`0.5.x` 存在循环依赖问题）。
 - 仓库此前没有 git tag，`.github/workflows/publish.yml` 以 `v*` 标签触发；本次发布补齐了 `v1.1.0` 标签。
 
+[2.0.0]: https://github.com/eloyhere/semantic-typescript/releases/tag/v2.0.0
+[1.2.0]: https://github.com/eloyhere/semantic-typescript/releases/tag/v1.2.0
 [1.1.0]: https://github.com/eloyhere/semantic-typescript/releases/tag/v1.1.0
 [1.0.0]: https://www.npmjs.com/package/semantic-typescript/v/1.0.0

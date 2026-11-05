@@ -2,14 +2,10 @@
  * The asynchronous statistics views: buffered, aggregate-oriented views over an
  * ordered collectable.
  *
- * This module is the transitional home of the asynchronous statistics API and
- * intentionally duplicates `AsynchronousStatistics`,
- * `AsynchronousBigIntStatistics` and `AsynchronousNumericStatistics` from
- * `#semantic/asynchronous/semantic`. Every preserved method body is copied from
- * that implementation with the class names, the module boundary and the
- * documentation adapted. Nothing imports this module yet, so the package entry
- * point keeps exporting the original classes until the redundant copies are
- * removed.
+ * This module is the home of the asynchronous statistics API. The classes were
+ * copied from `#semantic/asynchronous/semantic` with the class names, the module
+ * boundary and the documentation adapted, and `semantic` now re-exports them
+ * from here so that its historical import path keeps exposing them.
  *
  * The statistical definitions are the current, settled semantics:
  *
@@ -25,7 +21,8 @@
  * - every statistic returns `Optional`; undefined small-sample cases produce an
  *   empty optional: `G2` needs four observations, `G1` needs three, and the
  *   sample variance needs two.
- * - the normal-theory standard errors exist only on {@link NumericStatistics},
+ * - the normal-theory standard errors exist only on
+ *   {@link AsynchronousNumericStatistics},
  *   because rounding a real-valued standard error to a bigint would report zero
  *   for most samples.
  *
@@ -34,7 +31,7 @@
  * traversal order of the source cannot change their result. `mode` keeps the
  * first value encountered on ties, and `frequency` reports first occurrences in
  * buffered traversal order, so those two observe the order established by
- * {@link OrderedCollectable}. `group`, `groupBy`, `partition` and
+ * {@link AsynchronousOrderedCollectable}. `group`, `groupBy`, `partition` and
  * `partitionBy` are inherited from the collectable family unchanged.
  *
  * Complexity: the ordered buffer costs O(n) memory and O(n log n) construction
@@ -52,7 +49,7 @@ import { AsynchronousBigIntStatisticsSymbol, AsynchronousNumericStatisticsSymbol
 import { validate, type AsynchronousGenerator, type Comparator, type Functional } from "#semantic/utility";
 import { Optional } from "#semantic/optional";
 import { isKurtosisEstimator, isQuantileMethod, isSkewnessEstimator, isVarianceDdof, quantileOfSorted, type KurtosisOptions, type QuantileOptions, type SkewnessOptions, type VarianceOptions } from "#semantic/mathematics/quantile";
-import { OrderedCollectable } from "#semantic/asynchronous/collectable";
+import { AsynchronousOrderedCollectable } from "#semantic/asynchronous/collectable";
 
 /**
  * Converts bigint samples to number offsets relative to the first value.
@@ -85,7 +82,7 @@ function bigintOffsets(data: Array<bigint>): Array<number> {
  *
  * Responsibility: defines the aggregate and distribution operations shared by
  * the bigint and number subclasses. Every statistic reads the ordered buffer
- * built once by {@link OrderedCollectable}, so repeated calls replay the same
+ * built once by {@link AsynchronousOrderedCollectable}, so repeated calls replay the same
  * elements instead of re-running the generator. The class leaves the result
  * type open through `D`, but fixes the definition of every statistic at the
  * modern defaults: Hyndman–Fan type 7 quantiles, bias-corrected `G1` skewness,
@@ -104,7 +101,7 @@ function bigintOffsets(data: Array<bigint>): Array<number> {
  * @template E - The source element type.
  * @template D - The numeric result type: `number` or `bigint`.
  */
-export abstract class Statistics<E, D extends number | bigint> extends OrderedCollectable<E> {
+export abstract class AsynchronousStatistics<E, D extends number | bigint> extends AsynchronousOrderedCollectable<E> {
     protected readonly AsynchronousStatistics: symbol = AsynchronousStatisticsSymbol;
     /**
      * The built-in object tag identifying this API implementation.
@@ -518,7 +515,7 @@ export abstract class Statistics<E, D extends number | bigint> extends OrderedCo
 /**
  * A buffered bigint statistics view.
  *
- * Responsibility: implements {@link Statistics} for `bigint` results. Where an
+ * Responsibility: implements {@link AsynchronousStatistics} for `bigint` results. Where an
  * integer cannot represent a statistic exactly, the result is quantised once:
  * averages truncate towards zero, and variance, standard deviation, skewness,
  * kurtosis and interpolated quantiles round to the nearest integer. The
@@ -529,13 +526,13 @@ export abstract class Statistics<E, D extends number | bigint> extends OrderedCo
  * `interquartileRange` sort mapped values, `mode` breaks ties by first
  * encounter, and every other statistic is order-independent.
  *
- * Complexity: the buffer is built by {@link OrderedCollectable} in O(n log n);
+ * Complexity: the buffer is built by {@link AsynchronousOrderedCollectable} in O(n log n);
  * each statistic is O(n), except `median`, `quantile` and
  * `interquartileRange`, which are O(n log n).
  *
  * @template E - The source element type.
  */
-export class BigIntStatistics<E> extends Statistics<E, bigint> {
+export class AsynchronousBigIntStatistics<E> extends AsynchronousStatistics<E, bigint> {
     protected readonly BigIntStatistics: symbol = AsynchronousBigIntStatisticsSymbol;
     /**
      * The built-in object tag identifying this API implementation.
@@ -1288,7 +1285,7 @@ export class BigIntStatistics<E> extends Statistics<E, bigint> {
 /**
  * A buffered number statistics view.
  *
- * Responsibility: implements {@link Statistics} for `number` results without
+ * Responsibility: implements {@link AsynchronousStatistics} for `number` results without
  * rounding, and adds the normal-theory standard errors of the reported
  * skewness and kurtosis. The two-pass variance keeps the computation clear of
  * the catastrophic cancellation of the `sum(x^2) - sum(x)^2 / n` form.
@@ -1297,14 +1294,14 @@ export class BigIntStatistics<E> extends Statistics<E, bigint> {
  * `interquartileRange` sort mapped values, `mode` breaks ties by first
  * encounter, and every other statistic is order-independent.
  *
- * Complexity: the buffer is built by {@link OrderedCollectable} in O(n log n);
+ * Complexity: the buffer is built by {@link AsynchronousOrderedCollectable} in O(n log n);
  * each statistic is O(n), except `median`, `quantile` and
  * `interquartileRange`, which are O(n log n), and the two standard errors,
  * which are O(1).
  *
  * @template E - The source element type.
  */
-export class NumericStatistics<E> extends Statistics<E, number> {
+export class AsynchronousNumericStatistics<E> extends AsynchronousStatistics<E, number> {
     protected readonly AsynchronousNumericStatistics: symbol = AsynchronousNumericStatisticsSymbol;
     /**
      * The built-in object tag identifying this API implementation.

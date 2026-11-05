@@ -6,7 +6,7 @@
     "url": "https://github.com/eloyhere"
   },
   "description": "A modern type-safe stream processing library inspired by JavaScript Generator, Java Stream, and MySQL Index. Supports lazy evaluation, async streams, statistics, and IO-like operations.",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "type": "module",
   "readme": "readme.md",
   "main": "dist/index.js",
@@ -15,6 +15,26 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.js"
+    },
+    "./signal": {
+      "types": "./dist/synchronous/signal.d.ts",
+      "import": "./dist/synchronous/signal.js",
+      "require": "./dist/synchronous/signal.js"
+    },
+    "./distribution": {
+      "types": "./dist/synchronous/distribution.d.ts",
+      "import": "./dist/synchronous/distribution.js",
+      "require": "./dist/synchronous/distribution.js"
+    },
+    "./statistics": {
+      "types": "./dist/synchronous/statistics.d.ts",
+      "import": "./dist/synchronous/statistics.js",
+      "require": "./dist/synchronous/statistics.js"
+    },
+    "./window": {
+      "types": "./dist/synchronous/window.d.ts",
+      "import": "./dist/synchronous/window.js",
+      "require": "./dist/synchronous/window.js"
     },
     "./package.json": "./package.json"
   },

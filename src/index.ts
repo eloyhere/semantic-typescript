@@ -8,6 +8,69 @@ export {
 export {
     AsynchronousCollectable, AsynchronousOrderedCollectable, AsynchronousUnorderedCollectable,
 } from "#semantic/asynchronous/collectable";
+export {
+    SynchronousStatistics, SynchronousBigIntStatistics, SynchronousNumericStatistics,
+} from "#semantic/synchronous/statistics";
+export {
+    AsynchronousStatistics, AsynchronousBigIntStatistics, AsynchronousNumericStatistics,
+} from "#semantic/asynchronous/statistics";
+export {
+    SynchronousWindowCollectable, SynchronousWindowArrayCollectable,
+} from "#semantic/synchronous/window";
+export type { WindowPipeline } from "#semantic/synchronous/window";
+export {
+    AsynchronousWindowCollectable, AsynchronousWindowArrayCollectable,
+} from "#semantic/asynchronous/window";
+export type { WindowPipeline as AsynchronousWindowPipeline } from "#semantic/asynchronous/window";
+export {
+    SynchronousDistributionCollectable,
+    DensityEstimate, EmpiricalDistribution, Histogram, HistogramBin, MomentSummary, RobustSummary,
+} from "#semantic/synchronous/distribution";
+export {
+    AsynchronousDistributionCollectable,
+} from "#semantic/asynchronous/distribution";
+export type {
+    BandwidthRule, BoundaryCorrection, DensityData, DensityOptions, DistributionEntropyOptions,
+    EntropyOptions, HistogramBinData, HistogramBinning, HistogramClosure, HistogramData,
+    HistogramOptions, HistogramRule, KernelName, MomentData, RobustData, RobustOptions, TrimPolicy,
+} from "#semantic/synchronous/distribution";
+export {
+    SynchronousSignalCollectable, SpectralDensity,
+    useSynchronousAmplitude, useSynchronousAnalyticSignal, useSynchronousAutocorrelation,
+    useSynchronousDecibel, useSynchronousDetrended, useSynchronousEnvelope,
+    useSynchronousInstantaneousFrequency, useSynchronousInstantaneousPhase, useSynchronousOneSided,
+    useSynchronousPower, useSynchronousPowerDecibel, useSynchronousPowerSpectralDensity,
+    useSynchronousShortTimeFourierTransform, useSynchronousSignalToNoiseRatio,
+    useSynchronousSpectralBandwidth, useSynchronousSpectralCentroid, useSynchronousSpectralFlatness,
+    useSynchronousSpectralFlux, useSynchronousSpectralRolloff, useSynchronousSpectrogram,
+    useSynchronousSpectrum, useSynchronousWindowed, useSynchronousZeroCrossingRate,
+} from "#semantic/synchronous/signal";
+export type {
+    CorrelationNormalization, DetrendMode,
+} from "#semantic/synchronous/signal";
+export {
+    useSynchronousBlueStein, useSynchronousDiscreteFourierTransform,
+    useSynchronousFastFourierTransform, useSynchronousLaplacianTransform,
+    useSynchronousMeilinTransform, useSynchronousRadix2, useSynchronousRadix3,
+    useSynchronousRadix5, useSynchronousRadix7, useSynchronousWaveletTransform,
+} from "#semantic/synchronous/collectors/signal";
+export {
+    AsynchronousSignalCollectable,
+    useAsynchronousAmplitude, useAsynchronousAnalyticSignal, useAsynchronousAutocorrelation,
+    useAsynchronousDecibel, useAsynchronousDetrended, useAsynchronousEnvelope,
+    useAsynchronousInstantaneousFrequency, useAsynchronousInstantaneousPhase, useAsynchronousOneSided,
+    useAsynchronousPower, useAsynchronousPowerDecibel, useAsynchronousPowerSpectralDensity,
+    useAsynchronousShortTimeFourierTransform, useAsynchronousSignalToNoiseRatio,
+    useAsynchronousSpectralBandwidth, useAsynchronousSpectralCentroid, useAsynchronousSpectralFlatness,
+    useAsynchronousSpectralFlux, useAsynchronousSpectralRolloff, useAsynchronousSpectrogram,
+    useAsynchronousSpectrum, useAsynchronousWindowed, useAsynchronousZeroCrossingRate,
+} from "#semantic/asynchronous/signal";
+export {
+    useAsynchronousBlueStein, useAsynchronousDiscreteFourierTransform,
+    useAsynchronousFastFourierTransform, useAsynchronousLaplacianTransform,
+    useAsynchronousMeilinTransform, useAsynchronousRadix2, useAsynchronousRadix3,
+    useAsynchronousRadix5, useAsynchronousRadix7, useAsynchronousWaveletTransform,
+} from "#semantic/asynchronous/collectors/signal";
 export * from "#semantic/factory";
 export * from "#semantic/guard";
 export * from "#semantic/structure/error";
@@ -29,12 +92,12 @@ export type {
     AsynchronousListConstructor, SynchronousListConstructor,
 } from "#semantic/structure/list";
 export {
-    AsynchronousCycle, SynchronousCycle, useAngularSpectrum, combineCycles,
-} from "#semantic/structure/cycle";
+    AsynchronousRing, SynchronousRing, useAngularSpectrum, combineRings,
+} from "#semantic/structure/ring";
 export type {
-    AsynchronousCycleConstructor, SynchronousCycleConstructor, CycleElement, CycleOptions,
-    CycleView, CycleJet, CycleAnalysis, CycleReading, CycleReference, AngularSpectrum, CycleCombination,
-} from "#semantic/structure/cycle";
+    AsynchronousRingConstructor, SynchronousRingConstructor, RingElement, RingOptions,
+    RingView, RingJet, RingAnalysis, RingReading, RingReference, AngularSpectrum, RingCombination,
+} from "#semantic/structure/ring";
 export {
     PhaseField, useField,
 } from "#semantic/mathematics/field";

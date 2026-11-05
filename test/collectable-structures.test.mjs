@@ -10,7 +10,7 @@ const asyncCollectable = (...elements) => api.useFrom((async function* () {
     }
 })()).toCollectable();
 
-const newFactories = ["ToOrderedSet", "ToUnorderedSet", "ToOrderedMap", "ToUnorderedMap", "ToList", "ToCycle",
+const newFactories = ["ToOrderedSet", "ToUnorderedSet", "ToOrderedMap", "ToUnorderedMap", "ToList", "ToRing",
     "ToLRUSet", "ToLRUMap", "ToSkipSet", "ToSkipMap", "ToBinarySearchTree", "ToRootedForest"];
 
 test("every terminal method is backed by its own exported collector factory", () => {
@@ -64,13 +64,13 @@ test("toList returns a SynchronousList in encounter order with duplicates", () =
     assert.throws(() => api.useFrom([1, null]).toCollectable().toList(), TypeError);
 });
 
-test("toCycle returns a SynchronousCycle with source order and span", () => {
-    const cycle = collectable(3, 1, 2).toCycle(2);
-    assert.equal(cycle instanceof api.SynchronousCycle, true);
-    assert.deepEqual(cycle.toArray(), [3, 1, 2], "encounter order fixes ring positions");
-    assert.equal(cycle.getSpan(), 2);
-    assert.equal(cycle.phaseAt(0n).get().toString(), cycle.phaseAt(3n).get().toString(), "ring is n-periodic");
-    assert.throws(() => collectable(1).toCycle(0), RangeError);
+test("toRing returns a SynchronousRing with source order and span", () => {
+    const ring = collectable(3, 1, 2).toRing(2);
+    assert.equal(ring instanceof api.SynchronousRing, true);
+    assert.deepEqual(ring.toArray(), [3, 1, 2], "encounter order fixes ring positions");
+    assert.equal(ring.getSpan(), 2);
+    assert.equal(ring.phaseAt(0n).get().toString(), ring.phaseAt(3n).get().toString(), "ring is n-periodic");
+    assert.throws(() => collectable(1).toRing(0), RangeError);
 });
 
 test("toLRUSet returns a bounded SynchronousUnorderedLRUSet with recency eviction", () => {
@@ -176,12 +176,12 @@ test("toList returns a Promise of an AsynchronousList", async () => {
     assert.deepEqual(await list.toArray(), [3, 1, 2, 2]);
 });
 
-test("toCycle returns a Promise of an AsynchronousCycle", async () => {
-    const cycle = await asyncCollectable(3, 1, 2).toCycle(2);
-    assert.equal(cycle instanceof api.AsynchronousCycle, true);
-    assert.deepEqual(await cycle.toArray(), [3, 1, 2]);
-    assert.equal(cycle.getSpan(), 2);
-    assert.equal((await cycle.phaseAt(0n)).get().toString(), (await cycle.phaseAt(3n)).get().toString());
+test("toRing returns a Promise of an AsynchronousRing", async () => {
+    const ring = await asyncCollectable(3, 1, 2).toRing(2);
+    assert.equal(ring instanceof api.AsynchronousRing, true);
+    assert.deepEqual(await ring.toArray(), [3, 1, 2]);
+    assert.equal(ring.getSpan(), 2);
+    assert.equal((await ring.phaseAt(0n)).get().toString(), (await ring.phaseAt(3n)).get().toString());
 });
 
 test("toLRUSet returns a Promise of an AsynchronousUnorderedLRUSet", async () => {
@@ -248,7 +248,7 @@ test("every asynchronous terminal resolves through a promise, never a bare struc
         (collectable) => collectable.toOrderedMap((element) => element),
         (collectable) => collectable.toUnorderedMap((element) => element),
         (collectable) => collectable.toList(),
-        (collectable) => collectable.toCycle(),
+        (collectable) => collectable.toRing(),
         (collectable) => collectable.toLRUSet(4n),
         (collectable) => collectable.toLRUMap(4n, (element) => element),
         (collectable) => collectable.toSkipSet(compare),
@@ -272,7 +272,7 @@ test("the existing toSet and toMap terminals keep their native structures", () =
 test("nullish elements still fail at the new structure terminals", () => {
     const collectable = api.useFrom([1, null]).toCollectable();
     assert.throws(() => collectable.toList(), TypeError);
-    assert.throws(() => collectable.toCycle(), TypeError);
+    assert.throws(() => collectable.toRing(), TypeError);
     assert.throws(() => collectable.toBinarySearchTree(), TypeError);
     assert.throws(() => collectable.toRootedForest(), TypeError);
     assert.throws(() => collectable.toOrderedMap((element) => element, () => null), TypeError);
