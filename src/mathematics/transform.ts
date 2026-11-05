@@ -143,6 +143,7 @@ const attemptFactors: (count: number) => Array<number> | undefined = (count: num
  * @throws {TypeError} if any sample is not a finite number
  */
 export const asComplex: (frames: readonly number[]) => Array<Complex> =
+    /* `map` preserves order and length, building a fresh `Complex` per frame. */
     (frames: readonly number[]): Array<Complex> => frames.map((value: number): Complex => new Complex(value, 0));
 
 /**

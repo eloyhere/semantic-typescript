@@ -136,6 +136,17 @@ export class RangeError extends ValidationError {
 }
 
 /**
+ * The same class under a name that cannot shadow the global constructor.
+ *
+ * {@link RangeError} keeps its historical name, but a consumer that writes
+ * `import { RangeError }` shadows the global for that whole module, which turns
+ * an incidental `new RangeError(...)` in the same file into a library error.
+ * Importing `SemanticRangeError` instead leaves the global untouched. The two
+ * names denote one class, so `instanceof` checks work across both.
+ */
+export { RangeError as SemanticRangeError };
+
+/**
  * Indicates that a combination of options is internally inconsistent.
  */
 export class ConfigurationError extends ValidationError {

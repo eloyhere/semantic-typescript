@@ -8,7 +8,7 @@ import type {
 import type * as API from 'semantic-typescript';
 import type { SynchronousAdelsonVelskyLandisTree as ModuleAVLTree } from '#semantic/structure/tree/adelsonVelskyLandisTree';
 import type { SynchronousBPlusTree as ModuleBPlusTree } from '#semantic/structure/tree/bPlusTree';
-import type { SynchronousRootedForest as ModuleRootedForest } from '#semantic/structure/tree/rootedForest';
+import type { SynchronousRootedForest as ModuleRootedForest } from '#semantic/structure/forest/rootedForest';
 import type { SynchronousAdelsonVelskyLandisTree as DirectoryAVLTree } from '#semantic/structure/tree/index';
 
 /** Public traversal retains specialised nodes and exposes the full Generator protocol. */

@@ -11,6 +11,7 @@ export * from "#semantic/mathematics/frame";
 export * from "#semantic/mathematics/frequency";
 export * from "#semantic/mathematics/leap";
 export * from "#semantic/mathematics/omega";
+export * from "#semantic/mathematics/quantile";
 export * from "#semantic/mathematics/sample";
 export * from "#semantic/mathematics/sampler";
 export * from "#semantic/mathematics/spectral";

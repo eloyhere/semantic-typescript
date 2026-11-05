@@ -986,7 +986,30 @@ type Pair<K, V> = [K, V];
 type RuntimeMapEntry<K, V> = SynchronousMapEntry<K, V> | AsynchronousMapEntry<K, V>;
 type Operation = (...args: never[]) => unknown;
 type Bound<K> = { key: K; inclusive: boolean };
+/**
+ * The key window a view is restricted to.
+ *
+ * `lower` and `upper` are optional bounds and each is either inclusive or
+ * exclusive, so an open-ended range leaves one side undefined. `descending`
+ * reverses the presentation order without changing which keys are in scope.
+ *
+ * @template K the key type
+ */
 interface View<K> { lower?: Bound<K>; upper?: Bound<K>; descending: boolean }
+/**
+ * The storage a map instance keeps between operations.
+ *
+ * `data` holds the entries in iteration order, `recent` records recency for the
+ * LRU family, and the two bucket maps index keys by hash so the unordered family
+ * can find them without a scan. `capacity` bounds the LRU and SKIP families,
+ * `comparator` orders the ordered family, and `readiness`/`queue` serialise
+ * asynchronous work so a read issued after a write observes it. `generation`
+ * lets an in-flight asynchronous source notice that the map was cleared or
+ * replaced under it.
+ *
+ * @template K the key type
+ * @template V the value type
+ */
 interface State<K, V> {
     data: Map<K, V>;
     recent: Map<K, true>;
@@ -998,6 +1021,13 @@ interface State<K, V> {
     queue: Promise<unknown>;
     generation: number;
 }
+/**
+ * The minimal handle an asynchronous source keeps on a map instance.
+ *
+ * `readiness` is awaited before the source's values are published, and `pairs`
+ * reads the current contents at that moment, so a source attached to a map does
+ * not observe a half-applied write.
+ */
 interface RuntimeMap { readiness: Promise<void>; pairs: () => Pair<unknown, unknown>[] }
 const runtimeMaps = new WeakMap<object, RuntimeMap>();
 const runtimeEntries = new WeakMap<object, () => Pair<unknown, unknown>>();

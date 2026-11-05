@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     Bin, Complex, Frame, Frequency, Sample, Sampler, Spectrogram, Spectrum,
-    decibel, isBin, isFrame, isSpectrogram, isSpectrum, normalized, parabolicOffset,
-    useRectangularWindow,
+    amplitudeDecibel, isBin, isFrame, isSpectrogram, isSpectrum, normalized, parabolicOffset,
+    powerDecibel, useRectangularWindow,
 } from '../dist/index.js';
 
 const PI = Math.PI;
@@ -82,11 +82,21 @@ test('normalisation and decibel helpers apply documented scaling', () => {
     close(normalized(amplitude, 'count', 10).getReal(), 0.3);
     close(normalized(amplitude, 'root', 10).getImaginary(), 4 / Math.sqrt(10));
     close(normalized(amplitude, 'none', 10).magnitude(), 5);
-    close(decibel(1), 0);
-    close(decibel(0.1), -20);
-    close(decibel(1, 2), -20 * Math.log10(2));
-    assert.equal(decibel(0), Number.NEGATIVE_INFINITY);
-    assert.throws(() => decibel(-1), RangeError);
+    // The amplitude convention uses 20 log10, so one tenth is minus 20 dB.
+    close(amplitudeDecibel(1), 0);
+    close(amplitudeDecibel(0.1), -20);
+    close(amplitudeDecibel(1, 2), -20 * Math.log10(2));
+    assert.equal(amplitudeDecibel(0), Number.NEGATIVE_INFINITY);
+    assert.throws(() => amplitudeDecibel(-1), RangeError);
+    // The power convention uses 10 log10: 0.25 is -6.02 dB, not the -12.04 dB
+    // that the amplitude convention reports for the same number.
+    close(powerDecibel(1), 0);
+    close(powerDecibel(0.25), 10 * Math.log10(0.25));
+    close(powerDecibel(1, 4), -10 * Math.log10(4));
+    close(amplitudeDecibel(0.25), 20 * Math.log10(0.25));
+    assert.equal(powerDecibel(0), Number.NEGATIVE_INFINITY);
+    assert.throws(() => powerDecibel(-1), RangeError);
+    assert.throws(() => powerDecibel(1, 0), RangeError);
     assert.throws(() => normalized(amplitude, 'bad', 10), TypeError);
     close(parabolicOffset(1, 2, 1.5), 0.5 * (1 - 1.5) / (1 - 4 + 1.5));
     assert.equal(parabolicOffset(2, 2, 2), 0);
@@ -103,6 +113,8 @@ test('a spectrum folds one-sided bins and scales amplitudes', () => {
     close(spectrum.amplitudeOf(1, 'count').get().getReal(), 0.5);
     close(spectrum.magnitudeOf(1, 'root').get(), 4 / Math.sqrt(8));
     close(spectrum.decibelOf(1, 'count').get(), 20 * Math.log10(0.5));
+    // The same bin read as a power uses 10 log10, so 0.25 is -6.02 dB.
+    close(spectrum.powerDecibelOf(1, 'count').get(), 10 * Math.log10(0.25));
     close(spectrum.getNyquist().getHertz(), 4);
     close(spectrum.refinedPeakFrequency().get().getHertz(), 1);
     assert.ok(isSpectrum(spectrum));
@@ -129,11 +141,39 @@ test('a spectrum reports shape statistics', () => {
     close(spectrum.spread().get().getHertz(), 0.4);
     assert.equal(spectrum.flatness(), 0);
     close(spectrum.rolloff(0.85).get().getHertz(), 1);
-    close(spectrum.bandEnergy(new Frequency(0), new Frequency(2)), 5);
+    // The one-sided reading folds the conjugate half of a real spectrum: the
+    // interior bin at 1 Hz contributes its power twice, DC once, while the
+    // Nyquist bin at 2 Hz is outside the half-open band. The old two-sided raw
+    // sum, still available explicitly, counted the interior bin once.
+    close(spectrum.bandEnergy(new Frequency(0), new Frequency(2)), 9);
+    close(spectrum.bandEnergy(new Frequency(0), new Frequency(2), 'two-sided'), 5);
+    assert.throws(() => spectrum.bandEnergy(new Frequency(0), new Frequency(2), 'both'), TypeError);
+    // The Nyquist bin is self-conjugate and counted once, but the upper bound is
+    // exclusive: [0, Nyquist) excludes it while [0, Nyquist + 1) includes it.
+    const nyquist = new Spectrum(new Sample(8, 1), [
+        new Complex(0, 0), new Complex(0, 0), new Complex(0, 0), new Complex(0, 0),
+        new Complex(8, 0), new Complex(0, 0), new Complex(0, 0), new Complex(0, 0),
+    ]);
+    close(nyquist.bandEnergy(new Frequency(0), new Frequency(4)), 0);
+    close(nyquist.bandEnergy(new Frequency(0), new Frequency(5)), 64);
+    close(nyquist.bandEnergy(new Frequency(0), new Frequency(5), 'two-sided'), 64);
     assert.throws(() => spectrum.rolloff(0), RangeError);
     const silent = new Spectrum(new Sample(2, 1), [new Complex(0, 0), new Complex(0, 0)]);
     assert.equal(silent.centroid().isEmpty(), true);
     assert.equal(silent.rolloff().isEmpty(), true);
+});
+
+test('flatness uses the one-sided power spectrum', () => {
+    // Two bins with powers 4 and 1: the power flatness is sqrt(4) / 2.5 = 0.8.
+    // The old amplitude reading of the same two bins gave sqrt(2) / 1.5 = 0.9428.
+    const twoBins = new Spectrum(new Sample(2, 1), [new Complex(2, 0), new Complex(1, 0)]);
+    close(twoBins.flatness(), 0.8);
+    // A unit impulse has a perfectly flat power spectrum, so the ratio is one.
+    const impulse = new Sampler(new Sample(8, 1)).fastFourierTransform(time => time === 0 ? 1 : 0);
+    close(impulse.flatness(), 1);
+    // A tone concentrates its power in one bin, so flatness falls to almost zero.
+    const tone = new Sampler(new Sample(8, 1)).fastFourierTransform(time => Math.cos(2 * PI * time));
+    assert.ok(tone.flatness() < 1E-12, `tone flatness ${tone.flatness()}`);
 });
 
 test('a spectrogram reports frame times and inverts back to a frame', () => {
@@ -141,24 +181,39 @@ test('a spectrogram reports frame times and inverts back to a frame', () => {
     const sampler = new Sampler(new Sample(64, 1));
     const spectrogram = sampler.spectrogram(source, 16, 8, useRectangularWindow);
     assert.ok(isSpectrogram(spectrogram));
-    assert.equal(spectrogram.size(), 7);
+    // The default zero boundary extension prepends and appends eight samples,
+    // so the 64-sample source yields nine frames instead of seven.
+    assert.equal(spectrogram.size(), 9);
     assert.equal(spectrogram.getFrameSize(), 16);
     assert.equal(spectrogram.getHopSize(), 8);
     assert.equal(spectrogram.getRate(), 64);
+    assert.equal(spectrogram.getBoundary(), 'zeros');
     close(spectrogram.getTime(6), 0.75);
     close(spectrogram.getDuration(), 1);
-    assert.equal(spectrogram.magnitudeMatrix().length, 7);
+    assert.equal(spectrogram.magnitudeMatrix().length, 9);
     assert.equal(spectrogram.magnitudeMatrix()[0].length, 16);
-    close(spectrogram.binAt(0, 1).get().magnitude(), 8);
+    // The first frame is half extension zeros, so its leakage spreads across the
+    // band: bin 1 reads 4 rather than the 8 of a frame that starts on the tone,
+    // and the magnitude-weighted centroid rises to 9.9341 Hz.
+    close(spectrogram.binAt(0, 1).get().magnitude(), 4);
     close(spectrogram.dominantFrequencyAt(0).get().getHertz(), 4);
-    close(spectrogram.spectralCentroidAt(0).get().getHertz(), 4);
+    close(spectrogram.spectralCentroidAt(0).get().getHertz(), 9.934147226250369, 1E-9);
     assert.equal(spectrogram.binAt(0, 20).isEmpty(), true);
-    assert.equal(spectrogram.at(7).isEmpty(), true);
-    assert.throws(() => spectrogram.getTime(7), RangeError);
+    assert.equal(spectrogram.at(9).isEmpty(), true);
+    assert.throws(() => spectrogram.getTime(9), RangeError);
 
+    // Overlap-add trims the eight-sample extension at both ends, so the
+    // reconstruction covers the original 64 samples rather than the padded 80.
     const reconstructed = spectrogram.toFrame();
     assert.equal(reconstructed.size(), 64);
     reconstructed.getValues().forEach((value, index) => close(value, source(index / 64)));
+
+    const unpadded = sampler.spectrogram(source, 16, 8, useRectangularWindow, { boundary: 'none', padded: false });
+    assert.equal(unpadded.getBoundary(), 'none');
+    assert.equal(unpadded.size(), 7);
+    close(unpadded.getTime(6), 0.875);
+    close(unpadded.getDuration(), 1);
+    assert.equal(unpadded.toFrame().size(), 64);
 });
 
 test('a spectrogram validates its columns and hop', () => {
@@ -167,5 +222,7 @@ test('a spectrogram validates its columns and hop', () => {
     assert.throws(() => new Spectrogram([], 4), RangeError);
     assert.throws(() => new Spectrogram(columns, 0), TypeError);
     assert.throws(() => new Spectrogram(columns, 4, 1), TypeError);
+    assert.throws(() => new Spectrogram(columns, 4, useRectangularWindow, 'even'), TypeError);
+    assert.doesNotThrow(() => new Spectrogram(columns, 4, useRectangularWindow, 'zeros'));
     assert.throws(() => new Spectrogram([columns[0], sampler.shortTimeFourierTransform(time => time, 16, 16)[0]], 4), RangeError);
 });

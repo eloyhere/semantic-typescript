@@ -11,7 +11,10 @@ import {
 import { isSpectrum, Spectrum } from '../dist/mathematics/spectrum.js';
 import { Tone } from '../dist/mathematics/tone.js';
 import {
-    useBlackmanWindow, useHammingWindow, useHannWindow, useRectangularWindow, windowed,
+    coherentGain, equivalentNoiseBandwidth,
+    useBlackmanPeriodicWindow, useBlackmanWindow, useFlatTopPeriodicWindow, useFlatTopWindow,
+    useHammingPeriodicWindow, useHammingWindow, useHannPeriodicWindow, useHannWindow,
+    useRectangularWindow, windowed,
 } from '../dist/mathematics/window.js';
 
 const epsilon = 1E-9;
@@ -117,9 +120,12 @@ test('radixN accepts extra prime radices', () => {
 });
 
 test('the short-time transform frames the source and keeps its rate', () => {
+    // The default zero boundary extension adds floor(16 / 2) samples at each end,
+    // so 64 samples produce nine frames rather than the seven complete frames
+    // that the old unpadded path returned.
     const spectra = sampler(64).shortTimeFourierTransform(cos, 16, 8);
 
-    assert.equal(spectra.length, 7);
+    assert.equal(spectra.length, 9);
     for (const spectrum of spectra) {
         assert.equal(spectrum.size(), 16);
         assert.equal(spectrum.getRate(), 64);
@@ -128,6 +134,30 @@ test('the short-time transform frames the source and keeps its rate', () => {
     }
     assert.throws(() => sampler(16).shortTimeFourierTransform(cos, 32, 8), RangeError);
     assert.throws(() => sampler(16).shortTimeFourierTransform(cos, 8, 0), TypeError);
+});
+
+test('the short-time transform pads boundaries and covers the tail by default', () => {
+    const plan = sampler(64);
+    const padded = plan.shortTimeFourierTransform(cos, 16, 8);
+    const plain = plan.shortTimeFourierTransform(cos, 16, 8, useHannPeriodicWindow, { boundary: 'none', padded: false });
+    assert.equal(padded.length, 9);
+    assert.equal(plain.length, 7);
+
+    // 60 samples with a frame of 16 and a hop of 8 leave four samples that the
+    // unextended, unpadded path cannot frame. Zero extension adds eight samples
+    // per side; tail padding then adds four more so the last frame ends on the
+    // final sample, turning six frames into nine.
+    const partial = sampler(60);
+    assert.equal(partial.shortTimeFourierTransform(cos, 16, 8, useHannPeriodicWindow, { boundary: 'none', padded: false }).length, 6);
+    assert.equal(partial.shortTimeFourierTransform(cos, 16, 8, useHannPeriodicWindow, { boundary: 'none', padded: true }).length, 7);
+    assert.equal(partial.shortTimeFourierTransform(cos, 16, 8).length, 9);
+
+    // Constant extension repeats the edge samples rather than zero-filling; the
+    // frame geometry is unchanged, so the frame count is the same.
+    assert.equal(partial.shortTimeFourierTransform(cos, 16, 8, useHannPeriodicWindow, { boundary: 'constant' }).length, 9);
+
+    assert.throws(() => plan.shortTimeFourierTransform(cos, 16, 8, useHannPeriodicWindow, { boundary: 'even' }), TypeError);
+    assert.throws(() => plan.shortTimeFourierTransform(cos, 16, 8, useHannPeriodicWindow, { padded: 1 }), TypeError);
 });
 
 test('a tone peaks at its own bin', () => {
@@ -232,4 +262,74 @@ test('resample creates a new plan without mutating the original', () => {
     assert.equal(original.resample(4, 2).getSample().getCount(), 8);
     assert.equal(original.resample(4, 2).getSample().getDuration(), 2);
     assert.throws(() => new Sampler({}), TypeError);
+});
+
+const overlapAdd = (window, count, hop) => {
+    const sum = new Array(count).fill(0);
+    for (let start = 0; start < count; start += hop) {
+        for (let index = 0; index < count; index += 1) {
+            sum[(index + start) % count] += window(index, count);
+        }
+    }
+    return sum;
+};
+const rippleDecibel = values => 20 * Math.log10(Math.max(...values) / Math.min(...values));
+
+test('periodic windows are the DFT-even forms of the symmetric windows', () => {
+    assert.equal(useHannPeriodicWindow(0, 5), 0);
+    close(useHannPeriodicWindow(2, 5), 0.5 - 0.5 * Math.cos(4 * Math.PI / 5));
+    assert.ok(useHannPeriodicWindow(4, 5) > 0, 'the periodic Hann last sample is not zero');
+    assert.equal(useHannWindow(4, 5), 0, 'the symmetric Hann last sample is zero');
+
+    close(useHammingPeriodicWindow(0, 8), 0.08, 1E-12);
+    close(useHammingPeriodicWindow(4, 8), 1, 1E-12);
+    close(useBlackmanPeriodicWindow(0, 8), 0, 1E-12);
+    close(useBlackmanPeriodicWindow(4, 8), 1, 1E-12);
+    close(useFlatTopPeriodicWindow(4, 8), 1, 1E-6);
+
+    close(coherentGain(useHannPeriodicWindow, 8), 0.5, 1E-12);
+    close(equivalentNoiseBandwidth(useHannPeriodicWindow, 8), 1.5, 1E-12);
+    close(coherentGain(useHannWindow, 8), 0.4375, 1E-12);
+    close(equivalentNoiseBandwidth(useHannWindow, 8), 1.7142857142857144, 1E-12);
+});
+
+test('periodic Hann satisfies COLA at half hop while symmetric Hann does not', () => {
+    for (const count of [16, 64, 256, 1024]) {
+        const periodic = overlapAdd(useHannPeriodicWindow, count, count / 2);
+        periodic.forEach(value => close(value, 1, 1E-12));
+        const symmetric = overlapAdd(useHannWindow, count, count / 2);
+        assert.ok(rippleDecibel(symmetric) > 0, `symmetric Hann should ripple at ${count}`);
+    }
+    // The documented short-frame worst case is 0.841 dB at 16 samples.
+    close(rippleDecibel(overlapAdd(useHannWindow, 16, 8)), 0.8414102017054326, 1E-9);
+    close(rippleDecibel(overlapAdd(useHannWindow, 1024, 512)), 0.01332671514763897, 1E-9);
+});
+
+test('the flat-top window keeps its negative lobe', () => {
+    const symmetric = Array.from({ length: 1024 }, (_, index) => useFlatTopWindow(index, 1024));
+    const periodic = Array.from({ length: 1024 }, (_, index) => useFlatTopPeriodicWindow(index, 1024));
+    for (const weights of [symmetric, periodic]) {
+        assert.ok(weights.some(weight => weight < 0), 'flat-top must contain negative weights');
+        assert.ok(Math.min(...weights) < -0.0705, `minimum ${Math.min(...weights)}`);
+    }
+    // Without the clamp the symmetric window recovers the designed coherent gain
+    // and noise bandwidth; the old clamped version reported 0.233280 / 3.199558.
+    close(coherentGain(useFlatTopWindow, 1024), 0.2153680124990236, 1E-9);
+    close(equivalentNoiseBandwidth(useFlatTopWindow, 1024), 3.7739463420400616, 1E-9);
+
+    const scallopingLoss = window => {
+        let real = 0;
+        let imaginary = 0;
+        let total = 0;
+        for (let index = 0; index < 1024; index += 1) {
+            const weight = window(index, 1024);
+            const angle = Math.PI * index / 1024;
+            real += weight * Math.cos(angle);
+            imaginary -= weight * Math.sin(angle);
+            total += weight;
+        }
+        return 20 * Math.log10(Math.hypot(real, imaginary) / Math.abs(total));
+    };
+    close(scallopingLoss(useFlatTopWindow), -0.009695032103578964, 1E-9);
+    assert.ok(scallopingLoss(useHannWindow) < -1);
 });

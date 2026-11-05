@@ -321,6 +321,7 @@ const requireComplexFrames: (values: Iterable<Complex>, name: string) => Array<C
  * @throws {RangeError} if the sequence is empty
  */
 export const discreteFourierTransform: (values: Iterable<Complex>) => Array<Complex> =
+    /* `requireComplexFrames` validates and copies first; `directTransform` runs the quadratic kernel. */
     (values: Iterable<Complex>): Array<Complex> => directTransform(requireComplexFrames(values, "Discrete transform"));
 
 /**
@@ -343,6 +344,7 @@ export const discreteFourierTransform: (values: Iterable<Complex>) => Array<Comp
  * @throws {RangeError} if the sequence is empty
  */
 export const fastFourierTransform: (values: Iterable<Complex>) => Array<Complex> =
+    /* `transformAny` selects mixed-radix or Bluestein after the same validation and copy. */
     (values: Iterable<Complex>): Array<Complex> => transformAny(requireComplexFrames(values, "Fast transform"));
 
 /**
@@ -365,4 +367,5 @@ export const fastFourierTransform: (values: Iterable<Complex>) => Array<Complex>
  * @throws {RangeError} if the sequence is empty
  */
 export const inverseFastFourierTransform: (values: Iterable<Complex>) => Array<Complex> =
+    /* `inverseAny` conjugates through the forward dispatcher and applies the `1 / count` scale. */
     (values: Iterable<Complex>): Array<Complex> => inverseAny(requireComplexFrames(values, "Inverse transform"));

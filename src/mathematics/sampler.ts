@@ -7,12 +7,13 @@ import type { ContinuedFraction, SpectralEstimate, SpectralEstimateOptions } fro
 import { Sample } from "#semantic/mathematics/sample";
 import type { WaveletLevel } from "#semantic/mathematics/spectral";
 import { Spectrogram } from "#semantic/mathematics/spectrogram";
+import type { BoundaryExtension } from "#semantic/mathematics/spectrogram";
 import { Spectrum } from "#semantic/mathematics/spectrum";
 import { Tone } from "#semantic/mathematics/tone";
 import { Track } from "#semantic/mathematics/track";
 import { asComplex, bluesteinTransform, directTransform, factorsFor, transform, transformAny } from "#semantic/mathematics/transform";
 import { Waveform } from "#semantic/mathematics/waveform";
-import { useHannWindow, windowed, type SpectralWindow } from "#semantic/mathematics/window";
+import { useHannPeriodicWindow, windowed, type SpectralWindow } from "#semantic/mathematics/window";
 import { SamplerSymbol } from "#semantic/symbol";
 
 /**
@@ -28,6 +29,117 @@ import { SamplerSymbol } from "#semantic/symbol";
  * loudly instead of yielding an all-zero spectrum.
  */
 export type Samplable = Tone | Epicycle | Waveform | Track | ((time: number) => number);
+
+/**
+ * Options controlling how a short-time transform frames its source.
+ *
+ * The defaults match the SciPy `stft` conventions: the signal is extended by
+ * `floor(frameSize / 2)` zero samples at each end, and the extended signal is
+ * zero-padded at the tail so that the last frame ends exactly on its final
+ * sample. A caller who wants the historical "complete frames only" behaviour
+ * passes `{ boundary: "none", padded: false }`.
+ */
+export interface TimeFrequencyOptions {
+    /**
+     * How the signal is extended beyond its first and last sample, or `"none"`
+     * for no extension. `"zeros"` prepends and appends `floor(frameSize / 2)`
+     * zeros and `"constant"` repeats the first and last sample the same number of
+     * times. The extension centres the first frame on the first input sample. The
+     * default is `"zeros"`.
+     */
+    readonly boundary?: BoundaryExtension;
+    /**
+     * Whether to zero-pad the tail of the (possibly extended) signal so that the
+     * last frame ends exactly on its final sample, rather than dropping the
+     * samples that cannot fill a frame. The default is `true`.
+     */
+    readonly padded?: boolean;
+}
+
+/**
+ * The validated boundary mode and padding flag of a short-time call.
+ *
+ * The pair is resolved once per call, before the source is sampled, so an
+ * invalid option rejects without evaluating the source.
+ */
+interface TimeFrequency {
+    /** The extension applied at both ends of the signal. */
+    readonly boundary: BoundaryExtension;
+    /** Whether the tail is zero-padded to a whole number of frames. */
+    readonly padded: boolean;
+}
+
+/**
+ * Validates the short-time framing options and applies their defaults.
+ *
+ * A missing option takes its documented default; an unsupported boundary name or
+ * a non-boolean padding flag is rejected. The result is a fresh plain object, so
+ * later mutation of the caller's options cannot change an in-flight call.
+ *
+ * @param options the caller-supplied options; defaults to an empty object
+ * @returns the resolved boundary mode and padding flag
+ * @throws {TypeError} if an option is not one of the supported values
+ */
+const resolveTimeFrequency: (options: TimeFrequencyOptions) => TimeFrequency =
+    (options: TimeFrequencyOptions): TimeFrequency => {
+        if (typeof options !== "object" || options === null) {
+            throw new TypeError("Short-time options must be an object.");
+        }
+        const boundary: unknown = options.boundary === undefined ? "zeros" : options.boundary;
+        if (boundary !== "zeros" && boundary !== "constant" && boundary !== "none") {
+            throw new TypeError("Short-time boundary must be zeros, constant or none.");
+        }
+        const padded: unknown = options.padded === undefined ? true : options.padded;
+        if (typeof padded !== "boolean") {
+            throw new TypeError("Short-time padded flag must be a boolean.");
+        }
+        return { boundary, padded };
+    }
+
+/**
+ * Extends and pads a sampled signal before it is framed.
+ *
+ * The signal is copied, so the caller's array is never modified. When the
+ * boundary is not `"none"`, `floor(frameSize / 2)` samples are prepended and
+ * appended: zeros for `"zeros"`, or copies of the first and last sample for
+ * `"constant"`. When padding is enabled, zero samples are then appended until the
+ * distance from the frame size to the end of the signal is a whole number of
+ * hops, which makes the final frame end exactly on the final sample and leaves no
+ * source sample uncovered. Padding after the extension keeps the extension
+ * samples adjacent to the signal, matching SciPy's order.
+ *
+ * @param frames the sampled signal, in sample order
+ * @param frameSize the number of samples per frame
+ * @param hopSize the number of samples between consecutive frame starts
+ * @param framing the validated boundary mode and padding flag
+ * @returns a new array holding the extended and padded signal
+ */
+const frameSignal: (frames: Array<number>, frameSize: number, hopSize: number, framing: TimeFrequency) => Array<number> =
+    (frames: Array<number>, frameSize: number, hopSize: number, framing: TimeFrequency): Array<number> => {
+        const extension: number = framing.boundary === "none" ? 0 : Math.floor(frameSize / 2);
+        const extended: Array<number> = [];
+        if (extension > 0) {
+            const first: number = framing.boundary === "zeros" ? 0 : frames[0];
+            for (let index: number = 0; index < extension; index += 1) {
+                extended.push(first);
+            }
+        }
+        extended.push(...frames);
+        if (extension > 0) {
+            const last: number = framing.boundary === "zeros" ? 0 : frames[frames.length - 1];
+            for (let index: number = 0; index < extension; index += 1) {
+                extended.push(last);
+            }
+        }
+        if (framing.padded) {
+            const remainder: number = (extended.length - frameSize) % hopSize;
+            const missing: number = remainder === 0 ? 0 : hopSize - remainder;
+            for (let index: number = 0; index < missing; index += 1) {
+                extended.push(0);
+            }
+        }
+        return extended;
+    }
 
 /**
  * Adapts a samplable source to a function of time.
@@ -578,23 +690,41 @@ export class Sampler {
      * source is preserved. A frame that is not a supported radix length is
      * handled by Bluestein rather than padded.
      *
-     * Frames start every `hopSize` samples and the final one starts no later than
-     * the frame count minus the frame size, so trailing samples that cannot fill a
-     * whole frame are dropped; a hop larger than the frame size therefore leaves
-     * gaps. The frame and hop sizes are validated before the source is sampled, so
-     * an invalid size never evaluates the source. At least one spectrum is
-     * returned because the frame size may not exceed the frame count.
+     * The defaults follow the SciPy `stft` conventions. The window is the
+     * periodic, DFT-even Hann window rather than the symmetric one, so a
+     * half-frame hop tiles the signal with a constant overlap-add sum. The signal
+     * is extended at both ends by `floor(frameSize / 2)` zero samples
+     * (`boundary: "zeros"`), which centres the first frame on the first input
+     * sample, and the extended signal is zero-padded at the tail
+     * (`padded: true`) so that the last frame ends exactly on its final sample
+     * and no source sample is dropped. Pass `{ boundary: "none", padded: false }`
+     * to recover the old "complete frames only" behaviour, `"constant"` to repeat
+     * the edge samples instead of zero-filling, or `padded: false` to keep the
+     * extension but drop a tail that cannot fill a frame.
+     *
+     * With `L` source samples, a frame of `N` and a hop of `H`, the returned
+     * count is `floor((L' - N) / H) + 1`, where `L'` is the extended length plus
+     * any zero padding; it is always at least one because the frame size may not
+     * exceed the source count. Frames still start every `hopSize` samples, so a
+     * hop larger than the frame size leaves gaps. The frame and hop sizes and the
+     * framing options are validated before the source is sampled, so an invalid
+     * argument never evaluates the source. With boundary extension the first frame
+     * is centred on the first source sample; `spectrogram` reports those centre
+     * times.
      *
      * @param source the continuous source to analyse
      * @param frameSize the number of samples per frame
      * @param hopSize the number of samples between consecutive frame starts
-     * @param window the weighting applied to every frame; defaults to Hann
+     * @param window the weighting applied to every frame; defaults to the
+     *        periodic Hann window
+     * @param options the boundary extension and tail padding; defaults to
+     *        `"zeros"` and `true`
      * @returns one spectrum per frame, in start-time order
      * @throws {TypeError} if the frame size or the hop size is not a positive
-     *         integer, or the window is unusable
+     *         integer, the window is unusable, or the framing options are invalid
      * @throws {RangeError} if the frame size exceeds the frame count of the plan
      */
-    public shortTimeFourierTransform(source: Samplable, frameSize: number, hopSize: number, window: SpectralWindow = useHannWindow): Array<Spectrum> {
+    public shortTimeFourierTransform(source: Samplable, frameSize: number, hopSize: number, window: SpectralWindow = useHannPeriodicWindow, options: TimeFrequencyOptions = {}): Array<Spectrum> {
         if (!isNumber(frameSize) || !Number.isInteger(frameSize) || frameSize < 1) {
             throw new TypeError("Short-time frame size must be a positive integer.");
         }
@@ -604,7 +734,8 @@ export class Sampler {
         if (frameSize > this.plan.getCount()) {
             throw new RangeError("Short-time frame size must not exceed the frame count.");
         }
-        const frames: Array<number> = this.sample(source);
+        const framing: TimeFrequency = resolveTimeFrequency(options);
+        const frames: Array<number> = frameSignal(this.sample(source), frameSize, hopSize, framing);
         const framePlan: Sample = new Sample(frameSize, frameSize / this.plan.getRate());
         const output: Array<Spectrum> = [];
         for (let start: number = 0; start + frameSize <= frames.length; start += hopSize) {
@@ -617,21 +748,31 @@ export class Sampler {
     /**
      * Short-time transform wrapped in a time-frequency view.
      *
-     * The columns are exactly the spectra of `shortTimeFourierTransform`, and the
-     * view retains the hop and the window so that it can report frame times and
-     * invert itself. The window must be the one the columns were analysed with,
-     * which is why it is a parameter rather than being recovered from a spectrum.
+     * The columns are exactly the spectra of `shortTimeFourierTransform` with the
+     * same window and framing options, and the view retains the hop, the window
+     * and the boundary mode so that it can report frame centre times and invert
+     * itself while trimming the extension. The window must be the one the columns
+     * were analysed with, which is why it is a parameter rather than being
+     * recovered from a spectrum. The defaults are the same as for
+     * `shortTimeFourierTransform`: periodic Hann, zero boundary extension and tail
+     * padding.
      *
      * @param source the continuous source to analyse
      * @param frameSize the number of samples per frame
      * @param hopSize the number of samples between consecutive frame starts
-     * @param window the weighting applied to every frame; defaults to Hann
+     * @param window the weighting applied to every frame; defaults to the
+     *        periodic Hann window
+     * @param options the boundary extension and tail padding; defaults to
+     *        `"zeros"` and `true`
      * @returns the time-frequency view of the source
-     * @throws {TypeError} if the frame size or the hop size is not a positive integer
+     * @throws {TypeError} if the frame size or the hop size is not a positive
+     *         integer, the window is unusable, or the framing options are invalid
      * @throws {RangeError} if the frame size exceeds the frame count of the plan
      */
-    public spectrogram(source: Samplable, frameSize: number, hopSize: number, window: SpectralWindow = useHannWindow): Spectrogram {
-        return new Spectrogram(this.shortTimeFourierTransform(source, frameSize, hopSize, window), hopSize, window);
+    public spectrogram(source: Samplable, frameSize: number, hopSize: number, window: SpectralWindow = useHannPeriodicWindow, options: TimeFrequencyOptions = {}): Spectrogram {
+        const framing: TimeFrequency = resolveTimeFrequency(options);
+        const columns: Array<Spectrum> = this.shortTimeFourierTransform(source, frameSize, hopSize, window, framing);
+        return new Spectrogram(columns, hopSize, window, framing.boundary);
     }
 
     /**

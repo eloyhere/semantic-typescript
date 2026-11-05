@@ -10,15 +10,33 @@ import { Optional } from "#semantic/optional";
 import { SpectrogramSymbol } from "#semantic/symbol";
 
 /**
+ * How the analysed signal was extended beyond its first and last sample.
+ *
+ * `"zeros"` extends with zero samples, `"constant"` repeats the first and last
+ * sample, and `"none"` does not extend at all. The extension is what lets the
+ * first windowed segment be centred on the first input sample; when it is used,
+ * the spectrogram stores the mode so that it can trim the extension during
+ * overlap-add reconstruction.
+ */
+export type BoundaryExtension = "zeros" | "constant" | "none";
+
+const BoundaryExtensions: ReadonlyArray<BoundaryExtension> = Object.freeze(["zeros", "constant", "none"]);
+
+/**
  * A time-frequency view: one spectrum per analysis frame, with the hop that
  * separates consecutive frame starts.
  *
  * The frame size and the rate come from the columns, because every column keeps
- * the plan that produced it. Column `k` starts at `k * hop / rate` seconds and
- * the whole view covers `(columns - 1) * hop / rate + frameSize / rate` seconds,
- * so trailing samples that could not fill a frame are absent, exactly as the
- * short-time transform dropped them. The window is retained so the view can be
- * inverted with the same taper that analysed it.
+ * the plan that produced it. Column `k` is centred at
+ * `(k * hop + frameSize / 2) / rate` seconds when the signal was not extended,
+ * and at `(k * hop + (frameSize mod 2) / 2) / rate` seconds when it was
+ * extended, so the first extended frame is centred on the first input sample.
+ * The whole view covers `(columns - 1) * hop / rate + frameSize / rate` seconds
+ * when the signal was not extended; an extended view trims the extension from
+ * both ends, so its duration is the retained sample count, which still includes
+ * any zero padding that the transform added at the tail. The window and the
+ * boundary mode are retained so the view can be inverted with the same taper and
+ * the same trimming.
  *
  * A spectrogram is immutable: the column array is frozen, every column is a
  * spectrum, and a column outside the view is reported through an empty
@@ -32,6 +50,8 @@ export class Spectrogram {
     private readonly hopSize: number;
     /** The analysis window retained for the overlap-add inversion. */
     private readonly window: SpectralWindow;
+    /** How the analysed signal was extended at its ends, for trimming. */
+    private readonly boundary: BoundaryExtension;
     /** The registered spectrogram brand, read by the shared runtime guard. */
     protected readonly [SpectrogramSymbol]: symbol = SpectrogramSymbol;
 
@@ -39,29 +59,33 @@ export class Spectrogram {
      * Creates a spectrogram from a non-empty iterable of equally planned spectra.
      *
      * The columns are collected in iteration order, so column `k` is the spectrum
-     * of the frame that starts at `k * hopSize / rate` seconds. Every column must
-     * be a `Spectrum`, and all columns must share one frame size and one frame
-     * rate, because a single frame size and rate are derived from the first
-     * column. The hop size is not checked against the frame size, so overlapping
-     * frames and gaps between frames are both accepted. The window is stored as
-     * supplied and is not applied during construction: it matters only to
-     * `toFrame`, which re-weights the overlap-added samples with it. Validation
-     * finishes before any field is stored, so a rejected argument leaves no
-     * partially constructed spectrogram behind, and the collected array is frozen
-     * before it is retained.
+     * of the frame that covers samples `k * hopSize` through
+     * `k * hopSize + frameSize - 1` of the signal as it was presented to the
+     * transform, after any boundary extension. Every column must be a `Spectrum`,
+     * and all columns must share one frame size and one frame rate, because a
+     * single frame size and rate are derived from the first column. The hop size
+     * is not checked against the frame size, so overlapping frames and gaps
+     * between frames are both accepted. The window and the boundary mode are
+     * stored as supplied and are not applied during construction: they matter only
+     * to `toFrame`, which re-weights the overlap-added samples and trims the
+     * extension. Validation finishes before any field is stored, so a rejected
+     * argument leaves no partially constructed spectrogram behind, and the
+     * collected array is frozen before it is retained.
      *
      * @param columns - the spectra of the analysis frames, in frame-start order
      * @param hopSize - the number of samples between consecutive frame starts, a
      *        positive integer
      * @param window - the analysis window retained for inversion; defaults to the
      *        rectangular window
+     * @param boundary - how the signal was extended at its ends; defaults to
+     *        `"none"`, which reproduces the unextended frame coordinates
      * @throws {TypeError} if the columns are not iterable, the hop size is not a
-     *         positive integer, the window is not callable, or a column is not a
-     *         `Spectrum`
+     *         positive integer, the window is not callable, the boundary mode is
+     *         not one of the supported names, or a column is not a `Spectrum`
      * @throws {RangeError} if the columns do not share one frame size or one
      *         frame rate, or if the iterable yields no column
      */
-    public constructor(columns: Iterable<Spectrum>, hopSize: number, window: SpectralWindow = useRectangularWindow) {
+    public constructor(columns: Iterable<Spectrum>, hopSize: number, window: SpectralWindow = useRectangularWindow, boundary: BoundaryExtension = "none") {
         if (!isIterable(columns)) {
             throw new TypeError("Spectrogram expects an iterable of spectra.");
         }
@@ -70,6 +94,9 @@ export class Spectrogram {
         }
         if (!isSpectralWindow(window)) {
             throw new TypeError("Spectrogram window must be a window function.");
+        }
+        if (typeof boundary !== "string" || !BoundaryExtensions.includes(boundary as BoundaryExtension)) {
+            throw new TypeError("Spectrogram boundary must be zeros, constant or none.");
         }
         const collected: Array<Spectrum> = [];
         for (const column of columns) {
@@ -92,6 +119,7 @@ export class Spectrogram {
         this.columns = Object.freeze(collected);
         this.hopSize = hopSize;
         this.window = window;
+        this.boundary = boundary;
     }
 
     /**
@@ -193,16 +221,35 @@ export class Spectrogram {
     }
 
     /**
-     * Returns the start time of one analysis frame.
+     * Returns how the analysed signal was extended beyond its ends.
      *
-     * The time is `index * hopSize / rate` seconds measured from the start of the
-     * source signal, so the first frame starts at zero and consecutive starts are
-     * `hopSize / rate` seconds apart. Unlike `at`, this method does not report an
-     * index outside the frame count through an empty value, so the index must lie
-     * inside the view.
+     * The mode is the value supplied to the constructor and is not inferred from
+     * the columns. `"none"` means the frames were taken from the signal exactly
+     * as given, while `"zeros"` and `"constant"` mean the signal was extended by
+     * `floor(frameSize / 2)` samples at each end before framing. `toFrame` trims
+     * that extension, and `getTime` reports frame centres on the original time
+     * axis.
+     *
+     * @returns the retained boundary extension mode
+     */
+    public getBoundary(): BoundaryExtension {
+        return this.boundary;
+    }
+
+    /**
+     * Returns the centre time of one analysis frame.
+     *
+     * For an unextended view the centre is `(index * hopSize + frameSize / 2) /
+     * rate` seconds from the start of the signal, so the first frame is centred
+     * half a frame into the signal. When the signal was extended at its ends, the
+     * extension shifts the frames back, and the centre is `(index * hopSize +
+     * (frameSize mod 2) / 2) / rate` seconds on the original time axis: the first
+     * frame is centred on the first input sample and consecutive centres are one
+     * hop apart. Unlike `at`, this method does not report an index outside the
+     * frame count through an empty value, so the index must lie inside the view.
      *
      * @param index - the zero-based frame index
-     * @returns the start time of that frame in seconds
+     * @returns the centre time of that frame in seconds
      * @throws {TypeError} if the index is not a finite integer
      * @throws {RangeError} if the index is negative or at least the frame count
      */
@@ -213,22 +260,30 @@ export class Spectrogram {
         if (index < 0 || index >= this.columns.length) {
             throw new RangeError("Spectrogram frame index must be within the frame count.");
         }
-        return index * this.hopSize / this.getRate();
+        const offset: number = this.boundary === "none" ? this.getFrameSize() / 2 : (this.getFrameSize() % 2) / 2;
+        return (index * this.hopSize + offset) / this.getRate();
     }
 
     /**
      * Returns the covered duration in seconds.
      *
-     * The duration runs from the start of the first frame to the end of the last
-     * one, that is `(columns - 1) * hop / rate + frameSize / rate` seconds. It
-     * counts the whole last frame, so source samples that were too few to fill a
-     * frame, and therefore produced no column, are not covered. The value also
-     * matches the duration of the frame returned by `toFrame`.
+     * An unextended view runs from the start of the first frame to the end of the
+     * last one, that is `(columns - 1) * hop / rate + frameSize / rate` seconds,
+     * and counts the whole last frame. An extended view trims the
+     * `floor(frameSize / 2)` extension samples from both ends, because they
+     * correspond to padding rather than to the original signal; its duration is
+     * therefore `((columns - 1) * hop + frameSize - 2 * floor(frameSize / 2)) /
+     * rate`, which equals the duration of the frame returned by `toFrame`.
+     * Zero padding that the transform added at the tail is not distinguishable
+     * from source samples here and remains included.
      *
-     * @returns the covered duration in seconds, positive and finite
+     * @returns the covered duration in seconds, positive and finite for a view
+     *          that retains at least one sample
      */
     public getDuration(): number {
-        return (this.columns.length - 1) * this.hopSize / this.getRate() + this.getFrameSize() / this.getRate();
+        const length: number = (this.columns.length - 1) * this.hopSize + this.getFrameSize();
+        const extension: number = this.boundary === "none" ? 0 : 2 * Math.floor(this.getFrameSize() / 2);
+        return (length - extension) / this.getRate();
     }
 
     /**
@@ -357,14 +412,21 @@ export class Spectrogram {
      * Every column is inverted, weighted by the analysis window and accumulated
      * at its start offset; the sum is then divided by the accumulated squared
      * window, which is exact wherever the frames overlap at least once. A sample
-     * covered by no frame, or covered only by zero weights, stays zero, and the
-     * result covers the same interval as the view, so a source whose tail could
-     * not fill a frame is truncated. The retained window is evaluated once per
-     * position of every frame during this call, so a window with side effects runs
-     * `size() * frameSize` times.
+     * covered by no frame, or covered only by zero weights, stays zero.
      *
-     * @returns a new frame at the source rate, covering the view's duration
-     * @throws {RangeError} if the retained window returns a non-finite weight
+     * When the signal was extended at its ends, the `floor(frameSize / 2)`
+     * extension samples are trimmed from both sides of the accumulated result,
+     * so the returned frame covers the original signal plus any zero padding that
+     * the transform added at the tail, without the boundary extension; an
+     * unextended view is returned whole. A frame that covered fewer than one
+     * retained sample cannot be represented and is rejected. The retained window
+     * is evaluated once per position of every frame during this call, so a window
+     * with side effects runs `size() * frameSize` times.
+     *
+     * @returns a new frame at the source rate, covering the view's retained
+     *         duration
+     * @throws {RangeError} if the retained window returns a non-finite weight, or
+     *         if trimming the boundary extension leaves no sample
      */
     public toFrame(): Frame {
         const frameSize: number = this.getFrameSize();
@@ -383,9 +445,16 @@ export class Spectrogram {
                 weight[offset + index] += taper * taper;
             }
         }
-        const values: Array<number> = total.map((value: number, index: number): number =>
-            weight[index] > 0 ? value / weight[index] : 0);
-        return new Frame(new Sample(length, length / this.getRate()), values);
+        const extension: number = this.boundary === "none" ? 0 : Math.floor(frameSize / 2);
+        const covered: number = length - 2 * extension;
+        if (covered < 1) {
+            throw new RangeError("Spectrogram boundary trimming must retain at least one sample.");
+        }
+        const values: Array<number> = [];
+        for (let index: number = extension; index < extension + covered; index += 1) {
+            values.push(weight[index] > 0 ? total[index] / weight[index] : 0);
+        }
+        return new Frame(new Sample(covered, covered / this.getRate()), values);
     }
 
     /**

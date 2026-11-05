@@ -240,17 +240,157 @@ export const useHashAsyncIterable = async <T extends AsyncIterable<unknown>>(tar
     return hash.digest();
 };
 
+/**
+ * Call signatures of the structural `useHash` dispatcher.
+ *
+ * The overload family lets the return type follow the argument: every
+ * synchronous input hashes to a `bigint`, while an async iterable is consumed
+ * asynchronously and therefore yields `Promise<bigint>`. At runtime the
+ * implementation chooses by `typeof` and by protocol presence rather than by
+ * the selected overload: `null` is handled before the switch, strings are
+ * hashed as scalars instead of being iterated, and async iteration wins when a
+ * value implements both iteration protocols.
+ *
+ * The signatures below describe the branch each argument type reaches. The
+ * final `unknown` signature is the fallback selected when the argument type is
+ * too wide for a more specific one, and it keeps the union return type.
+ */
 interface UseHash {
+    /**
+     * Hashes `null` as a scalar.
+     *
+     * This branch runs before `typeof`, because `typeof null` is `"object"` and
+     * a null would otherwise be treated as a structural object. The result is
+     * synchronous and identical for every null input.
+     *
+     * @param target - the only accepted value, `null`
+     * @returns the 64-bit structural hash of `null`
+     */
     (target: null): bigint;
+    /**
+     * Hashes `undefined` through its dedicated handler.
+     *
+     * `undefined` is a value here rather than a missing argument, so the
+     * dispatcher hashes it instead of rejecting the call. The digest is
+     * synchronous and stable.
+     *
+     * @param target - the only accepted value, `undefined`
+     * @returns the 64-bit structural hash of `undefined`
+     */
     (target: undefined): bigint;
+    /**
+     * Hashes a primitive boolean without boxing it.
+     *
+     * The branch is selected by `typeof target === "boolean"`; a `Boolean`
+     * object is `"object"` at runtime and takes the structural path instead, so
+     * the two forms do not share a digest.
+     *
+     * @param target - the boolean to hash
+     * @returns the 64-bit structural hash of the boolean
+     */
     (target: boolean): bigint;
+    /**
+     * Hashes a primitive number, including `NaN` and the infinities.
+     *
+     * Numbers are encoded as their IEEE-754 bytes after a same-value-zero
+     * canonicalisation, so `0` and `-0` agree and every `NaN` payload agrees.
+     * Primitive number hashes are memoized, so repeating a value does not
+     * re-encode it.
+     *
+     * @param target - the number to hash, including non-finite values
+     * @returns the 64-bit structural hash of the number
+     */
     (target: number): bigint;
+    /**
+     * Hashes a primitive bigint through the shared structural hash.
+     *
+     * Unlike the other primitives, bigint has no dedicated wrapper in this
+     * module: the switch falls straight through to the shared hash, so there is
+     * no extra argument check beyond the `typeof` that selected the branch. The
+     * digest is synchronous and derived from the integer's hexadecimal form.
+     *
+     * @param target - the bigint to hash
+     * @returns the 64-bit structural hash of the bigint
+     */
     (target: bigint): bigint;
+    /**
+     * Hashes a string as a scalar rather than as an iterable of characters.
+     *
+     * Strings reach this branch before the iteration checks, so a string is
+     * never walked element by element even though it implements
+     * `Symbol.iterator`. Every UTF-16 code unit contributes two bytes, including
+     * unpaired surrogates, and the length is framed into the digest.
+     *
+     * @param target - the string to hash
+     * @returns the 64-bit structural hash of the string
+     */
     (target: string): bigint;
+    /**
+     * Hashes a symbol by its registered key or its description.
+     *
+     * A symbol created with `Symbol.for` contributes its key, while a local
+     * symbol contributes its description, so local symbols with equal
+     * descriptions collide. A symbol without a description hashes the shared
+     * empty representation.
+     *
+     * @param target - the symbol to hash
+     * @returns the 64-bit structural hash of the symbol
+     */
     (target: symbol): bigint;
+    /**
+     * Consumes an async iterable and hashes its elements in order.
+     *
+     * This is the only overload that returns a promise. Its protocol check runs
+     * before the synchronous one, so a value implementing both is consumed
+     * asynchronously. Each element contributes its structural hash under a
+     * dedicated tag, so order and length are significant; the source is
+     * traversed once and a failure rejects the promise.
+     *
+     * @param target - the asynchronous source to consume
+     * @returns a promise for the 64-bit digest of the consumed elements
+     */
     (target: AsyncIterable<unknown>): Promise<bigint>;
+    /**
+     * Consumes a synchronous iterable and hashes its elements in order.
+     *
+     * Arrays, sets, maps, typed arrays and generators reach this branch when
+     * they do not also expose `Symbol.asyncIterator`; strings do not, because
+     * they were handled as scalars earlier. The iterator is consumed exactly
+     * once, each element contributes its structural hash, and the digest is
+     * returned directly rather than wrapped in a promise.
+     *
+     * @param target - the synchronous source to consume
+     * @returns the 64-bit digest of the consumed elements
+     */
     (target: Iterable<unknown>): bigint;
+    /**
+     * Hashes an object or function structurally and memoizes the result.
+     *
+     * This branch catches everything that survived both iteration checks, which
+     * includes plain objects, class instances and functions. The walker frames
+     * the built-in toString tag, follows own keys in `Reflect.ownKeys` order and
+     * records visited objects so cycles terminate; distinct objects with equal
+     * contents therefore share a digest. The weak cache returns the first result
+     * again, so mutating an object does not change its hash.
+     *
+     * @param target - the object or function to hash
+     * @returns the 64-bit structural hash of the value
+     */
     (target: object): bigint;
+    /**
+     * Dispatches an unrefined value at runtime and widens the return type.
+     *
+     * This signature is selected when the argument is typed as `unknown` or as
+     * a union wide enough to match several overloads, so the static result is
+     * the union of both outcomes. The implementation still makes one concrete
+     * decision: async iterables produce a promise, and every other value,
+     * including functions, produces a bigint immediately. Callers that need a
+     * promise can narrow the argument with `isAsyncIterable` first.
+     *
+     * @param target - any value accepted by the dispatcher
+     * @returns the digest, or a promise for it when the value iterates
+     *          asynchronously
+     */
     (target: unknown): bigint | Promise<bigint>;
 }
 

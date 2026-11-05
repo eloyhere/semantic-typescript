@@ -53,6 +53,18 @@ export interface SynchronousForest<N extends Navigable<unknown> = Navigable<unkn
     getRoots(): ReadonlyArray<N>;
 }
 
+/**
+ * Asynchronous forest: structural navigation stays synchronous while
+ * `getRoots()` and every collection query settles through a promise.
+ *
+ * The roots are disjoint components with no synthetic parent. Depth-first
+ * orders finish one component before the next in root-array order, whereas
+ * breadth-first interleaves the roots by structural depth. Async heap,
+ * graph-result and Fenwick forests all specialise this contract.
+ *
+ * @template N the navigable node type, normally a `TreeNode` variant
+ * @template E the element type exposed by the collection operations
+ */
 export interface AsynchronousForest<N extends Navigable<unknown> = Navigable<unknown>, E = TreeElement<N>>
     extends AsynchronousCollection<E>, TreeTraversal<N> {
     getRoots(): Promise<ReadonlyArray<N>>;
@@ -66,16 +78,41 @@ export interface SynchronousTreeConstructor {
     new <E = unknown>(source?: Iterable<E>, options?: TreeOptions<E, Nodes.TreeNode<E>>): SynchronousTree<Nodes.TreeNode<E>, E>;
 }
 
+/**
+ * Constructor shape for `AsynchronousTree` implementations.
+ *
+ * The generic overload keeps a caller-supplied node contract and therefore
+ * requires `options.buildNodes`; the element overload builds the default
+ * `TreeNode` view from a synchronous or asynchronous source. `new` never
+ * blocks, so an async source is drained behind a readiness gate.
+ */
 export interface AsynchronousTreeConstructor {
     new <N extends Navigable<unknown>, E = TreeElement<N>>(source: Iterable<E> | AsyncIterable<E> | undefined, options: TreeOptions<E, N> & { buildNodes: (elements: readonly E[]) => readonly N[] }): AsynchronousTree<N, E>;
     new <E = unknown>(source?: Iterable<E> | AsyncIterable<E>, options?: TreeOptions<E, Nodes.TreeNode<E>>): AsynchronousTree<Nodes.TreeNode<E>, E>;
 }
 
+/**
+ * Constructor shape for `SynchronousForest` implementations.
+ *
+ * A synchronous source is materialised immediately. The generic overload must
+ * receive `options.buildNodes`, because only a custom builder can produce an
+ * arbitrary node type; the element overload uses the default `TreeNode`
+ * forest layout. A builder may return several roots, which become the
+ * disjoint forest components.
+ */
 export interface SynchronousForestConstructor {
     new <N extends Navigable<unknown>, E = TreeElement<N>>(source: Iterable<E> | undefined, options: TreeOptions<E, N> & { buildNodes: (elements: readonly E[]) => readonly N[] }): SynchronousForest<N, E>;
     new <E = unknown>(source?: Iterable<E>, options?: TreeOptions<E, Nodes.TreeNode<E>>): SynchronousForest<Nodes.TreeNode<E>, E>;
 }
 
+/**
+ * Constructor shape for `AsynchronousForest` implementations.
+ *
+ * Accepts a synchronous or asynchronous element iterable. The generic
+ * overload requires `options.buildNodes`; the element overload builds the
+ * default `TreeNode` roots. Unlike the single-root tree constructors, this
+ * contract permits a builder to return more than one navigable root.
+ */
 export interface AsynchronousForestConstructor {
     new <N extends Navigable<unknown>, E = TreeElement<N>>(source: Iterable<E> | AsyncIterable<E> | undefined, options: TreeOptions<E, N> & { buildNodes: (elements: readonly E[]) => readonly N[] }): AsynchronousForest<N, E>;
     new <E = unknown>(source?: Iterable<E> | AsyncIterable<E>, options?: TreeOptions<E, Nodes.TreeNode<E>>): AsynchronousForest<Nodes.TreeNode<E>, E>;

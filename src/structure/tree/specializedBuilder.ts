@@ -39,6 +39,14 @@ export interface SpecializedTreeOptions<E> {
 }
 
 type Node = Record<string, unknown>;
+/**
+ * @internal Mutable state behind one specialised-tree node: the public node
+ * object, its structural parent and children, and the optional stored element.
+ *
+ * `stateOf` maps the public object back to this record, which lets builders
+ * install navigation closures without exposing storage fields on the node
+ * itself.
+ */
 interface State { node: Node; parent?: State; children: State[]; element?: unknown; }
 const stateOf = new WeakMap<object, State>();
 const optional = <T>(value?: T): Optional<T> => Optional.ofNullable(value);
@@ -220,6 +228,14 @@ function tournament<E>(family: string, values: readonly E[], options: Specialize
     return [root.node];
 }
 
+/**
+ * @internal Trie state that adds labelled edges and a terminal flag to the
+ * shared node state.
+ *
+ * The edge map preserves insertion order for `getEdges()`, while `terminal`
+ * records whether the accumulated path is a completed key. The compressed trie
+ * reuses the same record after contracting single-child chains.
+ */
 interface PrefixState extends State { edges: Map<string, PrefixState>; terminal: boolean; }
 function prefix<E>(family: string, values: readonly E[], options: SpecializedTreeOptions<E>): object[] {
     const keyOf = options.keyOf ?? ((value: E) => value);

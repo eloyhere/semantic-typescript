@@ -10,11 +10,20 @@ import { isFunction, isNumber } from "#semantic/guard";
  * for a length greater than one, so `w(index, count)` equals
  * `w(count - 1 - index, count)`.
  *
- * By contract a window is finite and non-negative at every position it is
- * applied to, and the built-in windows are designed to satisfy this. The runtime
- * guards only reject non-finite weights, so a custom window that returns a
- * negative multiplier is still accepted. A window returns a weight rather than a
- * scaled sample, so one window can be reused across frames of different lengths.
+ * By contract a window is finite at every position it is applied to. Most
+ * built-in windows are non-negative, but the flat-top window is partially
+ * negative by design, so consumers must not assume that every weight is at least
+ * zero. The runtime guards only reject non-finite weights, so a custom window
+ * that returns a negative multiplier is accepted as well. A window returns a
+ * weight rather than a scaled sample, so one window can be reused across frames
+ * of different lengths.
+ *
+ * Every built-in window is symmetric about the centre of its frame by default,
+ * with weights derived from a denominator of `count - 1`. The `Periodic`
+ * variants derive the same shapes from a denominator of `count`; they are the
+ * DFT-even forms that a short-time transform, overlap-add synthesis or Welch
+ * estimate needs, because only those forms tile a signal with a constant
+ * overlap-add sum at a whole-number hop.
  */
 export type SpectralWindow = (index: number, count: number) => number;
 
@@ -65,6 +74,34 @@ export const useHannWindow: SpectralWindow = (index: number, count: number): num
 };
 
 /**
+ * A periodic, DFT-even Hann window.
+ *
+ * The raised cosine is evaluated at `2 * PI * index / count` rather than at
+ * `2 * PI * index / (count - 1)`, so the window equals the symmetric Hann window
+ * of `count + 1` samples with its last sample dropped. The frame boundary is
+ * therefore continuous under the periodic extension the DFT assumes.
+ *
+ * At a hop of half the frame length the periodic Hann window satisfies the
+ * constant-overlap-add condition exactly, whatever the frame length: the
+ * overlap-add sum is one at every position. The symmetric `useHannWindow` does
+ * not: at 50 per cent overlap its sum ripples by about 0.84 dB at a frame of 16
+ * samples and still by about 0.013 dB at 1024 samples. Use this window for
+ * short-time transforms, overlap-add synthesis and Welch estimates; keep the
+ * symmetric form for filter design. A frame of one sample or fewer receives a
+ * weight of one.
+ *
+ * @param index - the zero-based position within the frame
+ * @param count - the number of samples in the frame
+ * @returns the periodic Hann weight, one for a frame of one sample or fewer
+ */
+export const useHannPeriodicWindow: SpectralWindow = (index: number, count: number): number => {
+    if (count <= 1) {
+        return 1;
+    }
+    return 0.5 - 0.5 * Math.cos(2 * Math.PI * index / count);
+};
+
+/**
  * A Hamming window, which lifts the tapered ends above zero.
  *
  * For a frame longer than one sample, the weight is
@@ -92,6 +129,27 @@ export const useHammingWindow: SpectralWindow = (index: number, count: number): 
 };
 
 /**
+ * A periodic, DFT-even Hamming window.
+ *
+ * This is the Hamming raised cosine evaluated at `2 * PI * index / count`, the
+ * DFT-even form used by short-time and Welch analysis. Its endpoints stay above
+ * zero because of the constant offset, so it does not reach zero at the frame
+ * boundary, but the periodic extension is still continuous. The symmetric
+ * `useHammingWindow` remains the form intended for filter design. A frame of one
+ * sample or fewer receives a weight of one.
+ *
+ * @param index - the zero-based position within the frame
+ * @param count - the number of samples in the frame
+ * @returns the periodic Hamming weight, one for a frame of one sample or fewer
+ */
+export const useHammingPeriodicWindow: SpectralWindow = (index: number, count: number): number => {
+    if (count <= 1) {
+        return 1;
+    }
+    return 0.54 - 0.46 * Math.cos(2 * Math.PI * index / count);
+};
+
+/**
  * A Blackman window, which suppresses the side lobes further than Hann.
  *
  * For a frame longer than one sample, the weight combines a cosine with its
@@ -116,6 +174,28 @@ export const useBlackmanWindow: SpectralWindow = (index: number, count: number):
         return 1;
     }
     const ratio: number = 2 * Math.PI * index / (count - 1);
+    return 0.42 - 0.5 * Math.cos(ratio) + 0.08 * Math.cos(2 * ratio);
+};
+
+/**
+ * A periodic, DFT-even Blackman window.
+ *
+ * The three-term series is evaluated at `2 * PI * index / count`, so the window
+ * is continuous under the periodic extension and can be used for short-time
+ * analysis without the boundary ripple of the symmetric form. Side lobes fall
+ * lower than Hann's at the cost of a wider main lobe. `useBlackmanWindow`
+ * remains the symmetric form for filter design. A frame of one sample or fewer
+ * receives a weight of one.
+ *
+ * @param index - the zero-based position within the frame
+ * @param count - the number of samples in the frame
+ * @returns the periodic Blackman weight, one for a frame of one sample or fewer
+ */
+export const useBlackmanPeriodicWindow: SpectralWindow = (index: number, count: number): number => {
+    if (count <= 1) {
+        return 1;
+    }
+    const ratio: number = 2 * Math.PI * index / count;
     return 0.42 - 0.5 * Math.cos(ratio) + 0.08 * Math.cos(2 * ratio);
 };
 
@@ -154,9 +234,9 @@ const requireWindow: (window: unknown, name: string) => SpectralWindow = (window
  * An empty iterable returns an empty array without calling the window. The window
  * is validated before the iterable is read, so an invalid window leaves a lazy
  * source untouched. Weights are only required to be finite: a negative weight is
- * accepted, even though a well-formed window is expected to be non-negative. A
- * window with side effects runs once per sample, and an exception thrown by the
- * window or by the iterable propagates unchanged.
+ * accepted, and `useFlatTopWindow` returns such weights by design near the ends
+ * of its frame. A window with side effects runs once per sample, and an exception
+ * thrown by the window or by the iterable propagates unchanged.
  *
  * @param values - the frame to weight, as any iterable of finite numbers; the
  *        source is not mutated and is read once
@@ -273,17 +353,51 @@ export const useKaiserWindow: (beta: number) => SpectralWindow = (beta: number):
 }
 
 /**
+ * Creates a periodic, DFT-even Kaiser window.
+ *
+ * The same Bessel taper as `useKaiserWindow`, with the position mapped by
+ * `2 * index / count - 1` instead of `2 * index / (count - 1) - 1`, so the
+ * frame is the DFT-even form suited to short-time analysis. The shape parameter
+ * keeps its meaning: zero yields the rectangular window and a larger beta widens
+ * the main lobe while lowering the side lobes. A frame of one sample or fewer
+ * receives a weight of one.
+ *
+ * @param beta - the shape parameter, a finite non-negative number
+ * @returns a periodic window function implementing that shape
+ * @throws {TypeError} if beta is not a finite number
+ * @throws {RangeError} if beta is negative
+ */
+export const useKaiserPeriodicWindow: (beta: number) => SpectralWindow = (beta: number): SpectralWindow => {
+    if (!isNumber(beta)) {
+        throw new TypeError("Kaiser beta must be a finite number.");
+    }
+    if (beta < 0) {
+        throw new RangeError("Kaiser beta must not be negative.");
+    }
+    const normalization: number = besselI0(beta);
+    return (index: number, count: number): number => {
+        if (count <= 1) {
+            return 1;
+        }
+        const ratio: number = 2 * index / count - 1;
+        return besselI0(beta * Math.sqrt(Math.max(0, 1 - ratio * ratio))) / normalization;
+    };
+}
+
+/**
  * A flat-top window, which keeps the amplitude of a tone accurate at the cost of
  * a wide main lobe.
  *
  * The five-term cosine series makes the taper nearly flat around the centre and
  * suppresses scalloping, so the window is a good choice for amplitude
  * measurements rather than for resolving close frequencies. For a frame longer
- * than one sample the series is slightly negative at the very ends, so every
- * weight is clamped at zero with `Math.max`; the window is therefore non-negative
- * for finite arguments and its weights are largest near the middle of the frame,
- * reaching about one there for a sufficiently long frame. A frame of one sample
- * or fewer receives a weight of one, which also avoids a division by zero.
+ * than one sample the series is slightly negative at the very ends: a flat-top
+ * window is defined to be partially negative, and those negative weights are
+ * returned unchanged. Clamping them to zero would perturb the main lobe and
+ * destroy the low scalloping loss that is the window's only reason to exist.
+ * The weights are largest near the middle of the frame, reaching about one there
+ * for a sufficiently long frame. A frame of one sample or fewer receives a weight
+ * of one, which also avoids a division by zero.
  *
  * Neither argument is validated: for a frame longer than one sample, positions
  * outside `[0, count - 1]` follow the same periodic cosine instead of being
@@ -292,19 +406,48 @@ export const useKaiserWindow: (beta: number) => SpectralWindow = (beta: number):
  * @param index - the zero-based position within the frame
  * @param count - the number of samples in the frame
  * @returns the weight at that position: one for a frame of one sample or fewer,
- *          otherwise the clamped series value, which is never negative and is
- *          largest near the middle of the frame
+ *          otherwise the unclamped series value, which is about one near the
+ *          middle of the frame and slightly negative near its ends
  */
 export const useFlatTopWindow: SpectralWindow = (index: number, count: number): number => {
     if (count <= 1) {
         return 1;
     }
     const ratio: number = 2 * Math.PI * index / (count - 1);
-    return Math.max(0, 0.21557895
+    return 0.21557895
         - 0.41663158 * Math.cos(ratio)
         + 0.277263158 * Math.cos(2 * ratio)
         - 0.083578947 * Math.cos(3 * ratio)
-        + 0.006947368 * Math.cos(4 * ratio));
+        + 0.006947368 * Math.cos(4 * ratio);
+}
+
+/**
+ * A periodic, DFT-even flat-top window.
+ *
+ * This is the flat-top series evaluated at `2 * PI * index / count` rather than
+ * at `2 * PI * index / (count - 1)`, so the frame is one sample short of a full
+ * period and the periodic extension has no discontinuity at the frame boundary.
+ * The partially negative lobe of the symmetric window is preserved unchanged;
+ * clamping it would defeat the amplitude accuracy the window is chosen for.
+ *
+ * The window is the correct flat-top choice for a short-time transform or an
+ * overlap-add analysis; `useFlatTopWindow` remains the symmetric form for filter
+ * design. A frame of one sample or fewer receives a weight of one.
+ *
+ * @param index - the zero-based position within the frame
+ * @param count - the number of samples in the frame
+ * @returns the periodic flat-top weight, one for a frame of one sample or fewer
+ */
+export const useFlatTopPeriodicWindow: SpectralWindow = (index: number, count: number): number => {
+    if (count <= 1) {
+        return 1;
+    }
+    const ratio: number = 2 * Math.PI * index / count;
+    return 0.21557895
+        - 0.41663158 * Math.cos(ratio)
+        + 0.277263158 * Math.cos(2 * ratio)
+        - 0.083578947 * Math.cos(3 * ratio)
+        + 0.006947368 * Math.cos(4 * ratio);
 }
 
 /**
@@ -333,6 +476,30 @@ export const useNuttallWindow: SpectralWindow = (index: number, count: number): 
         return 1;
     }
     const ratio: number = 2 * Math.PI * index / (count - 1);
+    return 0.355768
+        - 0.487396 * Math.cos(ratio)
+        + 0.144232 * Math.cos(2 * ratio)
+        - 0.012604 * Math.cos(3 * ratio);
+}
+
+/**
+ * A periodic, DFT-even Nuttall window.
+ *
+ * The four-term Blackman-Harris variant evaluated at `2 * PI * index / count`,
+ * so it is continuous across the frame boundary under the periodic extension and
+ * is the form to use with a short-time transform. `useNuttallWindow` remains the
+ * symmetric form for filter design. A frame of one sample or fewer receives a
+ * weight of one.
+ *
+ * @param index - the zero-based position within the frame
+ * @param count - the number of samples in the frame
+ * @returns the periodic Nuttall weight, one for a frame of one sample or fewer
+ */
+export const useNuttallPeriodicWindow: SpectralWindow = (index: number, count: number): number => {
+    if (count <= 1) {
+        return 1;
+    }
+    const ratio: number = 2 * Math.PI * index / count;
     return 0.355768
         - 0.487396 * Math.cos(ratio)
         + 0.144232 * Math.cos(2 * ratio)

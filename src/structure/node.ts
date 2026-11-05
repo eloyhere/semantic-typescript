@@ -245,6 +245,16 @@ export interface LoserNode<E> extends NodeTraversal<LoserNode<E>> {
 }
 
 // 35–39: prefix indexes. Edge labels, not node elements, encode the key.
+/**
+ * The link from a trie node to the child it reaches.
+ *
+ * The key is carried by the edge label rather than by the node element, so a
+ * node knows only the prefix that leads to it. `label` is one segment of that
+ * prefix, which is why the trie's element type and its label type are separate.
+ *
+ * @template S the key segment type
+ * @template N the child node type
+ */
 export interface TrieEdge<S, N> {
     readonly label: S;
     readonly child: N;
@@ -407,6 +417,16 @@ export interface ASTNode<E, K = string> extends TreeNode<E> {
     getSpan(): Optional<TextSpan>;
     getChildren(): ReadonlyArray<ASTNode<E, K>>;
 }
+/**
+ * The link from a decision node to the child reached by one outcome.
+ *
+ * The label is what the node's test returned, so the set of edges under a node
+ * is the outcome space of its test. A leaf has no edges at all.
+ *
+ * @template E the element type carried by a leaf
+ * @template T the test result type used by an internal node
+ * @template L the label type attached to the edge
+ */
 export interface DecisionEdge<E, T, L> {
     readonly label: L;
     readonly child: DecisionNode<E, T, L>;
@@ -417,6 +437,16 @@ export interface DecisionNode<E, T, L = string> extends NodeTraversal<DecisionNo
     getPrediction(): Optional<E>;
     getEdges(): ReadonlyArray<DecisionEdge<E, T, L>>;
 }
+/**
+ * The link from a game node to the position reached by one action.
+ *
+ * `probability` is present only on a chance move, where the action is taken by
+ * nature rather than by a player; a player move leaves it undefined because the
+ * branch weight is a matter of strategy, not of chance.
+ *
+ * @template S the state type carried by a node
+ * @template A the action type leading to the child
+ */
 export interface GameEdge<S, A> {
     readonly action: A;
     readonly probability?: number;

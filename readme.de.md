@@ -13,7 +13,7 @@ npm install semantic-typescript
 ```
 
 - Keine Laufzeitabhängigkeiten, reines ESM, liefert eigene Typen mit.
-- 496 Regressionstests: `npm test`.
+- 622 Regressionstests: `npm test`.
 - Vollständige Änderungshistorie: [CHANGELOG.md](./CHANGELOG.md).
 
 ---
@@ -76,13 +76,33 @@ factory  ──▶  Semantic  ──▶  Semantic  ──▶  Collectable  ─�
 | Pipelines | `synchronous/semantic`, `asynchronous/semantic` | Träge Operatoren und das Umschreiben von Indizes |
 | Collectables | `synchronous/semantic`, `asynchronous/semantic` | Geordnete, ungeordnete, Statistik-, Fenster- und eigene Terminals |
 | Collectors | `synchronous/collector`, `asynchronous/collector` | Die Fold-Primitive, aus denen jedes Terminal aufgebaut ist |
-| Mathematik | `mathematics/*` | Winkel, Komplexe, Frequenzen, Spektren, Fenster, Epizyklen, Phasenringe |
-| Strukturen | `structure/*` | Listen, Sets, Maps, Bäume, Ringe, Felder |
+| Mathematik | `mathematics/*` | Winkel, Komplexe, Frequenzen, Spektren, Fenster, Schätzer, Epizyklen, Phasenringe |
+| Strukturen | `structure/*` | Listen, Sets, Maps, Bäume, Forste, Ringe, Felder |
+| Fehler | `structure/error` | Die typisierte `SemanticError`-Hierarchie und ihre Brand-Guards |
 
 Die synchrone und die asynchrone Familie teilen ein Vokabular: dieselben Operatornamen, dieselbe
 Indexsemantik, dieselben Collectables. Die asynchronen Varianten geben lediglich Promises zurück und
 stellen Schreibzugriffe in eine Warteschlange, sodass ein nach einem Schreibzugriff ausgelöster
 Lesezugriff ihn stets beobachtet.
+
+### 2.1 Was dieses Release verschoben und gebrochen hat
+
+Drei Module haben ihren Ort oder ihre Form gewechselt, und eine Reihe von Standardwerten hat die Bedeutung geändert. Jedes alte Verhalten bleibt über eine explizite Option erreichbar; nichts wurde ohne Ersatz entfernt.
+
+| Änderung | Vorher | Jetzt |
+| :--- | :--- | :--- |
+| Forste | `structure/tree/rootedForest`, `structure/tree/unionFindForest` | `structure/forest/rootedForest`, `structure/forest/unionFindForest`; `tree/index.ts` re-exportiert sie nicht mehr |
+| Fehler | ad-hoc native Fehler | eine Hierarchie aus fünfzehn Klassen in `structure/error.ts`, mit je einem Brand-Guard pro Klasse und dem Alias `SemanticRangeError` |
+| Schätzer-Optionen | feste Definitionen | `mathematics/quantile.ts` exportiert `QuantileMethod`, `QuantileOptions`, `SkewnessEstimator`, `KurtosisEstimator` und `VarianceOptions` |
+| `quantile` | Hyndman–Fan Typ 1 | Typ 7 — R `quantile`, NumPy `linear`, Excel `PERCENTILE.INC` |
+| `skewness` / `kurtosis` | `g1` / `g2` | die bias-korrigierten `G1` / `G2` |
+| `variance` / `standardDeviation` | `ddof = 0` | `ddof = 1`, in ein `Optional` gehüllt |
+| `decibel` | eine `20·log10`-Funktion | entfernt; `amplitudeDecibel` (20·log10) und `powerDecibel` (10·log10) |
+| `Spectrum.flatness()` | Beträge über beide Hälften | Leistungen über die einseitige Hälfte |
+| `Spectrum.bandEnergy()` | rohe zweiseitige Summe | standardmäßig einseitig, mit Faltung der konjugierten Hälfte |
+| `shortTimeFourierTransform` / `spectrogram` | symmetrisches Hann, nur vollständige Frames | periodisches Hann, `boundary: "zeros"`, `padded: true` |
+
+Die Kapitel 6, 7 und 10 dokumentieren die Ersatzlösungen; die gemessenen Folgen stehen in [CHANGELOG.md](./CHANGELOG.md).
 
 ---
 
@@ -94,37 +114,41 @@ import {
   useOf, useFrom, useRange, useText, useStringify, usePromise
 } from "semantic-typescript";
 
-// Numerische Aggregation
+// Numeric aggregation
 const sum: number = useOf(10, 20, 30, 40)
   .map(n => n * 2)
   .toNumericStatistics()
   .summate();                                   // 200
 
-// BigInt-Aggregation
+// BigInt aggregation
 const bigSum: bigint = useOf(10n, 20n, 30n, 40n)
   .map(n => n * 2n)
   .toBigintStatistics()
   .summate();                                   // 200n
 
-// Neuanordnung ist Index-Arithmetik — mit toOrdered() sammeln, damit sie wirkt
+// Reordering is index arithmetic — collect with toOrdered() for it to take effect
 const reversed: number[] = useFrom([1, 2, 3, 4, 5]).reverse().toOrdered().toArray();      // [5,4,3,2,1]
 const rotated: number[]  = useFrom([1, 2, 3, 4, 5]).translate(2).toOrdered().toArray();   // [4,5,1,2,3]
 
-// Träge Auswertung über einen großen Bereich
+// Lazy evaluation over a large range
 const multiples: bigint[] = useRange(0n, 1_000_000n)
   .filter(n => n % 17n === 0n)
   .limit(10n)
   .toUnordered()
   .toArray();                                   // [0n,17n,…,153n]
 
-// Unicode-sichere String-Verarbeitung (Code-Punkte, nicht UTF-16-Einheiten)
+// Unicode-safe string processing (code points, not UTF-16 units)
 useText("semantic 👍").toUnordered().forEach(character => console.log(character));
 
-// Zyklussichere Serialisierung
+// Circular-safe serialisation
 const cyclic: any = { a: 1 }; cyclic.self = cyclic;
 useStringify(cyclic);                           // '{"a":1}'
 
-// Asynchrone Quellen
+// Terminals hand the elements to real structures, not only to arrays
+useOf(3, 1, 4, 1, 5).toCollectable().toOrderedSet().toArray();          // [1,3,4,5]
+useFrom([3, 1, 4, 1, 5]).toCollectable().toBinarySearchTree().size();   // 5n
+
+// Async sources
 const total = await usePromise(Promise.resolve(7)).toNumericStatistics().summate();       // 7
 ```
 
@@ -197,7 +221,7 @@ bis `toOrdered()` die Indizes modulo der Elementanzahl normalisiert:
 
 ```typescript
 useFrom([1, 2, 3, 4, 5]).reverse().toOrdered().toArray();            // [5,4,3,2,1]
-useFrom([1, 2, 3, 4, 5]).translate(2).toOrdered().toArray();         // [4,5,1,2,3]  (Rotation)
+useFrom([1, 2, 3, 4, 5]).translate(2).toOrdered().toArray();         // [4,5,1,2,3]  (rotation)
 useFrom([1, 2, 3, 4, 5]).translate(7).toOrdered().toArray();         // [4,5,1,2,3]  (7 ≡ 2 mod 5)
 useFrom([1, 2, 3]).shuffle((_e, i) => -i - 1n).toOrdered().toArray();   // [3,2,1]
 ```
@@ -206,6 +230,8 @@ useFrom([1, 2, 3]).shuffle((_e, i) => -i - 1n).toOrdered().toArray();   // [3,2,
 
 <a id="6-collectables-and-terminal-operations"></a>
 ## 6. Collectables und Terminaloperationen
+
+### 6.1 Collectables
 
 Das Collectable besitzt sowohl die **Reihenfolge** als auch die **Index-Buchhaltung**. `n` ist die
 Elementanzahl.
@@ -219,6 +245,10 @@ Elementanzahl.
 | `toBigintStatistics()` | wertsortierter Puffer | O(n log n) | nach Wert | Statistik über `bigint` |
 | `toWindow()` | wertsortierter Puffer | O(n log n) | nach Wert | `slide` / `tumble` |
 | `toCollectable(mapper)` | was auch immer der Mapper zurückgibt | — | — | eigene Collectables |
+
+### 6.2 Terminals
+
+Jedes Terminal lebt am **Collectable**, nicht am `Semantic`. Genau das bedeutet „Terminals sind explizit" in der Praxis: Eine Pipeline erzeugt nichts, bis ein Collectable benannt wird, und `toCollectable()` ohne Mapper ist die günstigste Benennung.
 
 | Terminal | Liefert | Zeit | Anmerkungen |
 | :--- | :--- | :--- | :--- |
@@ -239,24 +269,119 @@ Elementanzahl.
 | `write(stream, accumulator?)` | `WritableStream<S>` | O(n) | IO-artiges Terminal |
 | `collect(collector)` | `R` | O(n) | der generische Fold hinter jedem obigen Terminal |
 
+### 6.3 Struktur-Collectors
+
+`toArray`, `toSet` und `toMap` beenden eine Pipeline in einem JavaScript-Container. Zwölf weitere Terminals beenden sie in einer der Strukturen der Bibliothek selbst, sodass das Ergebnis die Invarianten trägt, die diese Struktur garantiert, statt derer, die ein Array zufällig hat. Sie stehen an jedem Collectable zur Verfügung, auch am nackten Collectable aus `toCollectable()`.
+
+| Terminal | Liefert | Reihenfolge | Kosten |
+| :--- | :--- | :--- | :--- |
+| `toArray()` | `Array<E>` | Durchlaufreihenfolge | O(n) |
+| `toSet()` | `Set<E>` | Einfügungsreihenfolge, SameValueZero | O(n) im Mittel |
+| `toMap(key, value?)` | `Map<K, V>` | Einfügungsreihenfolge; der letzte Schreibzugriff gewinnt | O(n) im Mittel |
+| `toOrderedSet(comparator?)` | `SynchronousOrderedSet<E>` | comparator-aufsteigend | O(n²) im schlimmsten Fall |
+| `toUnorderedSet()` | `SynchronousUnorderedSet<E>` | nicht spezifiziert (Hash-Buckets) | O(n) erwartet |
+| `toOrderedMap(key, value?)` | `SynchronousOrderedMap<K, V>` | Einfügungsreihenfolge; der letzte Schreibzugriff gewinnt | O(n) erwartet |
+| `toUnorderedMap(key, value?)` | `SynchronousUnorderedMap<K, V>` | nicht spezifiziert | O(n) erwartet |
+| `toList()` | `SynchronousList<E>` | Durchlaufreihenfolge, Duplikate bleiben | O(n) |
+| `toCycle(span?)` | `SynchronousCycle<E>` | die Durchlaufreihenfolge legt die Ringpositionen fest | O(n) |
+| `toLRUSet(capacity)` | `SynchronousUnorderedLRUSet<E>` | nach Aktualität; nur die letzten `capacity` überleben | O(n²) im schlimmsten Fall |
+| `toLRUMap(capacity, key, value?)` | `SynchronousUnorderedLRUMap<K, V>` | nach Aktualität | O(n) erwartet |
+| `toSkipSet(comparator?)` | `SynchronousSkipSet<E>` | comparator-aufsteigend, navigierbar | O(n²) im schlimmsten Fall |
+| `toSkipMap(key, value?)` | `SynchronousSkipMap<K, V>` | nach dem Schlüssel-Comparator, navigierbar | O(n) erwartet |
+| `toBinarySearchTree(comparator?)` | `SynchronousBinarySearchTree<E>` | comparator-aufsteigend, höhenbalanciert | O(n log n) |
+| `toRootedForest()` | `SynchronousRootedForest<E>` | die Durchlaufreihenfolge wird zur Struktur | O(n) |
+
+Der Ergebnistyp folgt dem Elementtyp des Collectables selbst, daher braucht kein Terminal ein Typargument: Ein `SynchronousCollectable<E>` liefert direkt `Array<E>`, `SynchronousList<E>` oder `SynchronousOrderedSet<E>`. Es bleiben nur die fachlichen Argumente — der Comparator von `toOrderedSet` / `toSkipSet` / `toBinarySearchTree`, die Kapazität des LRU-Paars, die Spanne von `toCycle` und die Schlüssel- und Wert-Extraktoren der Map-Familie.
+
+Ein Cycle ist ein Set, daher behalten wiederholte Elemente ihre erste Position; alle übrigen Strukturen oben behalten Duplikate, sofern ihr eigener Vertrag nichts anderes sagt (`toOrderedSet`, `toUnorderedSet` und `toSkipSet` sind Sets; `toBinarySearchTree` und `toList` nicht).
+
+```typescript
+const numbers = useOf(3, 1, 4, 1, 5).toCollectable();
+
+numbers.toOrderedSet().toArray();                        // [1,3,4,5]
+numbers.toUnorderedSet().size();                         // 4n — the duplicate 1 collapses
+numbers.toList().toArray();                              // [3,1,4,1,5]
+numbers.toSkipSet().first().get();                       // 1 — navigable by comparator
+numbers.toBinarySearchTree().size();                     // 5n — duplicates retained
+numbers.toRootedForest().getRoots().length;              // 1
+useOf(1, 2, 3).toCollectable().toCycle().phaseAt(3n).get().toDegreeValue();      // 0
+useOf(3, 1, 3).toCollectable().toOrderedMap(n => n, n => `v${n}`).get(3).get();  // "v3"
+```
+
+Die asynchronen Collectables bieten dieselben Terminals und lösen jedes in einem Promise auf; die Aufrufform gewinnt also nur ein `await` hinzu.
+
 ---
 
 <a id="7-statistics-and-windows"></a>
 ## 7. Statistik und Fenster
 
+### 7.1 Die Statistik-Oberfläche
+
 ```typescript
-useOf(3, 1, 4, 1, 5).toNumericStatistics().summate();              // 14
-useOf(3, 1, 4, 1, 5).toNumericStatistics().average();              // 2.8
-useOf(3, 1, 4, 1, 5).toNumericStatistics().median();               // 3
-useOf(3, 1, 4, 1, 5).toNumericStatistics().mode();                 // 1
-useOf(3, 1, 4, 1, 5).toNumericStatistics().variance();             // 2.56
-useOf(3, 1, 4, 1, 5).toNumericStatistics().standardDeviation();    // 1.6
-useFrom([1, 2, 3, 4]).toWindow().slide(2n, 1n);                    // [[1,2],[2,3],[3,4]]
+useOf(3, 1, 4, 1, 5).toNumericStatistics().summate();                    // 14
+useOf(3, 1, 4, 1, 5).toNumericStatistics().average();                    // 2.8
+useOf(3, 1, 4, 1, 5).toNumericStatistics().median();                     // 3
+useOf(3, 1, 4, 1, 5).toNumericStatistics().mode();                       // 1
+useOf(3, 1, 4, 1, 5).toNumericStatistics().variance().get();             // 3.2    (n − 1)
+useOf(3, 1, 4, 1, 5).toNumericStatistics().standardDeviation().get();    // 1.7889 (n − 1)
 ```
 
-Beide Statistik-Familien bieten dieselbe Oberfläche — `summate`, `average`, `median`, `mode`,
-`variance`, `standardDeviation`, `frequency`, `findMaximum`, `findMinimum` — mit `bigint`-Arithmetik
-für `toBigintStatistics()`. Fenster unterstützen `slide(size, hop)` und `tumble(size)`.
+Beide Statistik-Familien bieten dieselbe Oberfläche — `summate`, `average`, `median`, `mode`, `variance`, `standardDeviation`, `frequency`, `findMaximum`, `findMinimum` — mit `bigint`-Arithmetik für `toBigintStatistics()`. Die Streuungsmaße und die Quantil-Familie geben `Optional` zurück, weil eine Stichprobe zu klein sein kann, um sie zu definieren; entpacken Sie sie mit `.get()`, `.orElse(…)` oder `.isPresent()`.
+
+### 7.2 Schätzer und Standardwerte
+
+Die Standardwerte sind die Definitionen, die R, NumPy, pandas und Excel verwenden; ein hier berechneter Wert lässt sich also ohne Korrekturfaktor mit diesen Werkzeugen vergleichen.
+
+| Statistik | Standard | Vorher | Alten Wert zurückholen mit |
+| :--- | :--- | :--- | :--- |
+| `quantile(probability)` | Hyndman–Fan Typ 7 | Typ 1 | `{ method: "type-1" }` |
+| `interquartileRange()` | Hyndman–Fan Typ 7 | Typ 1 | `{ method: "type-1" }` |
+| `skewness()` | bias-korrigiertes `G1` | `g1` | `{ estimator: "g1" }` |
+| `kurtosis()` | bias-korrigiertes Excess-`G2` | `g2` | `{ estimator: "g2" }` |
+| `variance()` | `ddof = 1` | `ddof = 0` | `{ ddof: 0 }` |
+| `standardDeviation()` | `ddof = 1` | `ddof = 0` | `{ ddof: 0 }` |
+
+Alle neun Hyndman–Fan-Typen stehen als `"type-1"` … `"type-9"` zur Verfügung, und `{ excess: false }` addiert drei wieder zur Kurtosis hinzu und meldet das nicht-exzessive vierte standardisierte Moment. Die Optionstypen — `QuantileMethod`, `QuantileOptions`, `SkewnessEstimator`, `KurtosisEstimator`, `VarianceOptions` — werden aus `mathematics/quantile.ts` exportiert.
+
+```typescript
+const sample = useOf(1, 2, 3, 4).toNumericStatistics();
+
+sample.variance().get();                                // 1.6667  (5/3, ddof = 1)
+sample.variance({ ddof: 0 }).get();                     // 1.25
+sample.standardDeviation().get();                       // 1.2910
+sample.skewness().get();                                // 0
+sample.kurtosis().get();                                // -1.2    (G2)
+sample.kurtosis({ estimator: "g2" }).get();             // -1.36
+sample.kurtosis({ excess: false }).get();               // 1.8
+
+const quartiles = useOf(1, 2, 3, 4, 5, 6, 7, 8).toNumericStatistics();
+quartiles.quantile(0.75).get();                         // 6.25    (type 7)
+quartiles.quantile(0.75, { method: "type-1" }).get();   // 6       (nearest rank)
+quartiles.interquartileRange().get();                   // 3.5
+```
+
+`G1` und `G2` sind unter drei bzw. vier Beobachtungen undefiniert, und die Stichprobenvarianz sowie die Standardabweichung sind unter `ddof = 1` unter zwei Beobachtungen undefiniert. Das wird als leeres `Optional` gemeldet statt als irreführende Null:
+
+```typescript
+useOf(1, 2, 3).toNumericStatistics().kurtosis().isEmpty();     // true  (G2 needs four observations)
+useOf(1, 2).toNumericStatistics().skewness().isEmpty();        // true  (G1 needs three)
+useOf(1).toNumericStatistics().variance().isEmpty();           // true  (ddof = 1 needs two)
+useOf(1).toNumericStatistics().variance({ ddof: 0 }).get();    // 0
+```
+
+Die bigint-Ansichten akzeptieren dieselben Optionen und runden jedes Ergebnis auf ein ganzzahliges `bigint` zurück.
+
+### 7.3 Fenster
+
+Fenster legen die gepufferten Elemente erneut als Pipeline von Pipelines offen, sodass ein Fenster konsumiert werden kann, ohne es zuerst in ein Array zu materialisieren. Beide Formen enthalten ein letztes partielles Fenster.
+
+```typescript
+useFrom([1, 2, 3, 4]).toWindow().slide(2n, 1n).toUnordered().toArray()
+  .map(window => window.toUnordered().toArray());        // [[1,2],[2,3],[3,4],[4]]
+
+useFrom([1, 2, 3, 4]).toWindow().tumble(2n).toUnordered().toArray()
+  .map(window => window.toUnordered().toArray());        // [[1,2],[3,4]]
+```
 
 ---
 
@@ -284,8 +409,8 @@ stets beobachtet.
 
 ```typescript
 const cycle = new AsynchronousCycle([1, 2]);
-const added   = cycle.add(3);          // in der Warteschlange
-const sampled = cycle.elementAt(2n);   // beobachtet den Schreibzugriff oben
+const added   = cycle.add(3);          // queued
+const sampled = cycle.elementAt(2n);   // observes the write above
 await added;
 (await sampled).get().element;         // 3
 ```
@@ -314,7 +439,7 @@ import { SynchronousCycle } from "semantic-typescript";
 const ring = new SynchronousCycle(["a", "b", "c", "d", "e", "f"]);
 ring.phaseAt(0n).get().toDegreeValue();   // 0
 ring.phaseAt(1n).get().toDegreeValue();   // 60
-ring.phaseAt(6n).get().getValue() === ring.phaseAt(0n).get().getValue();   // true, exakt
+ring.phaseAt(6n).get().getValue() === ring.phaseAt(0n).get().getValue();   // true, exactly
 ring.purity();                             // 1
 ring.isBalanced();                         // true
 ring.sequences().map(z => z.magnitude());  // [0, 6, 0, 0, 0, 0]
@@ -334,10 +459,10 @@ Richtungen durchlaufen kann.
 Ein `PhaseField` bildet eine relative Phase auf einen Score in `[-1, 1]` ab:
 
 ```typescript
-import { useField } from "semantic-typescript";
+import { useField, useRadian } from "semantic-typescript";
 
-const cosine = useField([1]);              // cos(2πΔ): +1 gleichgerichtet, −1 entgegengesetzt
-const mixed  = useField([0.4, 0.3, 0.3]);  // erste drei Harmonische
+const cosine = useField([1]);              // cos(2πΔ): +1 aligned, −1 opposed
+const mixed  = useField([0.4, 0.3, 0.3]);  // first three harmonics
 
 cosine.sample(useRadian(0));               //  1
 cosine.sample(useRadian(Math.PI));         // -1
@@ -362,7 +487,7 @@ const ring = new SynchronousCycle(["a", "b", "c", "d", "e"]);
 const report = ring.analyse(["a", "c", "c", "a", "zz", "e"]);
 
 report.matched;                              // 5
-report.missed;                               // 1  ('zz' liegt nicht auf dem Ring)
+report.missed;                               // 1  ('zz' is not on the ring)
 report.references.map(r => r.count);         // [2, 0, 2, 0, 1]
 ```
 
@@ -373,7 +498,7 @@ sich der Count und der Mittelwert.
 
 ```typescript
 const cycle = new SynchronousCycle(["a", "b", "c"]);
-cycle.scoresAt(0, cosine);                   // ein Score pro Position, in [-1, 1]
+cycle.scoresAt(0, cosine);                   // one score per position, in [-1, 1]
 ```
 
 ### 10.4 Verwandte Instrumente
@@ -392,10 +517,122 @@ teilen können, fehlen schlicht), und `rate()` gibt jedem Element seine eigene i
 sodass ein Ring gegen die Umgebung driften kann. `jetAt`, `windingAt` und `errorIntegralAt` legen den
 differentiellen Zustand dieser Drift offen.
 
+### 10.5 Spektrale Fenster
+
+Die Ringkonstruktionen sind die eine Hälfte der analytischen Oberfläche; die andere arbeitet an abgetasteten Signalen. Ihr meistgenutztes Primitiv ist das Fenster, und jede Form hier hat zwei Varianten. Die symmetrische Variante teilt den Frame durch `count − 1`; die periodische (DFT-gerade) Variante teilt ihn durch `count`, einen Abtastwert weniger als eine volle Periode, sodass die Ausblendung unter der periodischen Fortsetzung, die die DFT annimmt, stetig ist.
+
+```typescript
+useHannWindow(1, 4);                                   // 0.75  symmetric
+useHannPeriodicWindow(1, 4);                           // 0.5   periodic
+coherentGain(useHannPeriodicWindow, 16);               // 0.5
+equivalentNoiseBandwidth(useHannPeriodicWindow, 16);   // 1.5
+```
+
+| Form | Symmetrisch | Periodisch | Anmerkungen |
+| :--- | :--- | :--- | :--- |
+| Rechteck | `useRectangularWindow` | — | keine Ausblendung; keine periodische Unterscheidung |
+| Hann | `useHannWindow` | `useHannPeriodicWindow` | der Standard der Kurzzeitanalyse |
+| Hamming | `useHammingWindow` | `useHammingPeriodicWindow` | — |
+| Blackman | `useBlackmanWindow` | `useBlackmanPeriodicWindow` | — |
+| Nuttall | `useNuttallWindow` | `useNuttallPeriodicWindow` | viergliedriges Blackman–Harris |
+| Flat-Top | `useFlatTopWindow` | `useFlatTopPeriodicWindow` | Amplitudengenauigkeit vor Auflösung |
+| Kaiser | `useKaiserWindow(beta)` | `useKaiserPeriodicWindow(beta)` | `beta` bestimmt die Hauptkeulenbreite |
+
+Verwenden Sie die periodische Variante für Analyse und Overlap-Add: Bei einem Halbframe-Hop summiert das periodische Hann-Fenster bei jeder Länge zu `1.000000`, während die symmetrische Variante bei `N = 16` um `0.841 dB` und bei `N = 1024` noch um `0.013 dB` wellig ist. Für den Filterentwurf bleibt die symmetrische Variante richtig, wo der Frame nicht eine Periode der Ausblendung ist.
+
+Die Flat-Top-Fenster liefern an den Frame-Enden **negative Gewichte**, weil ein Flat-Top-Fenster genau das ist. Sie werden unverändert zurückgegeben statt abgeschnitten, denn Abschneiden stört die Hauptkeule und zerstört den geringen Scalloping-Verlust, um dessentwillen das Fenster existiert:
+
+```typescript
+useFlatTopWindow(0, 1024);                             // -0.000421 — negative by definition
+Array.from({ length: 1024 }, (_unused, index) => useFlatTopWindow(index, 1024))
+  .filter(weight => weight < 0).length;                // 578
+```
+
+### 10.6 Pegel, Flachheit und Bandenergie
+
+`decibel` ist als einzelne Funktion verschwunden, weil Amplitude und Leistung keinen gemeinsamen Faktor teilen. `amplitudeDecibel` wendet `20·log10` auf ein spannungsartiges Verhältnis an; `powerDecibel` wendet `10·log10` auf eine Leistung, eine Energie, ein mittleres Quadrat oder eine spektrale Leistungsdichte an:
+
+```typescript
+amplitudeDecibel(0.25);                                // -12.0412
+powerDecibel(0.25);                                    //  -6.0206
+```
+
+`Bin.decibel` und `Spectrum.decibelOf` sind Amplitudenpegel; `Spectrum.powerDecibelOf` ist der passende Leistungspegel. Eine Leistung an die Amplitudenform zu geben, meldet `20·log10(power)` und verdoppelt den Pegel in Dezibel.
+
+Zwei Spektrummessungen haben die Lesart gewechselt:
+
+```typescript
+const twoBins = new Spectrum(new Sample(2, 1), [new Complex(2, 0), new Complex(1, 0)]);
+twoBins.flatness();                                    // 0.8 — geometric over arithmetic mean of power
+
+const shape = new Spectrum(new Sample(4, 1), [
+  new Complex(1, 0), new Complex(2, 0), new Complex(0, 0), new Complex(0, 0),
+]);
+shape.bandEnergy(new Frequency(0), new Frequency(2));                // 9
+shape.bandEnergy(new Frequency(0), new Frequency(2), "two-sided");   // 5
+```
+
+`flatness()` vergleicht das geometrische und das arithmetische Mittel von `power()` über die einseitige Hälfte des Spektrums, nicht das Betragsmittel über beide Hälften, und die reine Anzeigeverdopplung von `oneSided()` wird bewusst nicht angewandt. `bandEnergy()` nutzt standardmäßig die einseitige Lesart und faltet die konjugierte Hälfte, sodass DC und Nyquist einfach und jeder innere Bin doppelt zählen; ein Band über die gesamte Achse erfüllt dann Parseval, `Σ|X|² = N·Σx²`. Übergeben Sie `"two-sided"` für ein komplexes Spektrum, dessen Bins bereits unabhängig sind.
+
+### 10.7 Kurzzeitanalyse
+
+`Sampler.shortTimeFourierTransform` und `Sampler.spectrogram` folgen den SciPy-`stft`-Konventionen: periodisches Hann-Fenster, eine mit Nullen gefüllte Grenze an beiden Enden und ein mit Nullen gefüllter Schwanz.
+
+```typescript
+const sampler = new Sampler(new Sample(64, 1));
+const spectrogram = sampler.spectrogram(time => Math.cos(2 * Math.PI * 4 * time), 16, 8);
+
+spectrogram.size();                     // 9 frames
+spectrogram.getBoundary();              // "zeros"
+spectrogram.getTime(6);                 // 0.75 — frame centres, not frame starts
+sampler.spectrogram(time => Math.cos(2 * Math.PI * 4 * time), 16, 8, useHannWindow,
+  { boundary: "none", padded: false }).size();                       // 7 — complete frames only
+```
+
+Die Erweiterung zentriert den ersten Frame auf den ersten Abtastwert, und die Schwanzauffüllung hält die letzten Abtastwerte erreichbar: 64 Abtastwerte bei Frame 16 und Hop 8 ergeben 9 Frames statt 7, und 1000 Abtastwerte bei Frame 256 und Hop 128 ergeben 9 statt 6. Frame-Zeiten sind Mitten — `(k·hop + (frameSize mod 2)/2)/rate` für eine erweiterte Ansicht, `(k·hop + frameSize/2)/rate` für eine nicht erweiterte — und `toFrame()` schneidet die Erweiterung vor der Inversion ab.
+
 ---
 
 <a id="11-utility-helpers"></a>
 ## 11. Hilfsfunktionen
+
+### 11.1 Die Fehlerhierarchie
+
+`structure/error.ts` exportiert eine Hierarchie aus fünfzehn Klassen für die Fehler, die *rund um* eine Pipeline entstehen — in Ihrem eigenen Code, einem eigenen Collector oder einem Adapter:
+
+```text
+SemanticError
+├── IllegalOperationError
+├── ValidationError
+│   ├── IndexError
+│   ├── RangeError        (also exported as SemanticRangeError)
+│   └── ConfigurationError
+├── CapacityError
+├── StateError
+│   └── IllegalStateError
+├── ConcurrencyError
+├── CollectionError
+├── SerializationError
+├── NumericError
+│   └── ArithmeticError
+└── PhaseError
+```
+
+Jede Klasse legt `name` fest, reicht die native `cause` weiter, trägt eine optionale `context`-Tasche und serialisiert über `toJSON()`; jede hat einen gleichnamigen Brand-Guard.
+
+```typescript
+const error = new CapacityError("LRU capacity exhausted", { context: { capacity: 0 } });
+
+error.name;                 // "CapacityError"
+isCapacityError(error);     // true
+isValidationError(error);   // false — a capacity failure is not a validation failure
+isSemanticError(error);     // true
+error.toJSON();             // { name: "CapacityError", message: "…", context: { capacity: 0 } }
+```
+
+`SemanticRangeError` ist dieselbe Klasse wie das exportierte `RangeError`, sodass `instanceof` über beide Namen hinweg gilt; ein Import von `RangeError` verdeckt den globalen Konstruktor für das ganze Modul, und deshalb existiert der Alias. Keine der beiden Klassen wird von den Argumentprüfungen der Bibliothek geworfen, die weiterhin native `TypeError` und `RangeError` auslösen — die Hierarchie ist das Vokabular für die Ebene darüber.
+
+### 11.2 Hilfstabelle
 
 | Hilfsfunktion | Zweck |
 | :--- | :--- |
@@ -407,6 +644,66 @@ differentiellen Zustand dieser Drift offen.
 | `useHash` / `maskOf` / `register` / `unregister` | Strukturelles Hashing und die Registry der Hash-Strategien |
 | `invalidate` / `validate` | Guard-Klauseln, die eine konsistente Fehlerform auslösen |
 | `Optional<T>` | Der `null`-Ersatz der Bibliothek: `Optional.of(x)` / `Optional.empty()` |
+
+### 11.3 `useTraverse`
+
+`useTraverse(target, callback)` flacht jedes Objekt zu seinen **Nicht-Null-Blättern** ab. Es steigt in verschachtelte Objekte hinab, durchläuft iterierbare Werte nach Position, überspringt `null` und `undefined` und betritt ein bereits besuchtes Objekt nie erneut — ein Objektgraph mit einem Zyklus endet also, statt den Stack zu sprengen.
+
+```typescript
+const source = { id: 7, tags: ["a", "b"], owner: { name: "Ada", note: null } };
+const leaves: string[] = [];
+
+useTraverse(source, (key, value, path) => {
+  leaves.push(`${path.join(".")} = ${String(value)}`);
+  return true;
+});
+
+leaves;   // ["id = 7", "tags.0 = a", "tags.1 = b", "owner.name = Ada"]
+```
+
+Der Callback läuft einmal pro Blatt und erhält den eigenen Schlüssel des Blatts (bei einem iterierbaren Wert dessen Index), den Wert und den Pfad dorthin. Die Rückgabe `false` gibt die **gesamte** Traversierung auf, nicht nur den aktuellen Zweig:
+
+```typescript
+let visited = 0;
+useTraverse({ a: 1, b: 2, c: 3 }, () => {
+  visited += 1;
+  return false;
+});
+visited;   // 1 — the first leaf already stops the walk
+```
+
+Aus demselben Grund ist ein Zyklus ungefährlich:
+
+```typescript
+const cyclic: any = { name: "root", child: { name: "leaf" } };
+cyclic.child.parent = cyclic;
+
+const names: string[] = [];
+useTraverse(cyclic, (_key, value) => {
+  if (typeof value === "string") names.push(value);
+  return true;
+});
+names;     // ["root", "leaf"] — the back edge to `cyclic` is not revisited
+```
+
+**Jeder Callback erhält seinen eigenen Pfad-Schnappschuss.** Der Durchlauf hält intern nur ein Arbeitsarray und kopiert es in dem Moment, in dem ein Blatt übergeben wird, in ein neues, mit `Object.freeze` eingefrorenes Array. Der Schnappschuss ändert sich danach nicht mehr, kann also unverändert behalten werden; zwei Callbacks teilen sich nie ein Array, und ein erneuter Durchlauf stört bereits ausgegebene Schnappschüsse nicht. Sein Typ ist `ReadonlyArray`, ein Schreibzugriff ist daher ein Compile-Fehler, und auf dem eingefrorenen Array wirft er zur Laufzeit zusätzlich einen `TypeError`. Diese Sicherheit kostet eine `O(depth)`-Allokation pro gemeldetem Blatt; ein Zweig, der nichts meldet, allokiert nichts zusätzlich.
+
+```typescript
+const paths: Array<ReadonlyArray<PropertyKey>> = [];
+useTraverse({ a: { b: 1 }, c: 2 }, (_key, _value, path) => {
+  paths.push(path);                      // safe to keep as-is
+  return true;
+});
+paths[0] === paths[1];                   // false — one array per call
+paths.map(path => path.join("."));       // ["a.b", "c"]
+```
+
+`useAttribute` ist dieser Durchlauf als Fabrik: Sie meldet dieselben Blätter als `{ key, value }`-Paare, also sind Regeln und Kosten identisch.
+
+```typescript
+useAttribute({ a: 1, b: { c: 2 } }).toUnordered().toArray();
+// [{ key: "a", value: 1 }, { key: "c", value: 2 }]
+```
 
 ---
 
@@ -434,6 +731,12 @@ behandeln und nicht der Position, die es gerade zufällig einnimmt.
 `getNyquist()` und `centroid()` unterstellen konjugierte Symmetrie. Das räumliche Spektrum eines
 Phasenrings ist komplex und im Allgemeinen nicht symmetrisch — ein Ring, der den Kreis rückwärts
 durchläuft, legt seine gesamte Energie in Bin `n − 1`, jenseits von Nyquist. Lesen Sie die Bins direkt.
+
+**Struktur-Collectors sind Terminals, keine Ansichten.** Jeder leert die Pipeline und baut dann eine vollständige Struktur auf; er kostet also O(n) Zeit und O(n) Speicher und läuft nicht auf einer unendlichen Quelle. Verwenden Sie einen am Ende einer Pipeline, niemals innerhalb einer Schleife über eine Pipeline.
+
+**`variance()` und seine Verwandten geben ein `Optional` zurück.** `variance().get()` auf einer zu kleinen Stichprobe wirft; verwenden Sie `.orElse(0)` oder prüfen Sie `.isPresent()`, wenn die Stichprobengröße nicht in Ihrer Hand liegt. Dasselbe gilt für `standardDeviation`, `quantile`, `interquartileRange`, `skewness` und `kurtosis`.
+
+**Die periodischen Fenster sind die Analysefenster.** `useHannWindow` und die anderen symmetrischen Formen sind für den Filterentwurf gedacht; eine Kurzzeitanalyse will `useHannPeriodicWindow` und seine Geschwister, sonst ist die Overlap-Add-Summe an jeder Fuge der Frames wellig.
 
 ---
 

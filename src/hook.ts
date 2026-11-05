@@ -1,4 +1,5 @@
-import { useSynchronousToArray, type SynchronousCollector } from "#semantic/synchronous/collector";
+import { useSynchronousToArray } from "#semantic/synchronous/collectors";
+import type { SynchronousCollector } from "#semantic/synchronous/collector";
 import { isBigInt, isFunction, isIterable, isNumber, isObject, isPrimitive } from "#semantic/guard";
 import { invalidate, validate, type BiPredicate, type MaybePrimitive } from "#semantic/utility";
 import type { BiConsumer, BiFunctional, Comparator, Consumer, Indexed, Predicate, Supplier, SynchronousGenerator } from "#semantic/utility";
@@ -249,16 +250,21 @@ export type UseTraverseKey<T extends object> = TraverseField<T, "key">;
  */
 export type UseTraverseValue<T extends object> = TraverseField<T, "value">;
 /**
- * The path leading to the current leaf.
+ * The path leading to one leaf, as a read-only snapshot.
  *
- * The array begins at the root object, holds each key or iterable index along
- * the way, and is the **same mutable array** for every callback; it is pushed
- * and popped as traversal proceeds, so a callback that stores it observes later
- * mutations unless it copies the array first.
+ * The array begins at the root object and holds each key or iterable index along
+ * the way down to the reported leaf. It is **built for a single callback call and
+ * never touched again**: its contents do not change after the call returns, and
+ * two calls never share one array, so a callback may store it as it is instead of
+ * copying it.
+ *
+ * The type is read-only and the runtime array is frozen, so a write is a compile
+ * error and an attempt to bypass the type raises a `TypeError` in strict mode
+ * rather than silently changing a path another callback may still hold.
  *
  * @template T the object being traversed
  */
-export type UseTraversePath<T extends object> = Array<TraverseField<T, "path">>;
+export type UseTraversePath<T extends object> = ReadonlyArray<TraverseField<T, "path">>;
 /**
  * Callback invoked once per non-null leaf.
  *
@@ -279,11 +285,11 @@ export interface UseTraverseCallback<T extends object> {
 }
 ;
 /**
- * Callback invoked once per non-null leaf, together with the current path.
+ * Callback invoked once per non-null leaf, together with a snapshot of the path.
  *
- * Returning `false` abandons the whole traversal. The path is the callback's
- * own mutable array, so it reflects the walk at the moment of the call and is
- * reused for the next leaf.
+ * Returning `false` abandons the whole traversal. The path belongs to this call
+ * alone: it reflects the walk at the moment of the call, is never mutated
+ * afterwards, and is not shared with any other call, so it is safe to retain.
  *
  * @template T the object being traversed
  */
@@ -293,7 +299,8 @@ export interface UseTraversePathCallback<T extends object> {
      *
      * @param key the leaf's own key, or its index when it came from an iterable
      * @param value the leaf value itself
-     * @param path the running path, mutated between calls and therefore not retained
+     * @param path the frozen path snapshot that reached the leaf; it never changes
+     *        afterwards and may be stored as it is
      * @returns `true` to continue the traversal, `false` to abandon it entirely
      */
     (key: UseTraverseKey<T>, value: UseTraverseValue<T>, path: UseTraversePath<T>): boolean;
@@ -313,7 +320,7 @@ interface UseTraverse {
      * Walks every non-null leaf reachable from an object.
      *
      * @param t the object to traverse; a non-object is ignored silently
-     * @param callback the visitor, invoked once per leaf with the running path
+     * @param callback the visitor, invoked once per leaf with that call's path snapshot
      */
     <T extends object>(t: T, callback: UseTraversePathCallback<NoInfer<T>>): void;
 }
@@ -332,8 +339,15 @@ interface UseTraverse {
  * sub-object is therefore reported once, on its first path only.
  *
  * The callback returns `false` to abandon the entire traversal, not merely the
- * current branch. The path array handed to the callback is reused between calls,
- * so it must be copied if it is to be retained.
+ * current branch. The path handed to the callback is a separate frozen snapshot
+ * per call — never the walk's own working array — so it can be stored directly
+ * and no two calls can observe each other's mutations.
+ *
+ * That safety costs one extra `O(depth)` allocation per reported leaf: the walk
+ * keeps a single mutable path internally and copies it into the snapshot only at
+ * the moment a leaf is handed over. The overhead therefore follows the depth of
+ * the leaf rather than the size of the traversed structure, and descending a
+ * branch that reports nothing allocates nothing extra.
  *
  * A value that is not an object is ignored: the function returns without calling
  * the callback at all.
@@ -347,6 +361,7 @@ export let useTraverse: UseTraverse = <T extends object>(t: T, callback: UseTrav
     if (isObject(t)) {
         let seen: WeakSet<object> = new WeakSet<object>();
         let path: Array<PropertyKey> = [];
+        let snapshot: Supplier<UseTraversePath<T>> = (): UseTraversePath<T> => Object.freeze([...path]) as UseTraversePath<T>;
         let stop: boolean = false;
         let traverse = (target: object): void => {
             if (seen.has(target)) {
@@ -374,7 +389,7 @@ export let useTraverse: UseTraverse = <T extends object>(t: T, callback: UseTrav
                                         traverse(item);
                                     }
                                     else {
-                                        if (!callback(index as UseTraverseKey<T>, item as UseTraverseValue<T>, path as UseTraversePath<T>)) {
+                                        if (!callback(index as UseTraverseKey<T>, item as UseTraverseValue<T>, snapshot())) {
                                             stop = true;
                                         }
                                     }
@@ -388,7 +403,7 @@ export let useTraverse: UseTraverse = <T extends object>(t: T, callback: UseTrav
                         }
                     }
                     else {
-                        if (!callback(property as UseTraverseKey<T>, value as UseTraverseValue<T>, path as UseTraversePath<T>)) {
+                        if (!callback(property as UseTraverseKey<T>, value as UseTraverseValue<T>, snapshot())) {
                             stop = true;
                         }
                     }

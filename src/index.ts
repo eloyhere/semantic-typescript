@@ -1,5 +1,7 @@
 export * from "#semantic/asynchronous/collector";
+export * from "#semantic/asynchronous/collectors";
 export * from "#semantic/synchronous/collector";
+export * from "#semantic/synchronous/collectors";
 export * from "#semantic/factory";
 export * from "#semantic/guard";
 export * from "#semantic/structure/error";
@@ -87,4 +89,5 @@ export {
 export type * from "#semantic/structure/navigation";
 export type * from "#semantic/structure/node";
 export * from "#semantic/structure/tree";
+export * from "#semantic/structure/forest";
 export * from "#semantic/mathematics/index";

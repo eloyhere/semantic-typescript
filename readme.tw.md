@@ -11,7 +11,7 @@ npm install semantic-typescript
 ```
 
 - 零執行期依賴，純 ESM，自帶型別定義。
-- 496 個迴歸測試：`npm test`。
+- 622 個迴歸測試：`npm test`。
 - 完整變更歷程：[CHANGELOG.md](./CHANGELOG.md)。
 
 ---
@@ -65,10 +65,30 @@ factory  ──▶  Semantic  ──▶  Semantic  ──▶  Collectable  ─�
 | 管線 | `synchronous/semantic`, `asynchronous/semantic` | 惰性算子與索引重寫 |
 | 可收集器 | `synchronous/semantic`, `asynchronous/semantic` | 有序、無序、統計、視窗與自訂終端 |
 | 收集器 | `synchronous/collector`, `asynchronous/collector` | 每個終端據以建構的摺疊基元 |
-| 數學 | `mathematics/*` | 角、複數、頻率、頻譜、視窗、本輪、相位環 |
-| 結構 | `structure/*` | 串列、集合、映射、樹、環、場 |
+| 數學 | `mathematics/*` | 角、複數、頻率、頻譜、視窗、估計量、本輪、相位環 |
+| 結構 | `structure/*` | 串列、集合、映射、樹、森林、環、場 |
+| 錯誤 | `structure/error` | 型別化的 `SemanticError` 階層及其品牌守衛 |
 
 同步與非同步家族共用同一套詞彙：相同的算子名稱、相同的索引語意、相同的可收集器。非同步變體只是回傳 promise，並且會將寫入排入佇列，因此寫入之後發出的讀取必定能觀察到它。
+
+### 2.1 本次發佈移動了什麼、破壞了什麼
+
+有三個模組改變了位置或形態，另有一組預設值的含義發生了變化。每一種舊行為都仍可透過明確選項抵達；沒有任何東西在沒有替代品的情況下被移除。
+
+| 變更 | 之前 | 現在 |
+| :--- | :--- | :--- |
+| 森林 | `structure/tree/rootedForest`、`structure/tree/unionFindForest` | `structure/forest/rootedForest`、`structure/forest/unionFindForest`；`tree/index.ts` 不再重新匯出它們 |
+| 錯誤 | 臨時的原生錯誤 | `structure/error.ts` 中的十五類階層，每類各帶一個品牌守衛，另有 `SemanticRangeError` 別名 |
+| 估計量選項 | 固定定義 | `mathematics/quantile.ts` 匯出 `QuantileMethod`、`QuantileOptions`、`SkewnessEstimator`、`KurtosisEstimator` 與 `VarianceOptions` |
+| `quantile` | Hyndman–Fan 型別 1 | 型別 7 —— R `quantile`、NumPy `linear`、Excel `PERCENTILE.INC` |
+| `skewness` / `kurtosis` | `g1` / `g2` | 偏差校正的 `G1` / `G2` |
+| `variance` / `standardDeviation` | `ddof = 0` | `ddof = 1`，並以 `Optional` 包裝 |
+| `decibel` | 一個 `20·log10` 函式 | 已移除；改為 `amplitudeDecibel`（20·log10）與 `powerDecibel`（10·log10） |
+| `Spectrum.flatness()` | 兩半的振幅 | 單側半的功率 |
+| `Spectrum.bandEnergy()` | 原始雙側求和 | 預設單側，並折疊共軛半邊 |
+| `shortTimeFourierTransform` / `spectrogram` | 對稱 Hann、僅完整幀 | 週期 Hann、`boundary: "zeros"`、`padded: true` |
+
+第 6、7、10 章記錄了這些替代品；實測影響見 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -80,37 +100,41 @@ import {
   useOf, useFrom, useRange, useText, useStringify, usePromise
 } from "semantic-typescript";
 
-// 數值聚合
+// Numeric aggregation
 const sum: number = useOf(10, 20, 30, 40)
   .map(n => n * 2)
   .toNumericStatistics()
   .summate();                                   // 200
 
-// BigInt 聚合
+// BigInt aggregation
 const bigSum: bigint = useOf(10n, 20n, 30n, 40n)
   .map(n => n * 2n)
   .toBigintStatistics()
   .summate();                                   // 200n
 
-// 重新排序是索引算術——以 toOrdered() 收集才會生效
+// Reordering is index arithmetic — collect with toOrdered() for it to take effect
 const reversed: number[] = useFrom([1, 2, 3, 4, 5]).reverse().toOrdered().toArray();      // [5,4,3,2,1]
 const rotated: number[]  = useFrom([1, 2, 3, 4, 5]).translate(2).toOrdered().toArray();   // [4,5,1,2,3]
 
-// 對大型區間進行惰性求值
+// Lazy evaluation over a large range
 const multiples: bigint[] = useRange(0n, 1_000_000n)
   .filter(n => n % 17n === 0n)
   .limit(10n)
   .toUnordered()
   .toArray();                                   // [0n,17n,…,153n]
 
-// Unicode 安全的字串處理（以碼點為單位，而非 UTF-16 單元）
+// Unicode-safe string processing (code points, not UTF-16 units)
 useText("semantic 👍").toUnordered().forEach(character => console.log(character));
 
-// 循環安全的序列化
+// Circular-safe serialisation
 const cyclic: any = { a: 1 }; cyclic.self = cyclic;
 useStringify(cyclic);                           // '{"a":1}'
 
-// 非同步來源
+// Terminals hand the elements to real structures, not only to arrays
+useOf(3, 1, 4, 1, 5).toCollectable().toOrderedSet().toArray();          // [1,3,4,5]
+useFrom([3, 1, 4, 1, 5]).toCollectable().toBinarySearchTree().size();   // 5n
+
+// Async sources
 const total = await usePromise(Promise.resolve(7)).toNumericStatistics().summate();       // 7
 ```
 
@@ -178,7 +202,7 @@ useGenerate(() => 7, (_e, index) => index >= 3n).toUnordered().toArray();   // [
 
 ```typescript
 useFrom([1, 2, 3, 4, 5]).reverse().toOrdered().toArray();            // [5,4,3,2,1]
-useFrom([1, 2, 3, 4, 5]).translate(2).toOrdered().toArray();         // [4,5,1,2,3]  (輪轉)
+useFrom([1, 2, 3, 4, 5]).translate(2).toOrdered().toArray();         // [4,5,1,2,3]  (rotation)
 useFrom([1, 2, 3, 4, 5]).translate(7).toOrdered().toArray();         // [4,5,1,2,3]  (7 ≡ 2 mod 5)
 useFrom([1, 2, 3]).shuffle((_e, i) => -i - 1n).toOrdered().toArray();   // [3,2,1]
 ```
@@ -187,6 +211,8 @@ useFrom([1, 2, 3]).shuffle((_e, i) => -i - 1n).toOrdered().toArray();   // [3,2,
 
 <a id="6-collectables-and-terminal-operations"></a>
 ## 6. 可收集器與終端操作
+
+### 6.1 可收集器
 
 可收集器同時擁有**順序**與**索引簿記**。`n` 為元素數量。
 
@@ -199,6 +225,10 @@ useFrom([1, 2, 3]).shuffle((_e, i) => -i - 1n).toOrdered().toArray();   // [3,2,
 | `toBigintStatistics()` | 依值排序的緩衝區 | O(n log n) | 依值 | 針對 `bigint` 的統計 |
 | `toWindow()` | 依值排序的緩衝區 | O(n log n) | 依值 | `slide` / `tumble` |
 | `toCollectable(mapper)` | 由 mapper 回傳的內容決定 | — | — | 自訂可收集器 |
+
+### 6.2 終端
+
+每個終端都活在**可收集器**上，而不是 `Semantic` 上。這正是「終端是顯式的」在實踐中的含義：在指定一個可收集器之前，管線不產生任何東西，而不帶 mapper 的 `toCollectable()` 就是最便宜的指定方式。
 
 | 終端 | 回傳 | 時間 | 備註 |
 | :--- | :--- | :--- | :--- |
@@ -219,22 +249,119 @@ useFrom([1, 2, 3]).shuffle((_e, i) => -i - 1n).toOrdered().toArray();   // [3,2,
 | `write(stream, accumulator?)` | `WritableStream<S>` | O(n) | 類 IO 的終端 |
 | `collect(collector)` | `R` | O(n) | 上述每個終端背後的通用摺疊 |
 
+### 6.3 結構收集器
+
+`toArray`、`toSet` 與 `toMap` 把管線終結在 JavaScript 容器裡。另有十二個終端把它終結在函式庫自有的某個結構中，於是結果攜帶的是那個結構所保證的不變量，而不是陣列恰好具有的那些。它們在每個可收集器上都可用，包括 `toCollectable()` 給出的那個裸可收集器。
+
+| 終端 | 回傳 | 順序 | 代價 |
+| :--- | :--- | :--- | :--- |
+| `toArray()` | `Array<E>` | 走訪順序 | O(n) |
+| `toSet()` | `Set<E>` | 插入順序，SameValueZero | 平均 O(n) |
+| `toMap(key, value?)` | `Map<K, V>` | 插入順序；後寫覆蓋 | 平均 O(n) |
+| `toOrderedSet(comparator?)` | `SynchronousOrderedSet<E>` | 依比較子升冪 | 最差 O(n²) |
+| `toUnorderedSet()` | `SynchronousUnorderedSet<E>` | 未指定（雜湊桶） | 期望 O(n) |
+| `toOrderedMap(key, value?)` | `SynchronousOrderedMap<K, V>` | 插入順序；後寫覆蓋 | 期望 O(n) |
+| `toUnorderedMap(key, value?)` | `SynchronousUnorderedMap<K, V>` | 未指定 | 期望 O(n) |
+| `toList()` | `SynchronousList<E>` | 走訪順序，保留重複 | O(n) |
+| `toCycle(span?)` | `SynchronousCycle<E>` | 走訪順序決定環上位置 | O(n) |
+| `toLRUSet(capacity)` | `SynchronousUnorderedLRUSet<E>` | 依最近使用；只留最後 `capacity` 個 | 最差 O(n²) |
+| `toLRUMap(capacity, key, value?)` | `SynchronousUnorderedLRUMap<K, V>` | 依最近使用 | 期望 O(n) |
+| `toSkipSet(comparator?)` | `SynchronousSkipSet<E>` | 依比較子升冪，可導航 | 最差 O(n²) |
+| `toSkipMap(key, value?)` | `SynchronousSkipMap<K, V>` | 依鍵比較子，可導航 | 期望 O(n) |
+| `toBinarySearchTree(comparator?)` | `SynchronousBinarySearchTree<E>` | 依比較子升冪，高度平衡 | O(n log n) |
+| `toRootedForest()` | `SynchronousRootedForest<E>` | 走訪順序即結構順序 | O(n) |
+
+結果型別跟隨可收集器自身的元素型別，因此沒有任何終端需要型別引數：一個 `SynchronousCollectable<E>` 直接交給你 `Array<E>`、`SynchronousList<E>` 或 `SynchronousOrderedSet<E>`。剩下的只有業務引數——`toOrderedSet` / `toSkipSet` / `toBinarySearchTree` 的比較子、LRU 對的容量、`toCycle` 的跨度，以及映射族的鍵與值提取器。
+
+一個環是集合，因此重複元素只保留首次出現的位置；上述其餘結構除非自身契約另有規定，否則都保留重複（`toOrderedSet`、`toUnorderedSet`、`toSkipSet` 是集合；`toBinarySearchTree` 與 `toList` 不是）。
+
+```typescript
+const numbers = useOf(3, 1, 4, 1, 5).toCollectable();
+
+numbers.toOrderedSet().toArray();                        // [1,3,4,5]
+numbers.toUnorderedSet().size();                         // 4n — the duplicate 1 collapses
+numbers.toList().toArray();                              // [3,1,4,1,5]
+numbers.toSkipSet().first().get();                       // 1 — navigable by comparator
+numbers.toBinarySearchTree().size();                     // 5n — duplicates retained
+numbers.toRootedForest().getRoots().length;              // 1
+useOf(1, 2, 3).toCollectable().toCycle().phaseAt(3n).get().toDegreeValue();      // 0
+useOf(3, 1, 3).toCollectable().toOrderedMap(n => n, n => `v${n}`).get(3).get();  // "v3"
+```
+
+非同步可收集器暴露同一批終端，並把每一個都解析進 promise，因此呼叫形式只多了一個 `await`。
+
 ---
 
 <a id="7-statistics-and-windows"></a>
 ## 7. 統計與視窗
 
+### 7.1 統計介面
+
 ```typescript
-useOf(3, 1, 4, 1, 5).toNumericStatistics().summate();              // 14
-useOf(3, 1, 4, 1, 5).toNumericStatistics().average();              // 2.8
-useOf(3, 1, 4, 1, 5).toNumericStatistics().median();               // 3
-useOf(3, 1, 4, 1, 5).toNumericStatistics().mode();                 // 1
-useOf(3, 1, 4, 1, 5).toNumericStatistics().variance();             // 2.56
-useOf(3, 1, 4, 1, 5).toNumericStatistics().standardDeviation();    // 1.6
-useFrom([1, 2, 3, 4]).toWindow().slide(2n, 1n);                    // [[1,2],[2,3],[3,4]]
+useOf(3, 1, 4, 1, 5).toNumericStatistics().summate();                    // 14
+useOf(3, 1, 4, 1, 5).toNumericStatistics().average();                    // 2.8
+useOf(3, 1, 4, 1, 5).toNumericStatistics().median();                     // 3
+useOf(3, 1, 4, 1, 5).toNumericStatistics().mode();                       // 1
+useOf(3, 1, 4, 1, 5).toNumericStatistics().variance().get();             // 3.2    (n − 1)
+useOf(3, 1, 4, 1, 5).toNumericStatistics().standardDeviation().get();    // 1.7889 (n − 1)
 ```
 
-兩個統計家族提供相同的介面——`summate`、`average`、`median`、`mode`、`variance`、`standardDeviation`、`frequency`、`findMaximum`、`findMinimum`——而 `toBigintStatistics()` 使用 `bigint` 算術。視窗支援 `slide(size, hop)` 與 `tumble(size)`。
+兩個統計家族提供相同的介面——`summate`、`average`、`median`、`mode`、`variance`、`standardDeviation`、`frequency`、`findMaximum`、`findMinimum`——而 `toBigintStatistics()` 使用 `bigint` 算術。離散度量與分位數一族回傳 `Optional`，因為樣本可能小到讓它們無從定義；請用 `.get()`、`.orElse(…)` 或 `.isPresent()` 取出。
+
+### 7.2 估計量與預設定義
+
+這些預設值就是 R、NumPy、pandas 與 Excel 所使用的定義，因此這裡算出的值可以直接與那些工具比對，無需任何修正因子。
+
+| 統計量 | 預設 | 舊預設 | 恢復舊值的方式 |
+| :--- | :--- | :--- | :--- |
+| `quantile(probability)` | Hyndman–Fan 型別 7 | 型別 1 | `{ method: "type-1" }` |
+| `interquartileRange()` | Hyndman–Fan 型別 7 | 型別 1 | `{ method: "type-1" }` |
+| `skewness()` | 偏差校正的 `G1` | `g1` | `{ estimator: "g1" }` |
+| `kurtosis()` | 偏差校正的超額 `G2` | `g2` | `{ estimator: "g2" }` |
+| `variance()` | `ddof = 1` | `ddof = 0` | `{ ddof: 0 }` |
+| `standardDeviation()` | `ddof = 1` | `ddof = 0` | `{ ddof: 0 }` |
+
+九種 Hyndman–Fan 型別均可寫為 `"type-1"` … `"type-9"`，而 `{ excess: false }` 會把三加回峰度，報告非超額的四階標準化動差。這些選項型別——`QuantileMethod`、`QuantileOptions`、`SkewnessEstimator`、`KurtosisEstimator`、`VarianceOptions`——由 `mathematics/quantile.ts` 匯出。
+
+```typescript
+const sample = useOf(1, 2, 3, 4).toNumericStatistics();
+
+sample.variance().get();                                // 1.6667  (5/3, ddof = 1)
+sample.variance({ ddof: 0 }).get();                     // 1.25
+sample.standardDeviation().get();                       // 1.2910
+sample.skewness().get();                                // 0
+sample.kurtosis().get();                                // -1.2    (G2)
+sample.kurtosis({ estimator: "g2" }).get();             // -1.36
+sample.kurtosis({ excess: false }).get();               // 1.8
+
+const quartiles = useOf(1, 2, 3, 4, 5, 6, 7, 8).toNumericStatistics();
+quartiles.quantile(0.75).get();                         // 6.25    (type 7)
+quartiles.quantile(0.75, { method: "type-1" }).get();   // 6       (nearest rank)
+quartiles.interquartileRange().get();                   // 3.5
+```
+
+`G1` 與 `G2` 分別在少於三個、四個觀測時無定義；在 `ddof = 1` 下，樣本變異數與標準差在少於兩個觀測時無定義。此時函式庫回傳空 `Optional`，而不是一個誤導性的零：
+
+```typescript
+useOf(1, 2, 3).toNumericStatistics().kurtosis().isEmpty();     // true  (G2 needs four observations)
+useOf(1, 2).toNumericStatistics().skewness().isEmpty();        // true  (G1 needs three)
+useOf(1).toNumericStatistics().variance().isEmpty();           // true  (ddof = 1 needs two)
+useOf(1).toNumericStatistics().variance({ ddof: 0 }).get();    // 0
+```
+
+bigint 檢視接受相同的選項，並把每個結果四捨五入回整數 `bigint`。
+
+### 7.3 視窗
+
+視窗把緩衝區中的元素重新暴露為「管線的管線」，因此一個視窗無需先具體化成陣列就能被消費。兩種形式都包含最後一個不完整的視窗。
+
+```typescript
+useFrom([1, 2, 3, 4]).toWindow().slide(2n, 1n).toUnordered().toArray()
+  .map(window => window.toUnordered().toArray());        // [[1,2],[2,3],[3,4],[4]]
+
+useFrom([1, 2, 3, 4]).toWindow().tumble(2n).toUnordered().toArray()
+  .map(window => window.toUnordered().toArray());        // [[1,2],[3,4]]
+```
 
 ---
 
@@ -256,8 +383,8 @@ useFrom([1, 2, 3, 4]).toWindow().slide(2n, 1n);                    // [[1,2],[2,
 
 ```typescript
 const cycle = new AsynchronousCycle([1, 2]);
-const added   = cycle.add(3);          // 已排入佇列
-const sampled = cycle.elementAt(2n);   // 可觀察到上述的寫入
+const added   = cycle.add(3);          // queued
+const sampled = cycle.elementAt(2n);   // observes the write above
 await added;
 (await sampled).get().element;         // 3
 ```
@@ -281,7 +408,7 @@ import { SynchronousCycle } from "semantic-typescript";
 const ring = new SynchronousCycle(["a", "b", "c", "d", "e", "f"]);
 ring.phaseAt(0n).get().toDegreeValue();   // 0
 ring.phaseAt(1n).get().toDegreeValue();   // 60
-ring.phaseAt(6n).get().getValue() === ring.phaseAt(0n).get().getValue();   // true，精確相等
+ring.phaseAt(6n).get().getValue() === ring.phaseAt(0n).get().getValue();   // true, exactly
 ring.purity();                             // 1
 ring.isBalanced();                         // true
 ring.sequences().map(z => z.magnitude());  // [0, 6, 0, 0, 0, 0]
@@ -296,10 +423,10 @@ ring.sequences().map(z => z.magnitude());  // [0, 6, 0, 0, 0, 0]
 `PhaseField` 會將相對相位映射為 `[-1, 1]` 區間內的分數：
 
 ```typescript
-import { useField } from "semantic-typescript";
+import { useField, useRadian } from "semantic-typescript";
 
-const cosine = useField([1]);              // cos(2πΔ)：+1 同相，−1 反相
-const mixed  = useField([0.4, 0.3, 0.3]);  // 前三項諧波
+const cosine = useField([1]);              // cos(2πΔ): +1 aligned, −1 opposed
+const mixed  = useField([0.4, 0.3, 0.3]);  // first three harmonics
 
 cosine.sample(useRadian(0));               //  1
 cosine.sample(useRadian(Math.PI));         // -1
@@ -318,7 +445,7 @@ const ring = new SynchronousCycle(["a", "b", "c", "d", "e"]);
 const report = ring.analyse(["a", "c", "c", "a", "zz", "e"]);
 
 report.matched;                              // 5
-report.missed;                               // 1  （'zz' 不在環上）
+report.missed;                               // 1  ('zz' is not on the ring)
 report.references.map(r => r.count);         // [2, 0, 2, 0, 1]
 ```
 
@@ -326,7 +453,7 @@ report.references.map(r => r.count);         // [2, 0, 2, 0, 1]
 
 ```typescript
 const cycle = new SynchronousCycle(["a", "b", "c"]);
-cycle.scoresAt(0, cosine);                   // 每個位置一個分數，落在 [-1, 1] 中
+cycle.scoresAt(0, cosine);                   // one score per position, in [-1, 1]
 ```
 
 ### 10.4 相關工具
@@ -341,10 +468,122 @@ cycle.scoresAt(0, cosine);                   // 每個位置一個分數，落�
 
 另有兩個基元補全了這個模型：`combineCycles(a, b)` 以最小公倍數聯結兩個環（這是拉回，而非乘積——無法共享同一時刻的配對直接不存在），而 `rate()` 讓每個元素擁有自己的內在頻率，使環得以相對於環境漂移。`jetAt`、`windingAt` 與 `errorIntegralAt` 則揭露該漂移的微分狀態。
 
+### 10.5 頻譜窗
+
+環的構造是分析介面的一半；另一半工作在取樣訊號上。它最常被複用的基元是窗函式，而這裡的每一種形狀都有兩種形式。對稱形式用 `count − 1` 去除幀長；週期（DFT-even）形式用 `count`，比一個完整週期少一個取樣，因此在 DFT 所設想的週期延拓下，這個漸變是連續的。
+
+```typescript
+useHannWindow(1, 4);                                   // 0.75  symmetric
+useHannPeriodicWindow(1, 4);                           // 0.5   periodic
+coherentGain(useHannPeriodicWindow, 16);               // 0.5
+equivalentNoiseBandwidth(useHannPeriodicWindow, 16);   // 1.5
+```
+
+| 形狀 | 對稱 | 週期 | 說明 |
+| :--- | :--- | :--- | :--- |
+| 矩形 | `useRectangularWindow` | — | 無漸變；沒有週期之分 |
+| Hann | `useHannWindow` | `useHannPeriodicWindow` | 短時轉換的預設窗 |
+| Hamming | `useHammingWindow` | `useHammingPeriodicWindow` | — |
+| Blackman | `useBlackmanWindow` | `useBlackmanPeriodicWindow` | — |
+| Nuttall | `useNuttallWindow` | `useNuttallPeriodicWindow` | 四項 Blackman–Harris |
+| 平頂 | `useFlatTopWindow` | `useFlatTopPeriodicWindow` | 以解析度換取振幅精度 |
+| Kaiser | `useKaiserWindow(beta)` | `useKaiserPeriodicWindow(beta)` | `beta` 決定主瓣寬度 |
+
+分析與重疊相加請用週期形式：在半幀跳距下，週期 Hann 窗在任何長度上都求和為 `1.000000`，而對稱形式在 `N = 16` 時起伏 `0.841 dB`，到 `N = 1024` 仍有 `0.013 dB`。濾波器設計請保留對稱形式，那裡的幀並不是漸變的一個週期。
+
+平頂窗在幀的兩端回傳**負權重**，因為平頂窗本來就是這樣。它們原樣回傳而不被截斷，因為截斷會擾動主瓣、摧毀這個窗存在的唯一理由——低扇貝損失：
+
+```typescript
+useFlatTopWindow(0, 1024);                             // -0.000421 — negative by definition
+Array.from({ length: 1024 }, (_unused, index) => useFlatTopWindow(index, 1024))
+  .filter(weight => weight < 0).length;                // 578
+```
+
+### 10.6 位準、平坦度與頻帶能量
+
+`decibel` 作為單一函式已不復存在，因為振幅與功率並不共享同一個因子。`amplitudeDecibel` 對類似電壓的比值施加 `20·log10`；`powerDecibel` 對功率、能量、均方或功率頻譜密度施加 `10·log10`：
+
+```typescript
+amplitudeDecibel(0.25);                                // -12.0412
+powerDecibel(0.25);                                    //  -6.0206
+```
+
+`Bin.decibel` 與 `Spectrum.decibelOf` 是振幅位準；`Spectrum.powerDecibelOf` 是對應的功率位準。把一個功率餵給振幅形式會報出 `20·log10(power)`，把分貝值翻倍。
+
+有兩項頻譜量測改變了讀法：
+
+```typescript
+const twoBins = new Spectrum(new Sample(2, 1), [new Complex(2, 0), new Complex(1, 0)]);
+twoBins.flatness();                                    // 0.8 — geometric over arithmetic mean of power
+
+const shape = new Spectrum(new Sample(4, 1), [
+  new Complex(1, 0), new Complex(2, 0), new Complex(0, 0), new Complex(0, 0),
+]);
+shape.bandEnergy(new Frequency(0), new Frequency(2));                // 9
+shape.bandEnergy(new Frequency(0), new Frequency(2), "two-sided");   // 5
+```
+
+`flatness()` 比較的是頻譜單側半上 `power()` 的幾何平均與算術平均，而不是兩半上的振幅平均，並且刻意不施加 `oneSided()` 那個僅供顯示的振幅加倍。`bandEnergy()` 預設採用單側讀法，折疊共軛半邊，使 DC 與 Nyquist 各計一次、每個內部頻段計兩次；覆蓋整個頻帶的頻帶由此滿足 Parseval，即 `Σ|X|² = N·Σx²`。對複數頻譜請傳 `"two-sided"`，它的頻段本來就是獨立的。
+
+### 10.7 短時分析
+
+`Sampler.shortTimeFourierTransform` 與 `Sampler.spectrogram` 遵循 SciPy `stft` 的慣例：週期 Hann 窗、兩端零填充邊界，以及尾端零填充。
+
+```typescript
+const sampler = new Sampler(new Sample(64, 1));
+const spectrogram = sampler.spectrogram(time => Math.cos(2 * Math.PI * 4 * time), 16, 8);
+
+spectrogram.size();                     // 9 frames
+spectrogram.getBoundary();              // "zeros"
+spectrogram.getTime(6);                 // 0.75 — frame centres, not frame starts
+sampler.spectrogram(time => Math.cos(2 * Math.PI * 4 * time), 16, 8, useHannWindow,
+  { boundary: "none", padded: false }).size();                       // 7 — complete frames only
+```
+
+兩端延拓把第一幀的中心對準第一個取樣，尾端填充則讓最後幾個取樣不再不可達：64 個取樣、幀長 16、跳距 8 會產出 9 幀而不是 7 幀；1000 個取樣、幀長 256、跳距 128 會產出 9 幀而不是 6 幀。幀時間是中心而非起點——有延拓的檢視為 `(k·hop + (frameSize mod 2)/2)/rate`，無延拓的檢視為 `(k·hop + frameSize/2)/rate`——而 `toFrame()` 在反轉換前會裁掉延拓。
+
 ---
 
 <a id="11-utility-helpers"></a>
 ## 11. 輔助工具
+
+### 11.1 錯誤階層
+
+`structure/error.ts` 匯出一個十五類的階層，用於在管線**周圍**拋出的錯誤——來自你自己的程式碼、自訂收集器或轉接器：
+
+```text
+SemanticError
+├── IllegalOperationError
+├── ValidationError
+│   ├── IndexError
+│   ├── RangeError        (also exported as SemanticRangeError)
+│   └── ConfigurationError
+├── CapacityError
+├── StateError
+│   └── IllegalStateError
+├── ConcurrencyError
+├── CollectionError
+├── SerializationError
+├── NumericError
+│   └── ArithmeticError
+└── PhaseError
+```
+
+每個類別固定 `name`、轉發原生 `cause`、攜帶可選的 `context` 診斷包，並透過 `toJSON()` 序列化；每個類別都有一個同名的品牌守衛。
+
+```typescript
+const error = new CapacityError("LRU capacity exhausted", { context: { capacity: 0 } });
+
+error.name;                 // "CapacityError"
+isCapacityError(error);     // true
+isValidationError(error);   // false — a capacity failure is not a validation failure
+isSemanticError(error);     // true
+error.toJSON();             // { name: "CapacityError", message: "…", context: { capacity: 0 } }
+```
+
+`SemanticRangeError` 與匯出的 `RangeError` 是同一個類別，因此 `instanceof` 在兩個名字之間都成立；而匯入 `RangeError` 會在整個模組內遮蔽全域建構子，這正是該別名存在的原因。這兩個類別都不會被函式庫自身的參數檢查拋出——那裡仍然拋原生的 `TypeError` 與 `RangeError`——這個階層是給上層使用的詞彙表。
+
+### 11.2 工具表
 
 | 輔助工具 | 用途 |
 | :--- | :--- |
@@ -356,6 +595,66 @@ cycle.scoresAt(0, cosine);                   // 每個位置一個分數，落�
 | `useHash` / `maskOf` / `register` / `unregister` | 結構化雜湊與雜湊策略註冊表 |
 | `invalidate` / `validate` | 會拋出一致錯誤形狀的防護子句 |
 | `Optional<T>` | 函式庫的 `null` 替代品：`Optional.of(x)` / `Optional.empty()` |
+
+### 11.3 `useTraverse`
+
+`useTraverse(target, callback)` 把任意物件攤平成它的**非空葉子**。它下鑽巢狀物件、依位置走訪可迭代值、跳過 `null` 與 `undefined`，並且永不重新進入已經造訪過的物件——因此帶環的物件圖會終止，而不是撐爆呼叫堆疊。
+
+```typescript
+const source = { id: 7, tags: ["a", "b"], owner: { name: "Ada", note: null } };
+const leaves: string[] = [];
+
+useTraverse(source, (key, value, path) => {
+  leaves.push(`${path.join(".")} = ${String(value)}`);
+  return true;
+});
+
+leaves;   // ["id = 7", "tags.0 = a", "tags.1 = b", "owner.name = Ada"]
+```
+
+回呼對每個葉子執行一次，收到葉子自身的鍵（葉子來自可迭代物件時是它的索引）、值，以及抵達它的路徑。回傳 `false` 會放棄**整次**走訪，而不只是當前分支：
+
+```typescript
+let visited = 0;
+useTraverse({ a: 1, b: 2, c: 3 }, () => {
+  visited += 1;
+  return false;
+});
+visited;   // 1 — the first leaf already stops the walk
+```
+
+環之所以安全，原因相同：
+
+```typescript
+const cyclic: any = { name: "root", child: { name: "leaf" } };
+cyclic.child.parent = cyclic;
+
+const names: string[] = [];
+useTraverse(cyclic, (_key, value) => {
+  if (typeof value === "string") names.push(value);
+  return true;
+});
+names;     // ["root", "leaf"] — the back edge to `cyclic` is not revisited
+```
+
+**每次回呼都會拿到獨立的徑路快照。** 走訪內部只保留一個工作陣列，在交出葉子的那一刻把它複製成一個以 `Object.freeze` 凍結的新陣列。快照之後不再變化，因此可以原樣留存；兩個回呼之間從不共用同一個陣列，再次走訪也不會擾動已經發出的快照。它的型別是 `ReadonlyArray`，所以寫入它是編譯錯誤，而被凍結的陣列在執行期寫入還會拋 `TypeError`。這份安全性的代價是每個上報葉子多一次 `O(depth)` 的配置，而不會上報任何葉子的分支不產生額外配置。
+
+```typescript
+const paths: Array<ReadonlyArray<PropertyKey>> = [];
+useTraverse({ a: { b: 1 }, c: 2 }, (_key, _value, path) => {
+  paths.push(path);                      // safe to keep as-is
+  return true;
+});
+paths[0] === paths[1];                   // false — one array per call
+paths.map(path => path.join("."));       // ["a.b", "c"]
+```
+
+`useAttribute` 就是把這次走訪變成工廠：它以 `{ key, value }` 對的形式回報同樣的葉子，因此規則與代價完全一致。
+
+```typescript
+useAttribute({ a: 1, b: { c: 2 } }).toUnordered().toArray();
+// [{ key: "a", value: 1 }, { key: "c", value: 2 }]
+```
 
 ---
 
@@ -371,6 +670,12 @@ cycle.scoresAt(0, cosine);                   // 每個位置一個分數，落�
 **`Cycle` 是插入有序的集合。** 元素彼此唯一，並保留首次加入的順序。重複的 `add` 會回傳 `false`，而會引入重複項的 `set` 則會拋出例外。這正是相位得以成為*元素*的函式、而非取決於它恰好佔據哪個位置的原因。
 
 **`Spectrum` 的單側輔助方法假設輸入為實數訊號。** `oneSided()`、`getNyquist()` 與 `centroid()` 假設共軛對稱。相位環的空間頻譜是複數，且一般而言並不對稱——一個反向繞行的環會把全部能量放進頻段 `n − 1`，也就是超出 Nyquist 的位置。請直接讀取頻段。
+
+**結構收集器是終端，不是檢視。** 每一個都會先排清管線，再建構一個完整結構，因此它花費 O(n) 時間與 O(n) 空間，且不能在無限來源上執行。請在管線末尾使用它們，絕不要在走訪管線的迴圈中使用。
+
+**`variance()` 及其同伴回傳 `Optional`。** 在過小的樣本上呼叫 `variance().get()` 會拋出例外；當樣本量不由你掌控時，請用 `.orElse(0)` 或先檢查 `.isPresent()`。`standardDeviation`、`quantile`、`interquartileRange`、`skewness` 與 `kurtosis` 同理。
+
+**週期窗才是分析用的窗。** `useHannWindow` 等對稱形式用於濾波器設計；短時轉換需要 `useHannPeriodicWindow` 及其同族，否則重疊相加的和會在幀與幀相接處起伏。
 
 ---
 

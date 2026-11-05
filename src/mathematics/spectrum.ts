@@ -1,6 +1,6 @@
 import { isNumber } from "#semantic/guard";
 import { Angle } from "#semantic/mathematics/angle";
-import { Bin, decibel, normalized, parabolicOffset } from "#semantic/mathematics/bin";
+import { Bin, amplitudeDecibel, normalized, parabolicOffset, powerDecibel } from "#semantic/mathematics/bin";
 import type { Normalization } from "#semantic/mathematics/bin";
 import { Complex } from "#semantic/mathematics/complex";
 import { Frame } from "#semantic/mathematics/frame";
@@ -9,6 +9,20 @@ import { Sample } from "#semantic/mathematics/sample";
 import { inverseFastFourierTransform } from "#semantic/mathematics/spectral";
 import { Optional } from "#semantic/optional";
 import { SpectrumSymbol } from "#semantic/symbol";
+
+/**
+ * Which half of a spectrum a band measurement covers.
+ *
+ * `"one-sided"` treats the spectrum as the transform of a real signal and folds
+ * the conjugate half into the non-negative frequency axis, so the result is the
+ * physical energy of both the positive and negative components in the band.
+ * `"two-sided"` sums only the bins that this spectrum actually retains, with no
+ * folding, which is the right choice for a complex-valued spectrum or for a raw
+ * historical sum.
+ */
+export type BandSidedness = "one-sided" | "two-sided";
+
+const BandSidednesses: ReadonlyArray<BandSidedness> = Object.freeze(["one-sided", "two-sided"]);
 
 /**
  * A discrete frequency-domain view produced by a transform over a sampling plan.
@@ -381,15 +395,19 @@ export class Spectrum {
     }
 
     /**
-     * Returns the level of a bin in decibels after a normalisation.
+     * Returns the amplitude level of a bin in decibels after a normalisation.
      *
-     * The level is `20 * log10(magnitude / reference)`, where the magnitude is
-     * the one `magnitudeOf` reports for the same index and normalisation. A
-     * magnitude equal to the reference reports zero decibels, a magnitude of one
-     * tenth of the reference reports minus twenty, and a silent bin reports
-     * negative infinity because silence is a normal measurement rather than an
-     * error. Both the magnitude and the reference are dimensionless, so any
+     * The level is `20 * log10(magnitude / reference)`, the amplitude convention,
+     * where the magnitude is the one `magnitudeOf` reports for the same index and
+     * normalisation. A magnitude equal to the reference reports zero decibels, a
+     * magnitude of one tenth of the reference reports minus twenty, and a silent
+     * bin reports negative infinity because silence is a normal measurement rather
+     * than an error. Both the magnitude and the reference are dimensionless, so any
      * positive finite value can mark the zero-decibel point.
+     *
+     * This method is for amplitude-like quantities only. A power, an energy or a
+     * mean square must use `powerDecibelOf`, which applies the factor of ten;
+     * feeding a power to this method would double its decibel value.
      *
      * The index follows the boundary behaviour of `binAt`, so an index outside
      * the spectrum yields an empty `Optional`; the normalisation and the
@@ -409,7 +427,42 @@ export class Spectrum {
      *         that is not positive
      */
     public decibelOf(index: number, normalization: Normalization = "none", reference: number = 1): Optional<number> {
-        return this.magnitudeOf(index, normalization).map((magnitude: number): number => decibel(magnitude, reference));
+        return this.magnitudeOf(index, normalization).map((magnitude: number): number => amplitudeDecibel(magnitude, reference));
+    }
+
+    /**
+     * Returns the power level of a bin in decibels after a normalisation.
+     *
+     * The level is `10 * log10(power / reference)`, the power convention, where
+     * the power is the squared magnitude reported by `powerOf` for the same index
+     * and normalisation. A power equal to the reference reports zero decibels, a
+     * power of one quarter reports minus 6.02 decibels, and a silent bin reports
+     * negative infinity. Both the power and the reference are dimensionless, so
+     * any positive finite value can mark the zero-decibel point.
+     *
+     * Use this method for a power, an energy or a mean square. `decibelOf`
+     * deliberately keeps the amplitude convention, so passing a power to it
+     * would report `20 * log10(power)` and double the level in decibels.
+     *
+     * The index follows the boundary behaviour of `binAt`, so an index outside
+     * the spectrum yields an empty `Optional`; the normalisation and the
+     * reference are then not consulted.
+     *
+     * @param index - the zero-based bin index
+     * @param normalization - the scaling applied to the amplitude before it is
+     *        squared, and `none` by default
+     * @param reference - the positive, finite power that maps to zero decibels,
+     *        and `1` by default
+     * @returns the level in decibels in an `Optional`, or an empty `Optional`
+     *         outside the spectrum
+     * @throws {TypeError} if the index is not a finite integer, if an in-range
+     *         bin is requested with an unsupported normalisation name, or if
+     *         the reference is not a finite number
+     * @throws {RangeError} if an in-range bin is requested with a reference
+     *         that is not positive
+     */
+    public powerDecibelOf(index: number, normalization: Normalization = "none", reference: number = 1): Optional<number> {
+        return this.powerOf(index, normalization).map((power: number): number => powerDecibel(power, reference));
     }
 
     /**
@@ -505,34 +558,45 @@ export class Spectrum {
      * Returns the spectral flatness of this spectrum.
      *
      * Flatness is the ratio of the geometric mean to the arithmetic mean of the
-     * bin magnitudes, which compares how evenly the magnitude is spread across
-     * frequency. A flat, noise-like spectrum approaches one and a tonal
-     * spectrum, whose magnitude concentrates in one bin, approaches zero. Every
-     * retained bin participates, including the conjugate-symmetric upper half,
-     * and the phase of each coefficient is ignored.
+     * **power** spectrum, `power()` being the squared magnitude of each bin, so it
+     * compares how evenly power is spread across frequency. A flat, noise-like
+     * spectrum approaches one and a tonal spectrum, whose power concentrates in a
+     * few bins, approaches zero.
      *
-     * The geometric mean is undefined once a magnitude is zero, so any silent
-     * bin makes the whole result zero. The value has no unit, and computing it
-     * has no side effects.
+     * The mean is taken over the one-sided half of the spectrum, that is, the
+     * bins from zero hertz through `floor(count / 2)`, which includes the Nyquist
+     * bin when the count is even. Each retained bin is weighted once: the
+     * conjugate half of a real spectrum carries no independent information and is
+     * not traversed, and the amplitude doubling that `oneSided()` performs for
+     * display is deliberately not applied, because doubling only the interior
+     * bins would weight them against DC and Nyquist in the geometric mean. The
+     * phase of each coefficient is ignored.
+     *
+     * The geometric mean is undefined once a power is zero, so any silent bin in
+     * the one-sided half makes the whole result zero; a silent spectrum is
+     * therefore not flat. The value is dimensionless, lies in `[0, 1]`, and
+     * computing it has no side effects.
      *
      * @returns the flatness ratio, approaching one for a flat spectrum and
      *         falling to zero for a tonal or silent one
      */
     public flatness(): number {
+        const last: number = Math.floor(this.bins.length / 2);
+        const count: number = last + 1;
         let arithmetic: number = 0;
         let logarithmic: number = 0;
-        for (const bin of this.bins) {
-            const magnitude: number = bin.magnitude();
-            if (magnitude === 0) {
+        for (let index: number = 0; index <= last; index += 1) {
+            const power: number = this.bins[index].power();
+            if (power === 0) {
                 return 0;
             }
-            arithmetic += magnitude;
-            logarithmic += Math.log(magnitude);
+            arithmetic += power;
+            logarithmic += Math.log(power);
         }
         if (arithmetic === 0) {
             return 0;
         }
-        return Math.exp(logarithmic / this.bins.length) / (arithmetic / this.bins.length);
+        return Math.exp(logarithmic / count) / (arithmetic / count);
     }
 
     /**
@@ -577,37 +641,74 @@ export class Spectrum {
     /**
      * Returns the summed power of the bins within a half-open frequency band.
      *
-     * Every bin whose frequency lies in `[low, high)` contributes its power,
-     * that is, the squared magnitude of its raw amplitude, and the contributions
-     * are added in increasing frequency order. A bin exactly on `low` is counted
-     * and a bin exactly on `high` is not, so equal bounds describe an empty band
-     * and report zero; a band that contains no bin also reports zero. The bounds
-     * are compared with the exact bin frequencies and no interpolation is
-     * performed, so a band whose bounds fall between two bins still measures
-     * whole bins.
+     * Every selected bin contributes its power, that is, the squared magnitude of
+     * its raw amplitude, and the contributions are added in increasing frequency
+     * order. A bin exactly on `low` is counted and a bin exactly on `high` is
+     * not, so equal bounds describe an empty band and report zero; a band that
+     * contains no bin also reports zero. The bounds are compared with exact bin
+     * frequencies and no interpolation is performed, so a band whose bounds fall
+     * between two bins still measures whole bins. No normalisation is applied, so
+     * the value is a raw power that scales with the number of frames; it is
+     * dimensionless, and computing the band energy has no side effects.
      *
-     * No normalisation is applied, so the value is a raw, unnormalised power;
-     * for a transform-derived spectrum it scales with the number of frames. It
-     * is dimensionless, and computing the band energy has no side effects.
+     * The `sidedness` argument fixes which bins the band selects.
+     *
+     * - `"one-sided"`, the default, reads the spectrum as the transform of a real
+     *   signal. The conjugate-symmetric upper half repeats the lower half, so the
+     *   band is interpreted on the non-negative frequency axis and each interior
+     *   bin of the lower half is counted twice, once for its positive-frequency
+     *   component and once for its negative-frequency mirror; DC and Nyquist are
+     *   self-conjugate and are counted once. Summing a band that covers the whole
+     *   one-sided axis, that is one whose upper bound lies above Nyquist,
+     *   therefore returns the total power `sum(|X[k]|^2)`, which Parseval's
+     *   theorem equates with `count * sum(x[n]^2)`. A band ending beyond Nyquist
+     *   simply includes every positive-frequency bin; a band starting exactly at
+     *   Nyquist selects only the Nyquist bin, and one starting above it is empty.
+     * - `"two-sided"` sums only the bins this spectrum actually retains, with no
+     *   folding, which is the correct reading for a complex-valued spectrum and
+     *   the raw historical sum. For a real spectrum and a band that stays below
+     *   Nyquist it counts only the positive-frequency half, so it reports half
+     *   the physical energy that `"one-sided"` reports.
      *
      * @param low - the inclusive lower bound of the band in hertz
      * @param high - the exclusive upper bound of the band in hertz
+     * @param sidedness - whether to fold the conjugate half (`"one-sided"`, the
+     *        default) or to sum only the retained bins (`"two-sided"`)
      * @returns the summed power within the band, zero for an empty band
-     * @throws {TypeError} if either bound is not a `Frequency`
+     * @throws {TypeError} if either bound is not a `Frequency`, or `sidedness`
+     *         is not one of the two supported names
      * @throws {RangeError} if `high` lies below `low` in hertz
      */
-    public bandEnergy(low: Frequency, high: Frequency): number {
+    public bandEnergy(low: Frequency, high: Frequency, sidedness: BandSidedness = "one-sided"): number {
         if (!(low instanceof Frequency) || !(high instanceof Frequency)) {
             throw new TypeError("Spectrum band bounds must be frequencies.");
+        }
+        if (typeof sidedness !== "string" || !BandSidednesses.includes(sidedness)) {
+            throw new TypeError("Spectrum band sidedness must be one-sided or two-sided.");
         }
         if (high.getHertz() < low.getHertz()) {
             throw new RangeError("Spectrum band end must not precede its start.");
         }
+        const lower: number = low.getHertz();
+        const upper: number = high.getHertz();
         let total: number = 0;
-        for (const bin of this.bins) {
+        if (sidedness === "two-sided") {
+            for (const bin of this.bins) {
+                const hertz: number = bin.frequency.getHertz();
+                if (hertz >= lower && hertz < upper) {
+                    total += bin.power();
+                }
+            }
+            return total;
+        }
+        const last: number = Math.floor(this.bins.length / 2);
+        const even: boolean = this.bins.length % 2 === 0;
+        for (let index: number = 0; index <= last; index += 1) {
+            const bin: Bin = this.bins[index];
             const hertz: number = bin.frequency.getHertz();
-            if (hertz >= low.getHertz() && hertz < high.getHertz()) {
-                total += bin.power();
+            if (hertz >= lower && hertz < upper) {
+                const edge: boolean = index === 0 || (even && index === last);
+                total += (edge ? 1 : 2) * bin.power();
             }
         }
         return total;

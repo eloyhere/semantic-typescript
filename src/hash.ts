@@ -7,10 +7,13 @@ const PRIME64_3 = 0x165667b19e3779f9n;
 const PRIME64_4 = 0x85ebca77c2b2ae63n;
 const PRIME64_5 = 0x27d4eb2f165667c5n;
 const rotateLeft = (value: bigint, bits: bigint): bigint =>
+    /* A shift pair implements the rotation; the mask drops the bits shifted in. */
     ((value << bits) | (value >> (64n - bits))) & UINT64_MASK;
 const round = (accumulator: bigint, lane: bigint): bigint =>
+    /* XXH64 round: fold the lane in, rotate by 31, then mix with PRIME64_1. */
     (rotateLeft((accumulator + lane * PRIME64_2) & UINT64_MASK, 31n) * PRIME64_1) & UINT64_MASK;
 const merge = (accumulator: bigint, lane: bigint): bigint =>
+    /* XXH64 merge step: run one round from a zero accumulator and fold the result in. */
     ((accumulator ^ round(0n, lane)) * PRIME64_1 + PRIME64_4) & UINT64_MASK;
 
 /**
@@ -143,7 +146,35 @@ export let maskOf = (type: Type): bigint => masks.get(type) ?? 8n;
 const primitive = new Map<Primitive, bigint>();
 const complex = new WeakMap<object, bigint>();
 const PRIMITIVE_CACHE_LIMIT = 100000;
+/**
+ * A hashing strategy for one runtime type.
+ *
+ * The dispatcher keeps one handler per `Type` name and selects it with
+ * `typeOf`, so this single contract covers both the built-in scalar and
+ * structural strategies and any custom strategy installed through `register`.
+ * A handler owns its digest completely: `useHash` adds no framing around the
+ * returned value and only consults `typeOf` to choose the handler, so a
+ * strategy that throws or ignores part of its input defines the observable
+ * behaviour for that type. Registering or removing a handler also clears the
+ * memoized primitive hashes, so a result cached under the old strategy is not
+ * reused.
+ *
+ * @template T - the value type this handler is registered for
+ */
 interface Handler<T> {
+    /**
+     * Hashes one value of the registered type.
+     *
+     * The value has already been selected by its runtime type name, so the
+     * handler may rely on the shape promised by `T`; the dispatcher does not
+     * check that the registered name and the handler's assumptions agree. The
+     * returned bigint becomes the hash of the value as it is, which makes the
+     * handler the only place where that type's digest can be changed.
+     *
+     * @param value - the value whose runtime type selected this handler
+     * @returns the hash of the value, conventionally an unsigned 64-bit
+     *          number
+     */
     (value: T): bigint;
 }
 const handlers = new Map<Type, Handler<unknown>>();
@@ -299,8 +330,44 @@ register("object", (value: object): bigint => {
     return result;
 });
 
+/**
+ * The call signatures of the internal `useHash` function.
+ *
+ * The two forms differ only in how many arguments the caller supplies: a single
+ * argument is hashed as that value, while any other count is hashed as the
+ * argument array. Both forms return a bigint because this dispatcher never
+ * consumes an async iterable; `src/structure/hash.ts` exports a wider overload
+ * set under the same name for asynchronous sources.
+ */
 interface UseHash {
+    /**
+     * Hashes a single value through the handler for its runtime type.
+     *
+     * The value is passed to the handler selected by `typeOf(target)` and the
+     * digest is returned unchanged; no array framing or extra type byte is added
+     * at this level. When no handler is installed for the type the lookup falls
+     * back to `0n` instead of throwing, a defensive branch that the built-in
+     * registrations do not normally reach.
+     *
+     * @template T - the type of the value, inferred from the call site
+     * @param target - the value to hash; its runtime type selects the handler
+     * @returns the digest produced by the selected handler, or `0n` when the
+     *          type has no handler
+     */
     <T = unknown>(target: T): bigint;
+    /**
+     * Hashes several arguments as one array-shaped value.
+     *
+     * Rather than hashing each argument separately, the arguments are collected
+     * into a fresh array and that array is hashed structurally, so `useHash(a,
+     * b)` and `useHash([a, b])` produce the same digest. The implementation
+     * branches on the argument count rather than on the selected overload, so a
+     * lone argument still takes the scalar path above, and a call with no
+     * arguments hashes the empty array.
+     *
+     * @param value - the arguments to hash together, in the given order
+     * @returns the structural hash of the argument array
+     */
     (...value: Array<unknown>): bigint;
 }
 /**

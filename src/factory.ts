@@ -854,20 +854,12 @@ export let useSubscription: UseSubscription = <T, EventMap, K extends KeyOfEvent
  */
 interface UseOf {
     /**
-     * Emits the argument as one element.
+     * Emits each argument as one element.
      *
-     * The argument is the element itself, so an array argument becomes a single
+     * Every argument becomes one element, so an array argument becomes a single
      * array element rather than being spread over several positions.
      */
-    <E>(target: E): SynchronousSemantic<E>;
-    /**
-     * Emits the iterable as one element.
-     *
-     * This overload exists for typing convenience and flattens nothing: the
-     * collection is one element whose value happens to be iterable. Use `useFrom`
-     * when the contents are what should be emitted.
-     */
-    <E>(target: Iterable<E>): SynchronousSemantic<E>;
+    <E>(...target: Array<E>): SynchronousSemantic<E>;
 }
 ;
 /**

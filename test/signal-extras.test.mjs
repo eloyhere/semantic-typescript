@@ -7,6 +7,8 @@ import {
     instantaneousAmplitude, instantaneousFrequency, inverseDiscreteFourierTransform,
     inverseFastFourierTransform, unwrapPhase, useBandPass, useDegree, useFirLowPass,
     useFlatTopWindow, useHannWindow, useHighPass, useKaiserWindow,
+    useHannPeriodicWindow, useHammingPeriodicWindow, useBlackmanPeriodicWindow,
+    useFlatTopPeriodicWindow,
     useLowPass, useNuttallWindow, useNotch, useOnePole, useRectangularWindow,
 } from '../dist/index.js';
 
@@ -126,4 +128,14 @@ test('windows expose shape parameters, coherent gain and noise bandwidth', () =>
     close(equivalentNoiseBandwidth(useRectangularWindow, 256), 1, 1e-12);
     close(equivalentNoiseBandwidth(useHannWindow, 256), 1.5, 0.01);
     assert.throws(() => coherentGain(useHannWindow, 0), TypeError);
+
+    // The periodic forms are DFT-even: their coherent gain and noise bandwidth do
+    // not drift with the frame length, and the flat-top keeps its negative lobe.
+    assert.equal(useHannPeriodicWindow(0, 8), 0);
+    close(coherentGain(useHannPeriodicWindow, 8), 0.5, 1e-12);
+    close(equivalentNoiseBandwidth(useHannPeriodicWindow, 8), 1.5, 1e-12);
+    close(coherentGain(useHammingPeriodicWindow, 8), 0.54, 1e-12);
+    close(coherentGain(useBlackmanPeriodicWindow, 8), 0.42, 1e-12);
+    assert.ok(useFlatTopWindow(0, 64) < 0);
+    assert.ok(useFlatTopPeriodicWindow(0, 64) < 0);
 });

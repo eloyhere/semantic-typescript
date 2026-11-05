@@ -27,3 +27,8 @@ dist
 
 # 智能体工作数据
 .workbuddy
+
+# 本地校验与临时产物
+.tmp/
+.baseline-dist/
+.readme-verify/

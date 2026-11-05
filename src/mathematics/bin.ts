@@ -33,38 +33,86 @@ const requireNormalization: (normalization: unknown) => Normalization = (normali
 }
 
 /**
- * Converts a non-negative ratio into decibels relative to a reference.
+ * Converts a non-negative amplitude ratio into decibels relative to a reference.
  *
- * The conversion is `20 * log10(ratio / reference)`, so a ratio equal to the
- * reference is zero decibels and a ratio of one tenth is minus twenty. The
- * factor of twenty is the amplitude convention, so squaring a ratio adds twice
- * its decibel value. A ratio of zero has no finite logarithm and reports
- * negative infinity rather than throwing, because silence is a normal
- * measurement. `Bin.decibel` and `Spectrum.decibelOf` both route their levels
- * through this function.
+ * The conversion is `20 * log10(ratio / reference)`, the amplitude convention, so
+ * a ratio equal to the reference is zero decibels and a ratio of one tenth is
+ * minus twenty. Use this function only when the ratio is an amplitude-like
+ * quantity, such as a voltage, a displacement, a sound pressure or a root mean
+ * square; a power, energy or power spectral density must go through
+ * `powerDecibel` instead, whose factor of ten reflects the square relation
+ * between the two conventions. `Bin.decibel` and `Spectrum.decibelOf` both route
+ * their levels through this function.
  *
- * @param ratio the measured ratio; must be finite and non-negative
- * @param reference the reference ratio, which must be finite and positive;
- *        defaults to one
+ * A ratio of zero has no finite logarithm and reports negative infinity rather
+ * than throwing, because silence is a normal measurement.
+ *
+ * @param ratio the measured amplitude ratio; must be finite and non-negative
+ * @param reference the reference amplitude ratio, which must be finite and
+ *        positive; defaults to one
  * @returns the level in decibels, or negative infinity for a zero ratio
  * @throws {TypeError} if either argument is not a finite number
  * @throws {RangeError} if the ratio is negative or the reference is not positive
  */
-export const decibel: (ratio: number, reference?: number) => number = (ratio: number, reference: number = 1): number => {
-    if (!isNumber(ratio)) {
-        throw new TypeError("Decibel ratio must be a finite number.");
-    }
-    if (!isNumber(reference)) {
-        throw new TypeError("Decibel reference must be a finite number.");
-    }
-    if (ratio < 0) {
-        throw new RangeError("Decibel ratio must not be negative.");
-    }
-    if (reference <= 0) {
-        throw new RangeError("Decibel reference must be positive.");
-    }
-    return ratio === 0 ? Number.NEGATIVE_INFINITY : 20 * Math.log10(ratio / reference);
+export const amplitudeDecibel: (ratio: number, reference?: number) => number = (ratio: number, reference: number = 1): number => {
+    return decibelOf(ratio, reference, 20);
 }
+
+/**
+ * Converts a non-negative power ratio into decibels relative to a reference.
+ *
+ * The conversion is `10 * log10(ratio / reference)`, the power convention, so a
+ * ratio equal to the reference is zero decibels and a power of one quarter is
+ * minus 6.02 decibels. Use this function for a power, an energy, a mean square or
+ * a power spectral density; passing such a quantity to `amplitudeDecibel`
+ * instead would report `20 * log10(power)` and exaggerate the level by a factor
+ * of two, turning the correct minus 6.02 decibels into minus 12.04 decibels.
+ *
+ * A ratio of zero has no finite logarithm and reports negative infinity rather
+ * than throwing, because silence is a normal measurement.
+ *
+ * @param ratio the measured power ratio; must be finite and non-negative
+ * @param reference the reference power ratio, which must be finite and
+ *        positive; defaults to one
+ * @returns the level in decibels, or negative infinity for a zero ratio
+ * @throws {TypeError} if either argument is not a finite number
+ * @throws {RangeError} if the ratio is negative or the reference is not positive
+ */
+export const powerDecibel: (ratio: number, reference?: number) => number = (ratio: number, reference: number = 1): number => {
+    return decibelOf(ratio, reference, 10);
+}
+
+/**
+ * Validates a ratio and a reference and applies one decibel convention.
+ *
+ * The two public conversions differ only in the factor, so the validation and
+ * the zero handling live here to keep them identical. The ratio must be finite
+ * and non-negative and the reference finite and positive; a zero ratio reports
+ * negative infinity instead of attempting a logarithm.
+ *
+ * @param ratio the measured ratio, finite and non-negative
+ * @param reference the reference ratio, finite and positive
+ * @param factor the decibel factor, twenty for amplitudes and ten for powers
+ * @returns the level in decibels, or negative infinity for a zero ratio
+ * @throws {TypeError} if the ratio or the reference is not a finite number
+ * @throws {RangeError} if the ratio is negative or the reference is not positive
+ */
+const decibelOf: (ratio: number, reference: number, factor: number) => number =
+    (ratio: number, reference: number, factor: number): number => {
+        if (!isNumber(ratio)) {
+            throw new TypeError("Decibel ratio must be a finite number.");
+        }
+        if (!isNumber(reference)) {
+            throw new TypeError("Decibel reference must be a finite number.");
+        }
+        if (ratio < 0) {
+            throw new RangeError("Decibel ratio must not be negative.");
+        }
+        if (reference <= 0) {
+            throw new RangeError("Decibel reference must be positive.");
+        }
+        return ratio === 0 ? Number.NEGATIVE_INFINITY : factor * Math.log10(ratio / reference);
+    }
 
 /**
  * Applies a normalisation to a raw transform coefficient.
@@ -272,14 +320,15 @@ export class Bin {
 
     /**
      * Returns the level of this coefficient in decibels relative to a reference
-     * magnitude.
+     * amplitude.
      *
-     * The level is the shared `decibel` conversion of `magnitude()` against the
+     * The level is the shared amplitude conversion of `magnitude()` against the
      * reference, so a magnitude equal to the reference is zero decibels, one
      * tenth of it is minus twenty, and a silent coefficient reports negative
      * infinity. The conversion uses the raw amplitude, because a bin carries no
      * normalisation of its own; pass a `Normalization` to `Spectrum.decibelOf`
-     * to obtain a level that accounts for the frame count. The receiver is not
+     * to obtain a level that accounts for the frame count, or to
+     * `Spectrum.powerDecibelOf` for the power convention. The receiver is not
      * modified.
      *
      * @param reference the positive, finite reference magnitude, defaulting to `1`
@@ -289,7 +338,7 @@ export class Bin {
      * @throws {RangeError} if the reference is not positive
      */
     public decibel(reference: number = 1): number {
-        return decibel(this.magnitude(), reference);
+        return amplitudeDecibel(this.magnitude(), reference);
     }
 
     /**

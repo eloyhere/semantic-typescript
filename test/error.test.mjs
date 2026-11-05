@@ -168,3 +168,16 @@ describe("语义错误序列化", () => {
         assert.equal(String(new ST.RangeError("outside")), "RangeError: outside");
     });
 });
+
+test('SemanticRangeError aliases RangeError without shadowing the global', () => {
+  assert.equal(ST.SemanticRangeError, ST.RangeError);
+  const error = new ST.SemanticRangeError('out of range', { context: { index: 3 } });
+  assert.equal(error.name, 'RangeError');
+  assert.equal(error.message, 'out of range');
+  assert.deepEqual(error.context, { index: 3 });
+  assert.ok(error instanceof ST.SemanticRangeError);
+  assert.ok(error instanceof ST.RangeError);
+  assert.ok(error instanceof ST.ValidationError);
+  assert.ok(error instanceof ST.SemanticError);
+  assert.equal(error instanceof globalThis.RangeError, false);
+});

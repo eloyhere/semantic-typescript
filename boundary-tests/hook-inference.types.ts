@@ -6,12 +6,14 @@ type Assert<T extends true> = T;
 const nested = { profile: { name: "Ada", count: 2 }, active: true };
 export type NestedKey = Assert<Equal<UseTraverseKey<typeof nested>, "name" | "count" | "active">>;
 export type NestedValue = Assert<Equal<UseTraverseValue<typeof nested>, string | number | boolean>>;
-export type NestedPath = Assert<Equal<UseTraversePath<typeof nested>, Array<"profile" | "name" | "count" | "active">>>;
+export type NestedPath = Assert<Equal<UseTraversePath<typeof nested>, ReadonlyArray<"profile" | "name" | "count" | "active">>>;
 
 useTraverse(nested, (key, value, path) => {
     const inferredKey: "name" | "count" | "active" = key;
     const inferredValue: string | number | boolean = value;
-    const inferredPath: Array<"profile" | "name" | "count" | "active"> = path;
+    const inferredPath: ReadonlyArray<"profile" | "name" | "count" | "active"> = path;
+    // @ts-expect-error A path snapshot is read-only and cannot be mutated in place.
+    path.push("other");
     // @ts-expect-error Object containers are not passed to the leaf callback.
     const container: typeof nested.profile = value;
     void [inferredKey, inferredValue, inferredPath, container];
@@ -38,7 +40,7 @@ type Branches = {
 };
 export type BranchKey = Assert<Equal<UseTraverseKey<Branches>, "label" | "left" | "right" | "code" | "callback" | "7" | number | typeof symbolKey>>;
 export type BranchValue = Assert<Equal<UseTraverseValue<Branches>, "optional" | 1 | 2 | bigint | "plain" | boolean | (() => void) | "numeric" | symbol>>;
-export type BranchPath = Assert<Equal<UseTraversePath<Branches>, Array<"optional" | "label" | "union" | "left" | "right" | "items" | "code" | "set" | "callback" | "7" | number | typeof symbolKey>>>;
+export type BranchPath = Assert<Equal<UseTraversePath<Branches>, ReadonlyArray<"optional" | "label" | "union" | "left" | "right" | "items" | "code" | "set" | "callback" | "7" | number | typeof symbolKey>>>;
 export type RootArrayKey = Assert<Equal<UseTraverseKey<string[]>, `${number}` | "length">>;
 export type RootTupleKey = Assert<Equal<UseTraverseKey<readonly ["one", 2]>, "0" | "1" | "length">>;
 export type RootArrayValue = Assert<Equal<UseTraverseValue<string[]>, string | number>>;
@@ -55,11 +57,11 @@ interface RecursiveNode {
 declare const recursive: RecursiveNode;
 export type RecursiveKey = Assert<Equal<UseTraverseKey<RecursiveNode>, PropertyKey>>;
 export type RecursiveValue = Assert<Equal<UseTraverseValue<RecursiveNode>, UseTraverseValue<object>>>;
-export type RecursivePath = Assert<Equal<UseTraversePath<RecursiveNode>, PropertyKey[]>>;
+export type RecursivePath = Assert<Equal<UseTraversePath<RecursiveNode>, ReadonlyArray<PropertyKey>>>;
 useTraverse(recursive, (key, value, path) => {
     const safeKey: PropertyKey = key;
     const safeValue: UseTraverseValue<object> = value;
-    const safePath: PropertyKey[] = path;
+    const safePath: ReadonlyArray<PropertyKey> = path;
     // @ts-expect-error Recursive fallback values still exclude null and object containers.
     const objectValue: object = value;
     void [safeKey, safeValue, safePath, objectValue];
