@@ -36,6 +36,7 @@ export {
     AsynchronousOrderedSet, AsynchronousUnorderedSet, SynchronousOrderedSet, SynchronousUnorderedSet,
 } from "#semantic/structure/set";
 export type {
+    AsynchronousSetContract, SynchronousSetContract,
     AsynchronousOrderedSetConstructor, AsynchronousUnorderedSetConstructor,
     SynchronousOrderedSetConstructor, SynchronousUnorderedSetConstructor,
 } from "#semantic/structure/set";
@@ -44,6 +45,7 @@ export {
     SynchronousMapEntry, AsynchronousMapEntry,
 } from "#semantic/structure/map";
 export type {
+    AsynchronousMapContract, SynchronousMapContract,
     Entry, MapOptions,
     SynchronousOrderedMapConstructor, AsynchronousOrderedMapConstructor, SynchronousUnorderedMapConstructor,
     AsynchronousUnorderedMapConstructor, SynchronousMapEntryConstructor, AsynchronousMapEntryConstructor,

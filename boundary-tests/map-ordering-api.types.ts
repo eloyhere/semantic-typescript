@@ -1,5 +1,9 @@
 import type {
-    AsynchronousCollection, AsynchronousMap, SynchronousMap,
+    AsynchronousCollection,
+    // Updated for the 1.2.0 -> 1.3.0 structure split: the shared `SynchronousMap`
+    // and `AsynchronousMap` names were removed in favour of the explicit
+    // ordered/unordered variants; the family-wide base is the Contract interface.
+    AsynchronousMapContract, SynchronousMapContract,
     AsynchronousOrderedMap, AsynchronousUnorderedMap,
     SynchronousOrderedMap, SynchronousUnorderedMap,
     AsynchronousOrderedLRUMap, AsynchronousUnorderedLRUMap,
@@ -20,7 +24,9 @@ export function synchronousOrdering(
 ): void {
     const orderedBase: SynchronousOrderedMap<string, bigint>[] = [ordered, orderedLRU, orderedSkip];
     const unorderedBase: SynchronousUnorderedMap<string, bigint>[] = [unordered, unorderedLRU, unorderedSkip];
-    const base: SynchronousMap<string, bigint>[] = [...orderedBase, ...unorderedBase];
+    // Updated for the 1.2.0 -> 1.3.0 structure split: ordered and unordered maps
+    // share only the family-wide Contract base, so the union narrows to it.
+    const base: SynchronousMapContract<string, bigint>[] = [...orderedBase, ...unorderedBase];
     const flag: true = orderedSkip.ordered;
     const otherFlag: false = unorderedSkip.ordered;
     const orderedRange: SynchronousOrderedSkipMap<string, bigint> = orderedSkip.subMap('a', true, 'z', false).descendingMap();
@@ -46,7 +52,7 @@ export async function asynchronousOrdering(
 ): Promise<void> {
     const orderedBase: AsynchronousOrderedMap<string, bigint>[] = [ordered, orderedLRU, orderedSkip];
     const unorderedBase: AsynchronousUnorderedMap<string, bigint>[] = [unordered, unorderedLRU, unorderedSkip];
-    const base: AsynchronousMap<string, bigint>[] = [...orderedBase, ...unorderedBase];
+    const base: AsynchronousMapContract<string, bigint>[] = [...orderedBase, ...unorderedBase];
     const orderedRange: AsynchronousOrderedSkipMap<string, bigint> = await orderedSkip.subMap('a', 'z');
     const unorderedRange: AsynchronousUnorderedSkipMap<string, bigint> = await unorderedSkip.descendingMap();
     const keys: AsynchronousSkipSet<string> = await orderedSkip.keySet();

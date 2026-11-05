@@ -5,7 +5,7 @@ import { SynchronousOrderedCollectableSymbol, SynchronousBigIntStatisticsSymbol,
 import { invalidate, validate, type BiConsumer, type BiFunctional, type BiPredicate, type Comparator, type Consumer, type Functional, type Indexed, type Predicate, type Supplier, type SynchronousGenerator, type TriFunctional, type TriPredicate } from "#semantic/utility";
 import { SynchronousCollector } from "#semantic/synchronous/collector";
 import { Optional } from "#semantic/optional";
-import { isKurtosisEstimator, isQuantileMethod, isSkewnessEstimator, isVarianceDdof, quantileOfSorted, type KurtosisOptions, type QuantileOptions, type SkewnessOptions, type VarianceOptions } from "#semantic/statistics";
+import { isKurtosisEstimator, isQuantileMethod, isSkewnessEstimator, isVarianceDdof, quantileOfSorted, type KurtosisOptions, type QuantileOptions, type SkewnessOptions, type VarianceOptions } from "#semantic/mathematics/quantile";
 import type { SynchronousCycle } from "#semantic/structure/cycle";
 import type { SynchronousRootedForest } from "#semantic/structure/forest/rootedForest";
 import type { SynchronousList } from "#semantic/structure/list";

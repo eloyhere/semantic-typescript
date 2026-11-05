@@ -5,6 +5,55 @@ import { SynchronousSemantic } from "#semantic/synchronous/semantic";
 import { invalidate, validate } from "#semantic/utility";
 import type { BiPredicate, Predicate, Supplier, Consumer, BiConsumer, DeepPropertyKey, DeepPropertyValue, Runnable } from "#semantic/utility";
 /**
+ * Combines a primary failure with the failures raised while cleaning up.
+ *
+ * The primary value is returned unchanged whenever its identity can be kept, so
+ * a caller still observes the original error. Secondary failures are exposed
+ * through `cause`: one failure is attached directly and several are attached as
+ * an `AggregateError`. A `cause` already present on the primary is preserved
+ * inside that aggregate instead of being replaced, so no failure is dropped.
+ * When the primary value cannot carry a `cause` — it is a primitive or a frozen
+ * object — an `AggregateError` holding every failure is returned instead.
+ *
+ * @param primary the failure that caused the cleanup, or the first cleanup failure
+ * @param secondary the remaining failures, in the order they were raised
+ * @returns the value to throw or reject with
+ */
+let combineFailure = (primary: unknown, secondary: Array<unknown>): unknown => {
+    let message: string = "Multiple failures occurred while cleaning up.";
+    if (secondary.length === 0) {
+        return primary;
+    }
+    if (primary === null || (typeof primary !== "object" && typeof primary !== "function")) {
+        return new AggregateError([primary, ...secondary], message);
+    }
+    let existing: unknown;
+    try {
+        existing = (primary as { cause?: unknown }).cause;
+    }
+    catch {
+        return new AggregateError([primary, ...secondary], message);
+    }
+    let cause: unknown = secondary.length === 1
+        ? secondary[0]
+        : new AggregateError(secondary, message);
+    if (existing !== undefined && existing !== null) {
+        cause = new AggregateError([existing, ...secondary], message);
+    }
+    try {
+        Object.defineProperty(primary, "cause", {
+            configurable: true,
+            enumerable: false,
+            writable: true,
+            value: cause
+        });
+        return primary;
+    }
+    catch {
+        return new AggregateError([primary, ...secondary], message);
+    }
+};
+/**
  * One leaf reached by `useAttribute`.
  *
  * The pair is produced for every non-null leaf of the source, so nested objects
@@ -121,7 +170,10 @@ interface UseBlob {
  * Collection starts the read; a downstream stop cancels the reader as well as
  * releasing its lock, so an abandoned read does not keep the stream open. The
  * lock is released on every exit path, including an error thrown by the consumer
- * or by the stream itself, and such an error propagates unchanged.
+ * or by the stream itself. A failure raised by `cancel()` or `releaseLock()` is
+ * never swallowed: on a normal exit it rejects the collection, and when the
+ * consumer or the stream had already failed, that original error stays primary
+ * and the cleanup failure is attached to it as its `cause`.
  *
  * @param blob the blob to read
  * @param chunk the chunk size in bytes, a safe positive integer; defaults to 64 KiB
@@ -141,6 +193,7 @@ export let useBlob: UseBlob = (blob: BlobLike, chunk: bigint = 64n * 1024n): Asy
         let index: bigint = 0n;
         let stoppable: boolean = false;
         let failed: boolean = false;
+        let failure: unknown = undefined;
         let stream = blob.stream();
         let reader = stream.getReader();
         let buffer: Uint8Array = new Uint8Array(size);
@@ -185,17 +238,30 @@ export let useBlob: UseBlob = (blob: BlobLike, chunk: bigint = 64n * 1024n): Asy
         }
         catch (error) {
             failed = true;
-            throw error;
+            failure = error;
         }
         finally {
+            let cleanup: Array<unknown> = [];
             if (stoppable || failed) {
                 try {
                     await reader.cancel();
                 }
                 catch (error) {
+                    cleanup.push(error);
                 }
             }
-            reader.releaseLock();
+            try {
+                reader.releaseLock();
+            }
+            catch (error) {
+                cleanup.push(error);
+            }
+            if (failed) {
+                throw combineFailure(failure, cleanup);
+            }
+            if (cleanup.length > 0) {
+                throw combineFailure(cleanup[0], cleanup.slice(1));
+            }
         }
     });
 };
@@ -736,15 +802,20 @@ interface UseSubscription {
  * The subscriber factory is called once per collection, so repeated collections
  * are independent: each mounts, subscribes and unmounts on its own. Mounting
  * happens before the first subscription and every subscription is recorded so it
- * can be undone later.
+ * can be undone later. Registrations are keyed by event name, so a name that
+ * appears more than once is overwritten by its later registration and only the
+ * survivor is tracked for teardown.
  *
  * Teardown is idempotent and runs on every exit path — a consumer asking to stop,
  * a consumer throwing, a subscription failing part-way through, or an event
  * arriving after the run has already ended. Every recorded `unsubscribe` is
  * attempted even if an earlier one throws, and `unmount` is attempted even if an
- * unsubscribe threw, so one failing host method cannot strand the others. Errors
- * raised during teardown are swallowed rather than masking the error that caused
- * the teardown; a consumer error therefore propagates unchanged.
+ * unsubscribe threw, so one failing host method cannot strand the others. A
+ * failure raised during teardown is never swallowed: it rejects the collection
+ * when the consumer completed normally, while a consumer error stays primary and
+ * the teardown failures are attached to it as its `cause`. When several teardown
+ * steps fail, the first failure is the one propagated and the rest are folded
+ * into the same `cause` chain.
  *
  * An empty name list completes immediately, having mounted and unmounted without
  * subscribing to anything.
@@ -772,16 +843,20 @@ export let useSubscription: UseSubscription = <T, EventMap, K extends KeyOfEvent
         let handlers: Map<K, Consumer<EventOfEventMap<EventMap, K>>> = new Map<K, Consumer<EventOfEventMap<EventMap, K>>>();
         let settled: boolean = false;
         return new Promise<void>((resolve: Runnable, reject: Consumer<any>): void => {
-            let teardown: Runnable = (): void => {
+            let registering: boolean = false;
+            let deferred: { failed: boolean; error: unknown; failures: Array<unknown> } | null = null;
+            let teardown: () => Array<unknown> = (): Array<unknown> => {
                 if (settled) {
-                    return;
+                    return [];
                 }
                 settled = true;
+                let failures: Array<unknown> = [];
                 for (let [key, handler] of handlers) {
                     try {
                         subscriber.unsubscribe(key, handler);
                     }
                     catch (error) {
+                        failures.push(error);
                     }
                 }
                 handlers.clear();
@@ -789,7 +864,40 @@ export let useSubscription: UseSubscription = <T, EventMap, K extends KeyOfEvent
                     subscriber.unmount();
                 }
                 catch (error) {
+                    failures.push(error);
                 }
+                return failures;
+            };
+            let settle: (failed: boolean, error: unknown, failures: Array<unknown>) => void = (failed: boolean, error: unknown, failures: Array<unknown>): void => {
+                if (failed) {
+                    reject(combineFailure(error, failures));
+                    return;
+                }
+                if (failures.length > 0) {
+                    reject(combineFailure(failures[0], failures.slice(1)));
+                    return;
+                }
+                resolve();
+            };
+            let conclude: Runnable = (): void => {
+                let failures: Array<unknown> = teardown();
+                if (registering) {
+                    if (deferred === null) {
+                        deferred = { failed: false, error: undefined, failures };
+                    }
+                    return;
+                }
+                settle(false, undefined, failures);
+            };
+            let abandon: Consumer<any> = (error: any): void => {
+                let failures: Array<unknown> = teardown();
+                if (registering) {
+                    if (deferred === null) {
+                        deferred = { failed: true, error, failures };
+                    }
+                    return;
+                }
+                settle(true, error, failures);
             };
             try {
                 subscriber.mount(target);
@@ -804,28 +912,38 @@ export let useSubscription: UseSubscription = <T, EventMap, K extends KeyOfEvent
                         }
                         try {
                             if (interrupt(event, index)) {
-                                teardown();
-                                resolve();
+                                conclude();
                                 return;
                             }
                             accept(event, index);
                             index++;
                             if (interrupt(event, index)) {
-                                teardown();
-                                resolve();
+                                conclude();
                             }
                         }
                         catch (error) {
-                            teardown();
-                            reject(error);
+                            abandon(error);
                         }
                     };
-                    subscriber.subscribe(key, handler);
+                    registering = true;
+                    try {
+                        subscriber.subscribe(key, handler);
+                    }
+                    finally {
+                        registering = false;
+                    }
                     if (settled) {
+                        let cleanup: Array<unknown> = [];
                         try {
                             subscriber.unsubscribe(key, handler);
                         }
                         catch (error) {
+                            cleanup.push(error);
+                        }
+                        if (deferred !== null) {
+                            let outcome: { failed: boolean; error: unknown; failures: Array<unknown> } = deferred;
+                            deferred = null;
+                            settle(outcome.failed, outcome.error, outcome.failures.concat(cleanup));
                         }
                     }
                     else {
@@ -833,13 +951,11 @@ export let useSubscription: UseSubscription = <T, EventMap, K extends KeyOfEvent
                     }
                 }
                 if (!settled && keys.length === 0) {
-                    teardown();
-                    resolve();
+                    conclude();
                 }
             }
             catch (error) {
-                teardown();
-                reject(error);
+                abandon(error);
             }
         });
     });

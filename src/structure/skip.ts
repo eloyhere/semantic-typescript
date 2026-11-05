@@ -467,8 +467,12 @@ export interface SynchronousUnorderedSkipSet<E> extends SynchronousUnorderedSet<
     readonly [SynchronousUnorderedSkipSetSymbol]: unique symbol;
 }
 
-/** @internal Skip-map operations shared by base and ordered/unordered skip map variants. */
-interface AsynchronousSkipMapOperations<K, V> {
+/**
+ * @internal Skip-map operations shared by base and ordered/unordered skip map
+ * variants. `M` is the map variant returned by descending and range views, so
+ * that a view of an ordered or unordered map preserves that variant.
+ */
+interface AsynchronousSkipMapOperations<K, V, M> {
     comparator(): Promise<Comparator<K>>;
     firstKey(): Promise<K>;
     lastKey(): Promise<K>;
@@ -484,18 +488,22 @@ interface AsynchronousSkipMapOperations<K, V> {
     higherEntry(key: K): Promise<AsynchronousMapEntry<K, V>>;
     pollFirstEntry(): Promise<AsynchronousMapEntry<K, V>>;
     pollLastEntry(): Promise<AsynchronousMapEntry<K, V>>;
-    descendingMap(): Promise<AsynchronousSkipMap<K, V>>;
+    descendingMap(): Promise<M>;
     keySet(): Promise<AsynchronousSetContract<K>>;
     navigableKeySet(): Promise<AsynchronousSkipSet<K>>;
     descendingKeySet(): Promise<AsynchronousSkipSet<K>>;
-    subMap(fromKey: K, toKey: K): Promise<AsynchronousSkipMap<K, V>>;
-    subMap(fromKey: K, fromInclusive: boolean, toKey: K, toInclusive: boolean): Promise<AsynchronousSkipMap<K, V>>;
-    headMap(toKey: K, inclusive?: boolean): Promise<AsynchronousSkipMap<K, V>>;
-    tailMap(fromKey: K, inclusive?: boolean): Promise<AsynchronousSkipMap<K, V>>;
+    subMap(fromKey: K, toKey: K): Promise<M>;
+    subMap(fromKey: K, fromInclusive: boolean, toKey: K, toInclusive: boolean): Promise<M>;
+    headMap(toKey: K, inclusive?: boolean): Promise<M>;
+    tailMap(fromKey: K, inclusive?: boolean): Promise<M>;
 }
 
-/** @internal Skip-map operations shared by base and ordered/unordered skip map variants. */
-interface SynchronousSkipMapOperations<K, V> {
+/**
+ * @internal Skip-map operations shared by base and ordered/unordered skip map
+ * variants. `M` is the map variant returned by descending and range views, so
+ * that a view of an ordered or unordered map preserves that variant.
+ */
+interface SynchronousSkipMapOperations<K, V, M> {
     comparator(): Comparator<K>;
     firstKey(): Optional<K>;
     lastKey(): Optional<K>;
@@ -511,14 +519,14 @@ interface SynchronousSkipMapOperations<K, V> {
     higherEntry(key: K): Optional<SynchronousMapEntry<K, V>>;
     pollFirstEntry(): Optional<SynchronousMapEntry<K, V>>;
     pollLastEntry(): Optional<SynchronousMapEntry<K, V>>;
-    descendingMap(): SynchronousSkipMap<K, V>;
+    descendingMap(): M;
     keySet(): SynchronousSetContract<K>;
     navigableKeySet(): SynchronousSkipSet<K>;
     descendingKeySet(): SynchronousSkipSet<K>;
-    subMap(fromKey: K, toKey: K): SynchronousSkipMap<K, V>;
-    subMap(fromKey: K, fromInclusive: boolean, toKey: K, toInclusive: boolean): SynchronousSkipMap<K, V>;
-    headMap(toKey: K, inclusive?: boolean): SynchronousSkipMap<K, V>;
-    tailMap(fromKey: K, inclusive?: boolean): SynchronousSkipMap<K, V>;
+    subMap(fromKey: K, toKey: K): M;
+    subMap(fromKey: K, fromInclusive: boolean, toKey: K, toInclusive: boolean): M;
+    headMap(toKey: K, inclusive?: boolean): M;
+    tailMap(fromKey: K, inclusive?: boolean): M;
 }
 
 /**
@@ -542,7 +550,7 @@ interface SynchronousSkipMapOperations<K, V> {
  * @template K the type of keys maintained by this map
  * @template V the type of mapped values, excluding `null` and `undefined`
  */
-export interface AsynchronousSkipMap<K, V> extends AsynchronousMapContract<K, V>, AsynchronousSkipMapOperations<K, V>{
+export interface AsynchronousSkipMap<K, V> extends AsynchronousMapContract<K, V>, AsynchronousSkipMapOperations<K, V, AsynchronousSkipMap<K, V>>{
 
     /** Identifies this interface at runtime. */
     readonly [AsynchronousSkipMapSymbol]: unique symbol;
@@ -759,7 +767,7 @@ export interface AsynchronousSkipMap<K, V> extends AsynchronousMapContract<K, V>
  * @template K the type of keys maintained by this map
  * @template V the type of mapped values, excluding `null` and `undefined`
  */
-export interface SynchronousSkipMap<K, V> extends SynchronousMapContract<K, V>, SynchronousSkipMapOperations<K, V>{
+export interface SynchronousSkipMap<K, V> extends SynchronousMapContract<K, V>, SynchronousSkipMapOperations<K, V, SynchronousSkipMap<K, V>>{
 
     /** Identifies this interface at runtime. */
     readonly [SynchronousSkipMapSymbol]: unique symbol;
@@ -957,19 +965,28 @@ export interface SynchronousSkipMap<K, V> extends SynchronousMapContract<K, V>, 
  * A navigable skip map whose collection views follow comparator order.
  *
  * Key, value and entry iteration, and `forEach` actions, follow the map's key
- * comparator. Descending views reverse that order; range views retain it within
- * their inherited bounds. All other navigation and backed-view contracts are
+ * comparator. Descending and range maps preserve this ordered variant;
+ * descending views reverse the order and range views retain it within their
+ * inherited bounds. All other navigation and backed-view contracts are
  * inherited from `AsynchronousSkipMap`.
  *
  * @template K the type of keys maintained by this map
  * @template V the type of mapped values, excluding `null` and `undefined`
  */
-export interface AsynchronousOrderedSkipMap<K, V> extends AsynchronousOrderedMap<K, V>, AsynchronousSkipMapOperations<K, V> {
+export interface AsynchronousOrderedSkipMap<K, V> extends AsynchronousOrderedMap<K, V>, AsynchronousSkipMapOperations<K, V, AsynchronousOrderedSkipMap<K, V>> {
     /** Runtime marker identifying this interface as a member of the skip map family. */
     readonly [AsynchronousSkipMapSymbol]: unique symbol;
 
     /** Identifies this interface at runtime. */
     readonly [AsynchronousOrderedSkipMapSymbol]: unique symbol;
+
+    /**
+     * Returns a backed navigable set view of the keys in this map's order.
+     * The view supports removal but not insertion.
+     *
+     * @returns a promise that resolves to the ordered key view
+     */
+    keySet(): Promise<AsynchronousSkipSet<K>>;
 }
 
 /**
@@ -984,7 +1001,7 @@ export interface AsynchronousOrderedSkipMap<K, V> extends AsynchronousOrderedMap
  * @template K the type of keys maintained by this map
  * @template V the type of mapped values, excluding `null` and `undefined`
  */
-export interface AsynchronousUnorderedSkipMap<K, V> extends AsynchronousUnorderedMap<K, V>, AsynchronousSkipMapOperations<K, V> {
+export interface AsynchronousUnorderedSkipMap<K, V> extends AsynchronousUnorderedMap<K, V>, AsynchronousSkipMapOperations<K, V, AsynchronousUnorderedSkipMap<K, V>> {
     /** Runtime marker identifying this interface as a member of the skip map family. */
     readonly [AsynchronousSkipMapSymbol]: unique symbol;
 
@@ -996,19 +1013,28 @@ export interface AsynchronousUnorderedSkipMap<K, V> extends AsynchronousUnordere
  * A navigable skip map whose collection views follow comparator order.
  *
  * Key, value and entry iteration, and `forEach` actions, follow the map's key
- * comparator. Descending views reverse that order; range views retain it within
- * their inherited bounds. All other navigation and backed-view contracts are
+ * comparator. Descending and range maps preserve this ordered variant;
+ * descending views reverse the order and range views retain it within their
+ * inherited bounds. All other navigation and backed-view contracts are
  * inherited from `SynchronousSkipMap`.
  *
  * @template K the type of keys maintained by this map
  * @template V the type of mapped values, excluding `null` and `undefined`
  */
-export interface SynchronousOrderedSkipMap<K, V> extends SynchronousOrderedMap<K, V>, SynchronousSkipMapOperations<K, V> {
+export interface SynchronousOrderedSkipMap<K, V> extends SynchronousOrderedMap<K, V>, SynchronousSkipMapOperations<K, V, SynchronousOrderedSkipMap<K, V>> {
     /** Runtime marker identifying this interface as a member of the skip map family. */
     readonly [SynchronousSkipMapSymbol]: unique symbol;
 
     /** Identifies this interface at runtime. */
     readonly [SynchronousOrderedSkipMapSymbol]: unique symbol;
+
+    /**
+     * Returns a backed navigable set view of the keys in this map's order.
+     * The view supports removal but not insertion.
+     *
+     * @returns the ordered key view
+     */
+    keySet(): SynchronousSkipSet<K>;
 }
 
 /**
@@ -1023,7 +1049,7 @@ export interface SynchronousOrderedSkipMap<K, V> extends SynchronousOrderedMap<K
  * @template K the type of keys maintained by this map
  * @template V the type of mapped values, excluding `null` and `undefined`
  */
-export interface SynchronousUnorderedSkipMap<K, V> extends SynchronousUnorderedMap<K, V>, SynchronousSkipMapOperations<K, V> {
+export interface SynchronousUnorderedSkipMap<K, V> extends SynchronousUnorderedMap<K, V>, SynchronousSkipMapOperations<K, V, SynchronousUnorderedSkipMap<K, V>> {
     /** Runtime marker identifying this interface as a member of the skip map family. */
     readonly [SynchronousSkipMapSymbol]: unique symbol;
 

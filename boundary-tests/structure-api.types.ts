@@ -1,21 +1,29 @@
 import type {
     AsynchronousCollection,
     AsynchronousList,
-    AsynchronousMap,
+    AsynchronousMapContract,
     AsynchronousMapEntry,
-    AsynchronousSet,
+    AsynchronousSetContract,
     Optional,
     SynchronousCollection,
     SynchronousList,
-    SynchronousMap,
+    SynchronousMapContract,
     SynchronousMapEntry,
-    SynchronousSet,
+    SynchronousSetContract,
+    // Updated for the 1.2.0 -> 1.3.0 structure split: map entry views are their
+    // own unordered set variant, not the removed generic `Set` name.
+    AsynchronousUnorderedSet,
+    SynchronousUnorderedSet,
 } from 'semantic-typescript';
 
 export function synchronousContracts(
     list: SynchronousList<bigint>,
-    set: SynchronousSet<bigint>,
-    map: SynchronousMap<string, bigint>,
+    // Updated for the 1.2.0 -> 1.3.0 structure split: `SynchronousSet`/`SynchronousMap`
+    // were replaced by the Contract base interfaces plus the ordered/unordered
+    // variants. These functions exercise family-wide base behaviour, so the
+    // Contract types are the faithful replacement.
+    set: SynchronousSetContract<bigint>,
+    map: SynchronousMapContract<string, bigint>,
 ): void {
     const collection: SynchronousCollection<bigint> = list;
     const added: boolean = list.add(1n);
@@ -33,9 +41,11 @@ export function synchronousContracts(
     const filtered: boolean = list.removeIf(value => value < 0n);
     list.replaceAll(value => value + 1n);
     list.sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
-    const union: SynchronousSet<bigint> = set.union(list);
-    const intersection: SynchronousSet<bigint> = set.intersection(list);
-    const complement: SynchronousSet<bigint> = set.complement(list);
+    // Updated for the 1.2.0 -> 1.3.0 definition change: set algebra on the family
+    // base returns the base set Contract.
+    const union: SynchronousSetContract<bigint> = set.union(list);
+    const intersection: SynchronousSetContract<bigint> = set.intersection(list);
+    const complement: SynchronousSetContract<bigint> = set.complement(list);
     const value: Optional<bigint> = map.get('key');
     const replaced: Optional<bigint> = map.put('key', 1n);
     const removed: Optional<bigint> = map.remove('key');
@@ -46,9 +56,9 @@ export function synchronousContracts(
     const absent: Optional<bigint> = map.computeIfAbsent('key', key => BigInt(key.length));
     const present: Optional<bigint> = map.computeIfPresent('key', (_key, current) => current > 0n ? current : null);
     const merged: Optional<bigint> = map.merge('key', 1n, (left, right) => left + right);
-    const keys: SynchronousSet<string> = map.keySet();
+    const keys: SynchronousSetContract<string> = map.keySet();
     const values: SynchronousCollection<bigint> = map.values();
-    const entries: SynchronousSet<SynchronousMapEntry<string, bigint>> = map.entrySet();
+    const entries: SynchronousUnorderedSet<SynchronousMapEntry<string, bigint>> = map.entrySet();
     const size: bigint = map.size();
     void [collection, added, inserted, appended, insertedAll, removedByValue,
         removedByIndex, element, previous, first, range, index, retained, filtered,
@@ -64,8 +74,9 @@ export function synchronousContracts(
 
 export async function asynchronousContracts(
     list: AsynchronousList<bigint>,
-    set: AsynchronousSet<bigint>,
-    map: AsynchronousMap<string, bigint>,
+    // Updated for the 1.2.0 -> 1.3.0 structure split: see the synchronous case.
+    set: AsynchronousSetContract<bigint>,
+    map: AsynchronousMapContract<string, bigint>,
 ): Promise<void> {
     const collection: AsynchronousCollection<bigint> = list;
     const added: boolean = await list.add(1n);
@@ -76,9 +87,9 @@ export async function asynchronousContracts(
     const removedByIndex: bigint = await list.removeAt(0n);
     const first: Optional<bigint> = await list.peekFront();
     const range: AsynchronousList<bigint> = await list.subList(0n, 1n);
-    const union: AsynchronousSet<bigint> = await set.union(list);
-    const intersection: AsynchronousSet<bigint> = await set.intersection(list);
-    const complement: AsynchronousSet<bigint> = await set.complement(list);
+    const union: AsynchronousSetContract<bigint> = await set.union(list);
+    const intersection: AsynchronousSetContract<bigint> = await set.intersection(list);
+    const complement: AsynchronousSetContract<bigint> = await set.complement(list);
     const previous: bigint | void = await map.put('key', 1n);
     const insertedValue: bigint | void = await map.putIfAbsent('key', 2n);
     const retrieved: bigint = await map.get('key');
@@ -91,9 +102,9 @@ export async function asynchronousContracts(
     const absent: bigint = await map.computeIfAbsent('key', key => BigInt(key.length));
     const present: bigint = await map.computeIfPresent('key', (_key, value) => value > 0n ? value : undefined);
     const merged: bigint = await map.merge('key', 1n, (left, right) => left + right);
-    const keys: AsynchronousSet<string> = await map.keySet();
+    const keys: AsynchronousSetContract<string> = await map.keySet();
     const values: AsynchronousCollection<bigint> = await map.values();
-    const entries: AsynchronousSet<AsynchronousMapEntry<string, bigint>> = await map.entrySet();
+    const entries: AsynchronousUnorderedSet<AsynchronousMapEntry<string, bigint>> = await map.entrySet();
     const size: bigint = await map.size();
     const cleared: void = map.clear();
     const listCleared: void = list.clear();

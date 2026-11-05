@@ -118,10 +118,19 @@ test('subscription instances are lazy and independent for repeated consumers', a
 
 test('subscription preserves callback errors while still attempting all cleanup', async () => {
   const boom = new Error('callback');
-  const f = subscription({ unsubscribeError: new Error('unsubscribe'), unmountError: new Error('unmount') });
+  const unsubscribeError = new Error('unsubscribe');
+  const unmountError = new Error('unmount');
+  const f = subscription({ unsubscribeError, unmountError });
   const result = ST.useSubscription({}, f.supplier, 'event').map(() => { throw boom; }).toUnordered().toArray();
   f.emit(1);
-  await assert.rejects(timeout(result), error => error === boom);
+  await assert.rejects(timeout(result), error => {
+    assert.equal(error, boom);
+    // Cleanup failures are not swallowed: the callback error stays primary and
+    // every teardown failure remains readable through the cause chain.
+    assert.ok(error.cause instanceof AggregateError, 'teardown failures must be attached to the cause');
+    assert.deepEqual(error.cause.errors, [unsubscribeError, unmountError]);
+    return true;
+  });
   assert.equal(f.handlers.size, 0);
   assert.equal(f.state.unmounted, 1);
 });

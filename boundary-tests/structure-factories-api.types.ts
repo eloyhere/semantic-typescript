@@ -1,9 +1,13 @@
 import {
     SynchronousCollection, AsynchronousCollection,
-    SynchronousList, AsynchronousList, SynchronousSet, AsynchronousSet,
+    // Updated for the 1.2.0 -> 1.3.0 structure split: the removed plain
+    // `Set` constructors map to their ordered defaults.
+    SynchronousList, AsynchronousList, SynchronousOrderedSet, AsynchronousOrderedSet,
     SynchronousLRUList, AsynchronousLRUList, SynchronousLRUSet, AsynchronousLRUSet,
     SynchronousSkipList, AsynchronousSkipList, SynchronousSkipSet, AsynchronousSkipSet,
-    SynchronousMap, AsynchronousMap, SynchronousMapEntry, AsynchronousMapEntry,
+    // Updated for the same split: the removed plain `Map` names were the
+    // family-wide base, which is now the Contract interface (type-only import).
+    SynchronousMapEntry, AsynchronousMapEntry,
     SynchronousOrderedMap, AsynchronousOrderedMap, SynchronousUnorderedMap, AsynchronousUnorderedMap,
     SynchronousLRUMap, AsynchronousLRUMap,
     SynchronousOrderedLRUMap, AsynchronousOrderedLRUMap, SynchronousUnorderedLRUMap, AsynchronousUnorderedLRUMap,
@@ -11,11 +15,12 @@ import {
     SynchronousOrderedSkipMap, AsynchronousOrderedSkipMap, SynchronousUnorderedSkipMap, AsynchronousUnorderedSkipMap,
     useHashAsyncIterable, useHashIterable, useStructureHash,
 } from 'semantic-typescript';
+import type { SynchronousMapContract, AsynchronousMapContract } from 'semantic-typescript';
 
 export function collectionConstructors(asyncSource: AsyncIterable<bigint>): void {
-    const sync = [new SynchronousCollection([1n]), new SynchronousList([1n]), new SynchronousSet([1n]),
+    const sync = [new SynchronousCollection([1n]), new SynchronousList([1n]), new SynchronousOrderedSet([1n]),
         new SynchronousLRUList([1n]), new SynchronousLRUSet([1n]), new SynchronousSkipList([1n]), new SynchronousSkipSet([1n])];
-    const async = [new AsynchronousCollection(asyncSource), new AsynchronousList(asyncSource), new AsynchronousSet(asyncSource),
+    const async = [new AsynchronousCollection(asyncSource), new AsynchronousList(asyncSource), new AsynchronousOrderedSet(asyncSource),
         new AsynchronousLRUList(asyncSource), new AsynchronousLRUSet(asyncSource), new AsynchronousSkipList(asyncSource), new AsynchronousSkipSet(asyncSource)];
     const synchronous: SynchronousCollection<bigint>[] = sync;
     const asynchronous: AsynchronousCollection<bigint>[] = async;
@@ -33,13 +38,16 @@ export function collectionConstructors(asyncSource: AsyncIterable<bigint>): void
 }
 
 export function mapConstructors(source: Iterable<readonly [string, bigint]>, asyncSource: AsyncIterable<readonly [string, bigint]>): void {
-    const sync: SynchronousMap<string, bigint>[] = [
-        new SynchronousMap(source), new SynchronousOrderedMap(source), new SynchronousUnorderedMap(source),
+    // Updated for the 1.2.0 -> 1.3.0 structure split: the removed plain
+    // `SynchronousMap`/`AsynchronousMap` constructors map to the ordered default;
+    // every family is still asserted assignable to the Contract base.
+    const sync: SynchronousMapContract<string, bigint>[] = [
+        new SynchronousOrderedMap(source), new SynchronousOrderedMap(source), new SynchronousUnorderedMap(source),
         new SynchronousLRUMap(source), new SynchronousOrderedLRUMap(source), new SynchronousUnorderedLRUMap(source),
         new SynchronousSkipMap(source), new SynchronousOrderedSkipMap(source), new SynchronousUnorderedSkipMap(source),
     ];
-    const async: AsynchronousMap<string, bigint>[] = [
-        new AsynchronousMap(asyncSource), new AsynchronousOrderedMap(asyncSource), new AsynchronousUnorderedMap(asyncSource),
+    const async: AsynchronousMapContract<string, bigint>[] = [
+        new AsynchronousOrderedMap(asyncSource), new AsynchronousOrderedMap(asyncSource), new AsynchronousUnorderedMap(asyncSource),
         new AsynchronousLRUMap(asyncSource), new AsynchronousOrderedLRUMap(asyncSource), new AsynchronousUnorderedLRUMap(asyncSource),
         new AsynchronousSkipMap(asyncSource), new AsynchronousOrderedSkipMap(asyncSource), new AsynchronousUnorderedSkipMap(asyncSource),
     ];
@@ -60,14 +68,16 @@ export function constructorCallBoundaries(): void {
     AsynchronousList();
     // @ts-expect-error SynchronousList requires new.
     SynchronousList();
-    // @ts-expect-error AsynchronousSet requires new.
-    AsynchronousSet();
-    // @ts-expect-error SynchronousSet requires new.
-    SynchronousSet();
-    // @ts-expect-error SynchronousMap requires new.
-    SynchronousMap();
-    // @ts-expect-error AsynchronousMap requires new.
-    AsynchronousMap();
+    // Updated for the 1.2.0 -> 1.3.0 structure split: the removed plain set/map
+    // constructors map to their ordered defaults for the requires-new boundary.
+    // @ts-expect-error AsynchronousOrderedSet requires new.
+    AsynchronousOrderedSet();
+    // @ts-expect-error SynchronousOrderedSet requires new.
+    SynchronousOrderedSet();
+    // @ts-expect-error SynchronousOrderedMap requires new.
+    SynchronousOrderedMap();
+    // @ts-expect-error AsynchronousOrderedMap requires new.
+    AsynchronousOrderedMap();
     // @ts-expect-error SynchronousOrderedMap requires new.
     SynchronousOrderedMap();
     // @ts-expect-error AsynchronousOrderedMap requires new.
@@ -124,13 +134,13 @@ export function constructorCallBoundaries(): void {
 
 /** Generic constructor signatures retain instance type arguments and subclass prototypes. */
 export function constructorGenerics(): void {
-    const map: SynchronousMap<string, bigint> = new SynchronousMap<string, bigint>();
-    const asyncMap: AsynchronousMap<string, bigint> = new AsynchronousMap<string, bigint>();
+    const map: SynchronousOrderedMap<string, bigint> = new SynchronousOrderedMap<string, bigint>();
+    const asyncMap: AsynchronousOrderedMap<string, bigint> = new AsynchronousOrderedMap<string, bigint>();
     const list: SynchronousCollection<bigint> = new SynchronousList<bigint>(undefined, { capacity: 2n });
     const entry = new SynchronousMapEntry<string, bigint>('key', 1n);
     class StringList extends SynchronousList<string> {}
     const derived: SynchronousCollection<string> = new StringList(['value']);
     // @ts-expect-error synchronous map constructors reject async-only sources.
-    new SynchronousMap((async function* () { yield ['key', 1n] as const; })());
+    new SynchronousOrderedMap((async function* () { yield ['key', 1n] as const; })());
     void [map, asyncMap, list, entry, derived];
 }

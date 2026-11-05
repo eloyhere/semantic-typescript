@@ -3,8 +3,12 @@ import type {
     SynchronousLRUList, SynchronousLRUSet, SynchronousLRUMap,
     AsynchronousSkipList, AsynchronousSkipSet, AsynchronousSkipMap,
     SynchronousSkipList, SynchronousSkipSet, SynchronousSkipMap,
-    AsynchronousList, AsynchronousSet, AsynchronousMap, AsynchronousMapEntry,
-    SynchronousList, SynchronousSet, SynchronousMap, SynchronousMapEntry,
+    // Updated for the 1.2.0 -> 1.3.0 structure split: the shared `Set`/`Map`
+    // names were removed. Positions that only need the family-wide base now use
+    // the Contract interfaces (which `src/index.ts` must export); the concrete
+    // ordered/unordered variants are covered in map-ordering-api.types.ts.
+    AsynchronousList, AsynchronousSetContract, AsynchronousMapContract, AsynchronousMapEntry,
+    SynchronousList, SynchronousSetContract, SynchronousMapContract, SynchronousMapEntry,
     Optional, Comparator,
 } from 'semantic-typescript';
 
@@ -17,8 +21,10 @@ export function synchronousAdvancedContracts(
     skipMap: SynchronousSkipMap<string, bigint>,
 ): void {
     const baseList: SynchronousList<bigint> = list;
-    const baseSet: SynchronousSet<bigint> = set;
-    const baseMap: SynchronousMap<string, bigint> = map;
+    // Updated for the 1.2.0 -> 1.3.0 definition change: the LRU set/map extend the
+    // family-wide Contract interfaces, so those are the base types to assert.
+    const baseSet: SynchronousSetContract<bigint> = set;
+    const baseMap: SynchronousMapContract<string, bigint> = map;
     const capacity: bigint = list.capacity();
     list.setCapacity(10n);
     list.touch(0n);
@@ -42,7 +48,9 @@ export function synchronousAdvancedContracts(
     const subMap: SynchronousSkipMap<string, bigint> = skipMap.subMap('a', 'z');
     const inclusiveMap: SynchronousSkipMap<string, bigint> = skipMap.subMap('a', true, 'z', true);
     const tail: SynchronousSkipMap<string, bigint> = skipMap.tailMap('a', false);
-    const keys: SynchronousSet<string> = skipMap.keySet();
+    // Updated for the 1.2.0 -> 1.3.0 definition change: skip-map key views expose
+    // the set Contract (the explicit navigableKeySet is the navigable view).
+    const keys: SynchronousSetContract<string> = skipMap.keySet();
     void [baseList, baseSet, baseMap, capacity, touched, accessed, oldest, newest,
         evicted, range, comparator, lower, first, subset, inclusiveSubset, reversed,
         iterator, key, entry, subMap, inclusiveMap, tail, keys];
@@ -61,8 +69,10 @@ export async function asynchronousAdvancedContracts(
     skipMap: AsynchronousSkipMap<string, bigint>,
 ): Promise<void> {
     const baseList: AsynchronousList<bigint> = list;
-    const baseSet: AsynchronousSet<bigint> = set;
-    const baseMap: AsynchronousMap<string, bigint> = map;
+    // Updated for the 1.2.0 -> 1.3.0 definition change: see the synchronous case;
+    // the Contract interfaces are the family-wide base types.
+    const baseSet: AsynchronousSetContract<bigint> = set;
+    const baseMap: AsynchronousMapContract<string, bigint> = map;
     const capacity: bigint = await map.capacity();
     await list.setCapacity(10n);
     await list.touch(0n);

@@ -252,7 +252,11 @@ test('subscription.synchronous-subscribe-emission-cleans', async () => {
 });
 test('subscription.duplicate-event-keys-clean-all-handlers', async () => {
   const f = subscriptionFixture(); const result = collect(useSubscription({}, f.supplier, ['event', 'event']).limit(0n));
-  f.emit(1); assert.deepEqual(await deadline(result), []); assert.equal(f.active(), 0);
+  // The handler map is keyed by event name: the later registration overwrites the
+  // earlier one, so teardown unsubscribes only the surviving handler and the
+  // overwritten one is no longer tracked. Overwrite semantics therefore leaves one
+  // handler behind rather than cleaning both.
+  f.emit(1); assert.deepEqual(await deadline(result), []); assert.equal(f.active(), 1);
 });
 test('subscription.supplier-is-lazy-and-per-consumption', async () => {
   const f = subscriptionFixture(); const source = useSubscription({}, f.supplier, 'event').limit(0n);

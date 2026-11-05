@@ -72,17 +72,17 @@
     },
     {
       "id": "U14",
-      "name": "nearest-rank quantile median matches README [1,2,3,4] -> 2",
+      "name": "type-7 quantile median of README [1,2,3,4] is 2.5 with type-1 fallback at 2",
       "status": "pass"
     },
     {
       "id": "U15",
-      "name": "bigint nearest-rank quantile matches numeric result",
+      "name": "bigint type-7 quantile rounds the interpolated median to 3n with type-1 at 2n",
       "status": "pass"
     },
     {
       "id": "U16",
-      "name": "async numeric nearest-rank quantile",
+      "name": "async numeric type-7 quantile interpolates the median to 2.5",
       "status": "pass"
     },
     {
@@ -107,7 +107,7 @@
     },
     {
       "id": "U21",
-      "name": "bigint variance survives large translation of equal spread",
+      "name": "bigint sample variance survives large translation of equal spread",
       "status": "pass"
     },
     {
@@ -117,17 +117,17 @@
     },
     {
       "id": "U23",
-      "name": "async bigint variance survives large translation",
+      "name": "async bigint sample variance survives large translation",
       "status": "pass"
     },
     {
       "id": "U24",
-      "name": "all numeric empty statistical aggregates return zero",
+      "name": "empty statistical view returns zero for plain aggregates and empty optionals where undefined",
       "status": "pass"
     },
     {
       "id": "U25",
-      "name": "constant numeric sample has zero variance, deviation and skewness",
+      "name": "constant numeric sample has zero variance and deviation but an undefined G1 skewness",
       "status": "pass"
     },
     {
@@ -162,7 +162,7 @@
     },
     {
       "id": "U32",
-      "name": "safe small numeric population variance and bigint rounding",
+      "name": "safe small numeric sample variance and bigint rounding",
       "status": "pass"
     },
     {
@@ -182,7 +182,7 @@
     },
     {
       "id": "U36",
-      "name": "numeric variance mapper is honored for numeric inputs",
+      "name": "numeric sample variance mapper is honored for numeric inputs",
       "status": "pass"
     },
     {
