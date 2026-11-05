@@ -2,42 +2,38 @@
  * The synchronous collectable class family: buffered, iterable element sources
  * that expose terminal operations over a callback-based generator.
  *
- * This module is the transitional home of the synchronous collectable API and
- * intentionally duplicates `SynchronousCollectable`,
- * `SynchronousOrderedCollectable` and `SynchronousUnorderedCollectable` from
- * `#semantic/synchronous/semantic`. Every preserved method body is copied
- * verbatim from that implementation; the class names, the module boundary and
- * the documentation differ, and a convenience `generator()` alias is added on
- * top of `source()`. The signal, distribution, statistics and window modules
- * extend the classes here and import the same collector factories, so a change
- * to the buffered source or to a terminal operation is visible from all of them.
+ * This module is the single home of the synchronous collectable API.
+ * `#semantic/synchronous/semantic` re-exports every class defined here, so the
+ * public surface and the historical import paths are unchanged. The signal,
+ * distribution, statistics and window modules extend the classes here and
+ * import the same collector factories, so a change to the buffered source or to
+ * a terminal operation is visible from all of them.
  *
  * {@link SignalCollectable} also lives in this module, immediately after
- * {@link OrderedCollectable}, because its `extends` heritage is evaluated when
- * this module's body runs. Declaring the subclass in
- * `#semantic/synchronous/signal` would read `OrderedCollectable` through a
- * temporal dead zone whenever a dependency cycle evaluated that module first;
- * keeping the heritage in one module removes that read. The signal module
- * re-exports the class, so its import path is unchanged.
+ * {@link SynchronousOrderedCollectable}, because its `extends` heritage is
+ * evaluated when this module's body runs. Declaring the subclass in
+ * `#semantic/synchronous/signal` would read `SynchronousOrderedCollectable`
+ * through a temporal dead zone whenever a dependency cycle evaluated that
+ * module first; keeping the heritage in one module removes that read. The
+ * signal module re-exports the class, so its import path is unchanged.
  *
- * One member of the original class is deliberately not reproduced here: the
- * `semantic()` bridge, which constructed a `SynchronousSemantic` from
- * `source()`. Creating that instance would introduce a runtime dependency on
- * `#semantic/synchronous/semantic` and therefore a module cycle once this file
- * is wired in, so only the type is imported. The same bridge remains available
- * through `pipe()`, which receives the generator from the caller and therefore
- * stays dependency-free.
+ * The historical `semantic()` bridge, which constructed a `SynchronousSemantic`
+ * from `source()`, is deliberately absent: creating that instance would
+ * introduce a runtime dependency on `#semantic/synchronous/semantic` and
+ * therefore a module cycle, so only the type is imported. The same bridge
+ * remains available through `pipe()`, which receives the generator from the
+ * caller and therefore stays dependency-free, and through `source()` directly.
  *
  * Ordering contract of the family:
  *
- * - {@link Collectable} makes no ordering promise: it only defines the
- *   callback-based traversal and the terminal operations built on it.
- * - {@link OrderedCollectable} buffers the source at construction and exposes
- *   elements in comparator order, or in normalised encounter-index order when
- *   no comparator is supplied.
- * - {@link UnorderedCollectable} buffers by encounter index and exposes
- *   elements in map insertion order, retaining duplicate-index entries under
- *   surrogate keys.
+ * - {@link SynchronousCollectable} makes no ordering promise: it only defines
+ *   the callback-based traversal and the terminal operations built on it.
+ * - {@link SynchronousOrderedCollectable} buffers the source at construction
+ *   and exposes elements in comparator order, or in normalised encounter-index
+ *   order when no comparator is supplied.
+ * - {@link SynchronousUnorderedCollectable} buffers by encounter index and
+ *   exposes elements in map insertion order, retaining duplicate-index entries
+ *   under surrogate keys.
  *
  * Complexity: the concrete buffered subclasses hold O(n) elements; terminal
  * operations drain the source once, so they are O(n) unless a method documents
@@ -210,7 +206,7 @@ const SURROGATE_BASE: bigint = 1n << 96n;
  *
  * @template E - The source element type.
  */
-export abstract class Collectable<E> implements Iterable<E> {
+export abstract class SynchronousCollectable<E> implements Iterable<E> {
     protected readonly SynchronousCollectable: symbol = SynchronousCollectableSymbol;
     /**
      * The built-in object tag identifying this API implementation.
@@ -1939,7 +1935,7 @@ export abstract class Collectable<E> implements Iterable<E> {
  *
  * @template E - The source element type.
  */
-export class OrderedCollectable<E> extends Collectable<E> {
+export class SynchronousOrderedCollectable<E> extends SynchronousCollectable<E> {
     protected readonly OrderedCollectable: symbol = SynchronousOrderedCollectableSymbol;
     protected buffer: Array<Indexed<E>> = [];
     /**
@@ -2140,7 +2136,7 @@ export class OrderedCollectable<E> extends Collectable<E> {
  *
  * @template E - The source element type.
  */
-export class UnorderedCollectable<E> extends Collectable<E> {
+export class SynchronousUnorderedCollectable<E> extends SynchronousCollectable<E> {
     protected readonly SynchronousUnorderedCollectable: symbol = SynchronousUnorderedCollectableSymbol;
     /**
      * The built-in object tag identifying this API implementation.
@@ -2264,7 +2260,7 @@ export class UnorderedCollectable<E> extends Collectable<E> {
  * @template E - The element type, constrained to `number` so that the spectral
  *               formulas are total.
  */
-export class SignalCollectable<E extends number> extends OrderedCollectable<E> {
+export class SignalCollectable<E extends number> extends SynchronousOrderedCollectable<E> {
 
     /**
      * The built-in object tag identifying this API implementation.
@@ -3084,3 +3080,15 @@ export class SignalCollectable<E extends number> extends OrderedCollectable<E> {
         return useSynchronousSignalToNoiseRatio(this.plan, resolved, step, window ?? this.taper, floorQuantile).collect(this.source());
     }
 }
+
+/**
+ * The historical, unprefixed name of {@link SynchronousOrderedCollectable}.
+ *
+ * `statistics.ts`, `window.ts` and `distribution.ts` still extend the ordered
+ * collectable through this name, so it stays exported until those modules are
+ * migrated to the prefixed one. The binding is the very same class object, so
+ * no behaviour differs; only the spelling of the import changes.
+ *
+ * @deprecated Import {@link SynchronousOrderedCollectable} instead.
+ */
+export { SynchronousOrderedCollectable as OrderedCollectable };

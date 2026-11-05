@@ -2,6 +2,7 @@ import { AsynchronousSemantic } from "#semantic/asynchronous/semantic";
 import { isBigInt, isFunction, isIterable, isNumber, isObject, isPromise, isAsyncIterable, isString } from "#semantic/guard";
 import { useCompare, useToBigInt, useToNumber, useTraverse } from "#semantic/hook";
 import { SynchronousSemantic } from "#semantic/synchronous/semantic";
+import { bindSemanticFactory } from "#semantic/optional";
 import { invalidate, validate } from "#semantic/utility";
 import type { BiPredicate, Predicate, Supplier, Consumer, BiConsumer, DeepPropertyKey, DeepPropertyValue, Runnable } from "#semantic/utility";
 /**
@@ -1256,3 +1257,14 @@ export let useText: UseText = (argument1: string | bigint, argument2?: number | 
     }
     throw new TypeError("Invalid arguments.");
 };
+/*
+ * Bind the lazy semantic factory used by Optional.semantic().
+ *
+ * `optional.ts` cannot import this module statically without recreating the
+ * evaluation cycle collectable -> collectors -> optional -> factory -> semantic
+ * -> collectable. This module is evaluated after `optional.ts` (the semantic
+ * classes it imports reach the optional module through collectable and
+ * collectors), so the binding is ready before any caller can construct a
+ * semantic through Optional.
+ */
+bindSemanticFactory({ useEmpty, useOf });

@@ -3,42 +3,39 @@
  * sources that expose promise-returning terminal operations over a
  * callback-based generator.
  *
- * This module is the transitional home of the asynchronous collectable API and
- * intentionally duplicates `AsynchronousCollectable`,
- * `AsynchronousOrderedCollectable` and `AsynchronousUnorderedCollectable` from
- * `#semantic/asynchronous/semantic`. Every preserved method body is copied
- * verbatim from that implementation; the class names, the module boundary and
- * the documentation differ, and a convenience `generator()` alias is added on
- * top of `source()`. The signal, distribution, statistics and window modules
- * extend the classes here and import the same collector factories, so a change
- * to the ordered buffer or to a terminal operation is visible from all of them.
+ * This module is the single home of the asynchronous collectable API.
+ * `#semantic/asynchronous/semantic` re-exports every class defined here, so the
+ * public surface and the historical import paths are unchanged. The signal,
+ * distribution, statistics and window modules extend the classes here and
+ * import the same collector factories, so a change to the ordered buffer or to
+ * a terminal operation is visible from all of them.
  *
  * {@link SignalCollectable} also lives in this module, immediately after
- * {@link OrderedCollectable}, because its `extends` heritage is evaluated when
- * this module's body runs. Declaring the subclass in
- * `#semantic/asynchronous/signal` would read `OrderedCollectable` through a
- * temporal dead zone whenever a dependency cycle evaluated that module first;
- * keeping the heritage in one module removes that read. The signal module
- * re-exports the class, so its import path is unchanged.
+ * {@link AsynchronousOrderedCollectable}, because its `extends` heritage is
+ * evaluated when this module's body runs. Declaring the subclass in
+ * `#semantic/asynchronous/signal` would read `AsynchronousOrderedCollectable`
+ * through a temporal dead zone whenever a dependency cycle evaluated that
+ * module first; keeping the heritage in one module removes that read. The
+ * signal module re-exports the class, so its import path is unchanged.
  *
- * One member of the original class is deliberately not reproduced here: the
- * `semantic()` bridge, which constructed an `AsynchronousSemantic` from
- * `source()`. Creating that instance would introduce a runtime dependency on
- * `#semantic/asynchronous/semantic` and therefore a module cycle once this file
- * is wired in. Callers can still build the pipeline from `source()` directly;
+ * The historical `semantic()` bridge, which constructed an
+ * `AsynchronousSemantic` from `source()`, is deliberately absent: creating that
+ * instance would introduce a runtime dependency on
+ * `#semantic/asynchronous/semantic` and therefore a module cycle, so only the
+ * type is imported. Callers build the pipeline from `source()` directly;
  * unlike the synchronous family there is no `pipe()` helper to replace it.
  *
  * Ordering contract of the family:
  *
- * - {@link Collectable} makes no ordering promise: it only defines the
- *   callback-based traversal and the promise-returning terminal operations
+ * - {@link AsynchronousCollectable} makes no ordering promise: it only defines
+ *   the callback-based traversal and the promise-returning terminal operations
  *   built on it.
- * - {@link OrderedCollectable} starts buffering at construction and exposes
- *   elements in comparator order, or in normalised encounter-index order when
- *   no comparator is supplied.
- * - {@link UnorderedCollectable} buffers by encounter index and exposes
- *   elements in map insertion order, retaining duplicate-index entries under
- *   surrogate keys.
+ * - {@link AsynchronousOrderedCollectable} starts buffering at construction and
+ *   exposes elements in comparator order, or in normalised encounter-index
+ *   order when no comparator is supplied.
+ * - {@link AsynchronousUnorderedCollectable} buffers by encounter index and
+ *   exposes elements in map insertion order, retaining duplicate-index entries
+ *   under surrogate keys.
  *
  * Complexity: the concrete subclasses buffer eagerly in O(n); every terminal
  * operation awaits the same `ready` promise, so it is O(n) to drain the buffer
@@ -210,7 +207,7 @@ const SURROGATE_BASE: bigint = 1n << 96n;
  *
  * @template E - The source element type.
  */
-export abstract class Collectable<E> implements AsyncIterable<E> {
+export abstract class AsynchronousCollectable<E> implements AsyncIterable<E> {
     protected readonly AsynchronousCollectable: symbol = AsynchronousCollectableSymbol;
     /**
      * The built-in object tag identifying this API implementation.
@@ -1883,7 +1880,7 @@ export abstract class Collectable<E> implements AsyncIterable<E> {
  *
  * @template E - The source element type.
  */
-export class OrderedCollectable<E> extends Collectable<E> {
+export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E> {
     protected readonly OrderedCollectable: symbol = AsynchronousOrderedCollectableSymbol;
     protected buffer: Array<Indexed<E>> = [];
     protected readonly ready: Promise<void>;
@@ -2105,7 +2102,7 @@ export class OrderedCollectable<E> extends Collectable<E> {
  *
  * @template E - The source element type.
  */
-export class UnorderedCollectable<E> extends Collectable<E> {
+export class AsynchronousUnorderedCollectable<E> extends AsynchronousCollectable<E> {
     protected readonly AsynchronousUnorderedCollectable: symbol = AsynchronousUnorderedCollectableSymbol;
     /**
      * The built-in object tag identifying this API implementation.
@@ -2207,7 +2204,7 @@ export class UnorderedCollectable<E> extends Collectable<E> {
  * @template E - The element type, constrained to `number` so that the spectral
  *               formulas are total.
  */
-export class SignalCollectable<E extends number> extends OrderedCollectable<E> {
+export class SignalCollectable<E extends number> extends AsynchronousOrderedCollectable<E> {
 
     /**
      * The built-in object tag identifying this API implementation.
@@ -3027,3 +3024,15 @@ export class SignalCollectable<E extends number> extends OrderedCollectable<E> {
         return await useAsynchronousSignalToNoiseRatio(this.plan, resolved, step, window ?? this.taper, floorQuantile).collect(this.source());
     }
 }
+
+/**
+ * The historical, unprefixed name of {@link AsynchronousOrderedCollectable}.
+ *
+ * `statistics.ts`, `window.ts` and `distribution.ts` still extend the ordered
+ * collectable through this name, so it stays exported until those modules are
+ * migrated to the prefixed one. The binding is the very same class object, so
+ * no behaviour differs; only the spelling of the import changes.
+ *
+ * @deprecated Import {@link AsynchronousOrderedCollectable} instead.
+ */
+export { AsynchronousOrderedCollectable as OrderedCollectable };

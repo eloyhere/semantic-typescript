@@ -2,6 +2,12 @@ export * from "#semantic/asynchronous/collector";
 export * from "#semantic/asynchronous/collectors";
 export * from "#semantic/synchronous/collector";
 export * from "#semantic/synchronous/collectors";
+export {
+    SynchronousCollectable, SynchronousOrderedCollectable, SynchronousUnorderedCollectable,
+} from "#semantic/synchronous/collectable";
+export {
+    AsynchronousCollectable, AsynchronousOrderedCollectable, AsynchronousUnorderedCollectable,
+} from "#semantic/asynchronous/collectable";
 export * from "#semantic/factory";
 export * from "#semantic/guard";
 export * from "#semantic/structure/error";

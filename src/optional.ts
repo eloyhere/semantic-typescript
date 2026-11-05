@@ -1,8 +1,46 @@
-import { useEmpty, useOf } from "#semantic/factory";
 import { isFunction, isOptional } from "#semantic/guard";
+import { IllegalStateError } from "#semantic/structure/error";
 import { OptionalSymbol } from "#semantic/symbol";
 import type { SynchronousSemantic } from "#semantic/synchronous/semantic";
 import { invalidate, validate, type Consumer, type Functional, type MaybeInvalid, type Predicate, type Runnable, type Valid } from "#semantic/utility";
+/**
+ * The synchronous semantic operations used by {@link Optional.semantic}.
+ *
+ * They are injected lazily instead of imported directly. A static value import
+ * of the factory would close the cycle
+ * `collectable -> collectors -> optional -> factory -> semantic -> collectable`,
+ * in which the statistics and window classes of `semantic.ts` extend collectable
+ * classes that have not been initialised yet.
+ */
+export interface SynchronousSemanticFactory {
+    /**
+     * Creates a synchronous semantic that emits nothing.
+     * @template E - The element type, never actually produced.
+     * @returns An empty synchronous semantic.
+     */
+    useEmpty<E>(): SynchronousSemantic<E>;
+    /**
+     * Creates a synchronous semantic over the supplied values.
+     * @template E - The element type.
+     * @param values - The values to emit, one per argument.
+     * @returns A synchronous semantic over the supplied values.
+     */
+    useOf<E>(...values: Array<E>): SynchronousSemantic<E>;
+}
+/** The factory bound by the semantic layer at module evaluation time. */
+let synchronousSemanticFactory: SynchronousSemanticFactory | undefined;
+/**
+ * Binds the synchronous semantic factory used by {@link Optional.semantic}.
+ *
+ * The binding module is evaluated after this module, because it is downstream of
+ * `optional.ts` in the import graph, so the factory is always available before a
+ * caller can reach the method.
+ *
+ * @param factory - The synchronous semantic operations to use.
+ */
+export const bindSemanticFactory = (factory: SynchronousSemanticFactory): void => {
+    synchronousSemanticFactory = factory;
+};
 /**
  * An immutable container whose value is present unless it is null or undefined.
  * Instances are created through the static factory methods; stored objects are not deep-frozen.
@@ -158,12 +196,17 @@ export class Optional<T> {
     /**
      * Exposes the contained value as a synchronous semantic sequence.
      * @returns A sequence containing the present value, or an empty sequence.
+     * @throws {IllegalStateError} If the semantic factory has not been bound yet,
+     *         which indicates that this module was loaded without the semantic layer.
      */
     public semantic(): SynchronousSemantic<T> {
-        if (this.isPresent()) {
-            return useOf(this.value as T);
+        if (synchronousSemanticFactory === undefined) {
+            throw new IllegalStateError("Optional.semantic() requires the synchronous semantic factory to be bound before use.");
         }
-        return useEmpty();
+        if (this.isPresent()) {
+            return synchronousSemanticFactory.useOf(this.value as T);
+        }
+        return synchronousSemanticFactory.useEmpty();
     }
     /**
      * Creates an empty container.
