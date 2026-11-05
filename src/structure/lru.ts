@@ -20,6 +20,27 @@ import type {
     AsynchronousMapContract, AsynchronousMapEntry, AsynchronousOrderedMap, AsynchronousUnorderedMap,
     SynchronousMapContract, SynchronousMapEntry, SynchronousOrderedMap, SynchronousUnorderedMap,
 } from "#semantic/structure/map";
+import type { Comparator } from "#semantic/utility";
+
+/**
+ * Ordered-set behaviour shared by the ordered LRU sets.
+ *
+ * This module sits in the cycle
+ * `set -> hook -> synchronous/collectors -> lru -> set`: `synchronous/collectors`
+ * imports `lru`, so this module's body can run while `set`'s body is still
+ * suspended at its own imports (for example when `structure/lru.js` is the first
+ * module imported, or when another cycle member is). Reading the
+ * `useDefaultOrder` binding here would hit its temporal dead zone. The accessor
+ * defers exactly that read to construction time, after the module graph has
+ * finished evaluating, and it still yields the very same `useDefaultOrder`
+ * function: the comparator and its ordering semantics are unchanged.
+ */
+const orderedSetBehavior: { ordered: boolean; comparator: Comparator<unknown> } = {
+    ordered: true,
+    get comparator(): Comparator<unknown> {
+        return useDefaultOrder;
+    },
+};
 
 /**
  * A bounded list that evicts the least recently used element when necessary.
@@ -777,12 +798,12 @@ export const SynchronousLRUSet: SynchronousLRUSetConstructor = createCollectionC
  * Creates a bounded LRU set whose elements are unique by comparator and iterate
  * in comparator order. Duplicate insertions refresh element recency.
  */
-export const AsynchronousOrderedLRUSet: AsynchronousOrderedLRUSetConstructor = createCollectionConstructor("AsynchronousOrderedLRUSet", true, "set", "lru", { ordered: true, comparator: useDefaultOrder }) as unknown as AsynchronousOrderedLRUSetConstructor;
+export const AsynchronousOrderedLRUSet: AsynchronousOrderedLRUSetConstructor = createCollectionConstructor("AsynchronousOrderedLRUSet", true, "set", "lru", orderedSetBehavior) as unknown as AsynchronousOrderedLRUSetConstructor;
 /**
  * Creates a bounded LRU set whose elements are unique by comparator and iterate
  * in comparator order. Duplicate insertions refresh element recency.
  */
-export const SynchronousOrderedLRUSet: SynchronousOrderedLRUSetConstructor = createCollectionConstructor("SynchronousOrderedLRUSet", false, "set", "lru", { ordered: true, comparator: useDefaultOrder }) as unknown as SynchronousOrderedLRUSetConstructor;
+export const SynchronousOrderedLRUSet: SynchronousOrderedLRUSetConstructor = createCollectionConstructor("SynchronousOrderedLRUSet", false, "set", "lru", orderedSetBehavior) as unknown as SynchronousOrderedLRUSetConstructor;
 /**
  * Creates a bounded LRU set with SameValueZero equality and no iteration-order
  * guarantee. Duplicate insertions refresh element recency.

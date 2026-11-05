@@ -9,6 +9,26 @@ import type { AsynchronousMapContract, AsynchronousMapEntry, AsynchronousOrdered
 import type { Comparator } from "#semantic/utility";
 
 /**
+ * Ordered-set behaviour shared by the ordered skip sets.
+ *
+ * This module sits in the cycle
+ * `set -> hook -> synchronous/collectors -> skip -> set`: `synchronous/collectors`
+ * imports `skip`, so this module's body can run while `set`'s body is still
+ * suspended at its own imports (for example when `structure/skip.js` is the first
+ * module imported, or when another cycle member is). Reading the
+ * `useDefaultOrder` binding here would hit its temporal dead zone. The accessor
+ * defers exactly that read to construction time, after the module graph has
+ * finished evaluating, and it still yields the very same `useDefaultOrder`
+ * function: the comparator and its ordering semantics are unchanged.
+ */
+const orderedSetBehavior: { ordered: boolean; comparator: Comparator<unknown> } = {
+    ordered: true,
+    get comparator(): Comparator<unknown> {
+        return useDefaultOrder;
+    },
+};
+
+/**
  * An indexed list intended for implementation with positional skip links.
  *
  * Skip links index positions, not element values. This list preserves arbitrary
@@ -1134,12 +1154,12 @@ export const SynchronousSkipSet: SynchronousSkipSetConstructor = createCollectio
  * Creates a navigable skip set whose elements are unique by comparator and
  * iterate in comparator order. Promise operations wait for source initialisation.
  */
-export const AsynchronousOrderedSkipSet: AsynchronousOrderedSkipSetConstructor = createCollectionConstructor("AsynchronousOrderedSkipSet", true, "set", "skip", { ordered: true, comparator: useDefaultOrder }) as unknown as AsynchronousOrderedSkipSetConstructor;
+export const AsynchronousOrderedSkipSet: AsynchronousOrderedSkipSetConstructor = createCollectionConstructor("AsynchronousOrderedSkipSet", true, "set", "skip", orderedSetBehavior) as unknown as AsynchronousOrderedSkipSetConstructor;
 /**
  * Creates a navigable skip set whose elements are unique by comparator and
  * iterate in comparator order. Operations return their results directly.
  */
-export const SynchronousOrderedSkipSet: SynchronousOrderedSkipSetConstructor = createCollectionConstructor("SynchronousOrderedSkipSet", false, "set", "skip", { ordered: true, comparator: useDefaultOrder }) as unknown as SynchronousOrderedSkipSetConstructor;
+export const SynchronousOrderedSkipSet: SynchronousOrderedSkipSetConstructor = createCollectionConstructor("SynchronousOrderedSkipSet", false, "set", "skip", orderedSetBehavior) as unknown as SynchronousOrderedSkipSetConstructor;
 /**
  * Creates a navigable skip set with SameValueZero equality and no iteration-order
  * guarantee. Promise operations wait for source initialisation.
