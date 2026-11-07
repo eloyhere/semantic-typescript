@@ -249,6 +249,10 @@ export class Optional<T> {
     }
 }
 ;
+// Instances freeze themselves in the constructor; these two freezes only protect
+// the class and its own prototype. Do not also freeze
+// Object.getPrototypeOf(Optional): for a base class it is the shared
+// Function.prototype, and freezing that global intrinsic breaks any code that
+// later augments Function.prototype.
 Object.freeze(Optional);
 Object.freeze(Optional.prototype);
-Object.freeze(Object.getPrototypeOf(Optional));

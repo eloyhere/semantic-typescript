@@ -111,6 +111,7 @@ import {
     type TriFunctional,
     type TriPredicate
 } from "#semantic/utility";
+import { readonlyMap } from "#semantic/readonly-map";
 import { SynchronousCollector } from "#semantic/synchronous/collector";
 import { Optional } from "#semantic/optional";
 import type { SynchronousSemantic } from "#semantic/synchronous/semantic";
@@ -2067,10 +2068,10 @@ export class SynchronousOrderedCollectable<E> extends SynchronousCollectable<E> 
  * A collectable that buffers by encounter index and traverses by insertion.
  *
  * Construction drains the generator into a `Map` keyed by the emitted index and
- * freezes that buffer. Because a `Map` keeps the first position of a key, a
- * repeated index would overwrite its value, so each duplicate is stored under a
- * surrogate key above `2 ** 96`; the original value survives in map insertion
- * order.
+ * replaces the buffer with a read-only facade. Because a `Map` keeps the first
+ * position of a key, a repeated index would overwrite its value, so each
+ * duplicate is stored under a surrogate key above `2 ** 96`; the original value
+ * survives in map insertion order.
  *
  * Ordering semantics: iteration follows insertion order of the buffer, which is
  * the encounter order of first occurrence for each index. No comparator is
@@ -2100,9 +2101,9 @@ export class SynchronousUnorderedCollectable<E> extends SynchronousCollectable<E
      * Drains the source into an index-keyed buffer at construction.
      *
      * Elements are stored in a `Map` under their emitted index. A repeated index
-     * is moved above `2 ** 96` so it cannot overwrite an earlier value, and the
-     * map is frozen once the source is exhausted, which makes terminal
-     * operations read-only replays.
+     * is moved above `2 ** 96` so it cannot overwrite an earlier value. Once
+     * source collection finishes, the buffer is exposed through a read-only
+     * facade, so terminal operations are read-only replays.
      *
      * Ordering: map insertion order, i.e. the encounter order of each index and
      * of its first duplicate; no comparator is involved.
@@ -2119,7 +2120,7 @@ export class SynchronousUnorderedCollectable<E> extends SynchronousCollectable<E
                 let key: bigint = this.buffer.has(index) ? SURROGATE_BASE + (surrogate++) : index;
                 this.buffer.set(key, element);
             }, (): boolean => false);
-            Object.freeze(this.buffer);
+            this.buffer = readonlyMap(this.buffer) as Map<bigint, E>;
             Object.defineProperties(this, {
                 "SynchronousUnorderedCollectable": {
                     value: SynchronousUnorderedCollectableSymbol,

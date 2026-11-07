@@ -113,6 +113,7 @@ import {
     type TriFunctional,
     type TriPredicate
 } from "#semantic/utility";
+import { readonlyMap } from "#semantic/readonly-map";
 import type { AsynchronousCollector } from "#semantic/asynchronous/collector";
 import type { AsynchronousRing } from "#semantic/structure/ring";
 import type { AsynchronousRootedForest } from "#semantic/structure/forest/rootedForest";
@@ -2032,10 +2033,10 @@ export class AsynchronousOrderedCollectable<E> extends AsynchronousCollectable<E
  * insertion.
  *
  * Construction starts draining the generator into a `Map` keyed by the emitted
- * index, and `ready` resolves when that buffer is complete. Because a `Map`
- * keeps the first position of a key, a repeated index would overwrite its
- * value, so each duplicate is stored under a surrogate key above `2 ** 96`;
- * the original value survives in map insertion order.
+ * index. Once the generator settles, `ready` exposes the buffer through a
+ * read-only facade. Because a `Map` keeps the first position of a key, a repeated
+ * index would overwrite its value, so each duplicate is stored under a surrogate
+ * key above `2 ** 96`; the original value survives in map insertion order.
  *
  * Ordering semantics: iteration follows insertion order of the buffer, which is
  * the encounter order of first occurrence for each index. No comparator is
@@ -2077,10 +2078,15 @@ export class AsynchronousUnorderedCollectable<E> extends AsynchronousCollectable
         }
         this.ready = (async (): Promise<void> => {
             let surrogate: bigint = 0n;
-            await generator((element: E, index: bigint): void => {
-                let key: bigint = this.buffer.has(index) ? SURROGATE_BASE + (surrogate++) : index;
-                this.buffer.set(key, element);
-            }, (): boolean => false);
+            try {
+                await generator((element: E, index: bigint): void => {
+                    let key: bigint = this.buffer.has(index) ? SURROGATE_BASE + (surrogate++) : index;
+                    this.buffer.set(key, element);
+                }, (): boolean => false);
+            }
+            finally {
+                this.buffer = readonlyMap(this.buffer) as Map<bigint, E>;
+            }
         })();
         void this.ready.catch((): void => {});
         Object.defineProperty(this, "AsynchronousUnorderedCollectable", {

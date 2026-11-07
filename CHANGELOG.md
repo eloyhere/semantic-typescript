@@ -8,6 +8,19 @@ A Simplified Chinese edition is kept in [`CHANGELOG.cn.md`](./CHANGELOG.cn.md).
 
 ---
 
+## [2.0.1] - 2026-11-07
+
+### Fixed
+
+- **`Optional` no longer freezes `Function.prototype`.** Importing the module ran
+  `Object.freeze(Object.getPrototypeOf(Optional))`; for a base class that value is
+  the shared `Function.prototype`, so the whole process lost the ability to augment
+  functions (`Object.defineProperty(Function.prototype, …)` threw a `TypeError`).
+  Instance immutability is unchanged: the constructor still freezes every instance
+  and defines its fields as non-writable, and the class plus its own prototype stay
+  frozen. Only the mutation of the global intrinsic was removed.
+- **Unordered collectable buffers now use a read-only `Map` facade.** `Object.freeze(map)` does not disable `Map.prototype.set`, `delete` or `clear`, so the old buffer freeze did not actually protect buffered data. Attempts to mutate either synchronous or completed asynchronous unordered buffers now throw `TypeError`.
+
 ## [2.0.0] - 2026-11-05
 
 This release covers the work merged after 1.2.0. It is a large change: the

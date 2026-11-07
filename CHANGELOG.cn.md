@@ -5,6 +5,18 @@
 
 ---
 
+## [2.0.1] - 2026-11-07
+
+### 修复
+
+- **`Optional` 不再冻结 `Function.prototype`。** 该模块求值时执行了
+  `Object.freeze(Object.getPrototypeOf(Optional))`；对基类而言那是共享的
+  `Function.prototype`，导致整个进程无法再扩展函数原型
+  （`Object.defineProperty(Function.prototype, …)` 抛 `TypeError`）。实例的不可变性不变：
+  构造函数仍会冻结每个实例并把字段定义为不可写，类与其自身原型也仍然被冻结；
+  本次只移除了对全局内置对象的改动。
+- **无序 collectable 缓冲区改用只读 `Map` facade。** `Object.freeze(map)` 并不会禁用 `Map.prototype.set`、`delete` 或 `clear`，因此原先的冻结并未真正保护缓冲数据。现在尝试修改同步或已完成的异步无序缓冲区都会抛出 `TypeError`。
+
 ## [2.0.0] - 2026-11-05
 
 本节涵盖 1.2.0 之后合入的改动。这是一次较大的变更：集合族被拆分、相位环 API 重做、
